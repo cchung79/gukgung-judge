@@ -111,7 +111,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
 <body>
 <div class="wrap">
 <header>
-  <h1>관중 판정기 <span class="ver">시험판 v5</span></h1>
+  <h1>관중 판정기 <span class="ver">시험판 v6</span></h1>
   <p class="sub">발시음과 과녁 점멸을 짝지어 관중·불을 자동으로 채웁니다. 시험판이라 결과는 반드시 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -445,6 +445,7 @@ function setROI(cxp,cyp,scale){
   if(scale)S.roiScale=scale;const W=vid.videoWidth,H=vid.videoHeight;
   const w=Math.max(8,Math.round(Math.min(W,H)*0.034*S.roiScale)),h=Math.max(6,Math.round(w*0.62));
   S.roi={x:Math.round(Math.min(W-w,Math.max(0,cxp-w/2))),y:Math.round(Math.min(H-h,Math.max(0,cyp-h/2))),w,h};
+  S.roiT=S.mode==='file'?vid.currentTime:null;
   S.trk=null;S.bg=null;S.weak=null;S.roiDims=[W,H];S.vbuf=[];S.devAbs=[];S.edges=[];S.ring=[];S.single=null;S.wasOn=false;S.onSince=null;S.warm=null;
   $('aimHint').hidden=true;chip('chRoi','on');$('btnGo').disabled=false;
   buildTemplate();$('trkTxt').textContent='';
@@ -458,7 +459,15 @@ let loopGen=0;
 function startFrameLoop(){const g=++loopGen;
   if('requestVideoFrameCallback' in HTMLVideoElement.prototype){const f=(now,md)=>{if(g!==loopGen)return;onFrame(S.mode==='file'?md.mediaTime:performance.now()/1000);vid.requestVideoFrameCallback(f)};vid.requestVideoFrameCallback(f)}
   else{let last=-1;const f=()=>{if(g!==loopGen)return;const ct=vid.currentTime;if(ct!==last){last=ct;onFrame(clock())}requestAnimationFrame(f)};requestAnimationFrame(f)}}
+function resetDetectors(){
+  // forget everything tied to playback time: last shot, last blink, pending candidates, lamp background
+  S.lastRel=-1e9;S.lastFlash=-1e9;S.cand=null;S.edges=[];S.weak=null;S.wasOn=false;S.onSince=null;
+  S.warm=null;S.bg=null;S.lastT=null;S.ring=[];S.devAbs=[];S.lastFrameT=null;
+  S.arrows.forEach(a=>{if(a.res==='pending')a.res='miss'});
+}
 function onFrame(t){
+  if(S.lastFrameT!=null&&t<S.lastFrameT-0.5){resetDetectors();log('note','재생 위치가 앞으로 돌아가 감지 상태를 초기화')}
+  S.lastFrameT=t;
   const F=S.fps;F.n++;if(!F.t0)F.t0=performance.now();const el=performance.now()-F.t0;
   if(el>2000){const fps=F.n*1000/el;$('fpsTxt').textContent=fps.toFixed(0)+' fps';chip('chFps',fps>=20?'on':'warn');F.n=0;F.t0=performance.now()}
   if(S.roi&&!(S.mode==='file'&&vid.paused))track();
@@ -588,6 +597,7 @@ function setRunning(on){S.running=on;$('btnGo').textContent=on?'판정 멈춤':'
 $('btnGo').onclick=async()=>{
   if(!S.roi){toast('먼저 화면에서 점멸 자리를 누르세요');return}
   if(S.actx&&S.actx.state!=='running'){try{await S.actx.resume()}catch(_){}}
+  if(!S.running&&S.mode==='file'&&vid.ended){toast('영상이 끝났습니다. 「새로 시작」을 누르면 처음부터 다시 판정합니다');return}
   if(!S.running){if(S.mode==='file'){vid.muted=false;try{await vid.play()}catch(e){toast('재생을 시작하지 못했습니다')}}setRunning(true);log('note','판정 시작')}
   else{if(S.mode==='file')vid.pause();setRunning(false);log('note','판정 멈춤')}
 };
@@ -595,7 +605,13 @@ $('btnManual').onclick=()=>onRelease(clock(),'manual',{});
 $('btnUndo').onclick=undo;
 $('btnReset').onclick=()=>{$('resetAsk').hidden=false};
 $('btnResetNo').onclick=()=>{$('resetAsk').hidden=true};
-$('btnResetYes').onclick=()=>{S.arrows=[];S.sun=1;S.sel=1;S.ptr={p:0,s:0};S.raw={v:[],a:[],ev:[]};S.startedAt=null;$('log').innerHTML='';$('resetAsk').hidden=true;render();toast('기록을 지웠습니다')};
+$('btnResetYes').onclick=()=>{
+  if(S.running){if(S.mode==='file')vid.pause();setRunning(false)}
+  S.arrows=[];S.sun=1;S.sel=1;S.ptr={p:0,s:0};S.raw={v:[],a:[],ev:[]};S.startedAt=null;resetDetectors();
+  if(S.mode==='file'){try{vid.pause();vid.currentTime=S.roiT!=null?S.roiT:0.05}catch(_){}
+    if(S.trk){S.trk.dx=0;S.trk.dy=0;S.trk.scores=[];S.trk.bad=0;$('trkTxt').textContent=''}}
+  $('log').innerHTML='';$('resetAsk').hidden=true;render();redraw();
+  toast(S.mode==='file'?'기록을 지우고 영상을 처음으로 되감았습니다':'기록을 지웠습니다')};
 $('btnCopy').onclick=async()=>{
   const c=cfg();let out=`관중 판정기 · ${new Date().toLocaleString('ko-KR')}\n`;
   const suns=[...new Set(S.arrows.map(a=>a.sun))].sort((a,b)=>a-b);
