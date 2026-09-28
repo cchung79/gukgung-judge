@@ -111,7 +111,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
 <body>
 <div class="wrap">
 <header>
-  <h1>관중 판정기 <span class="ver">시험판 v6</span></h1>
+  <h1>관중 판정기 <span class="ver">시험판 v7</span></h1>
   <p class="sub">발시음과 과녁 점멸을 짝지어 관중·불을 자동으로 채웁니다. 시험판이라 결과는 반드시 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -459,6 +459,12 @@ let loopGen=0;
 function startFrameLoop(){const g=++loopGen;
   if('requestVideoFrameCallback' in HTMLVideoElement.prototype){const f=(now,md)=>{if(g!==loopGen)return;onFrame(S.mode==='file'?md.mediaTime:performance.now()/1000);vid.requestVideoFrameCallback(f)};vid.requestVideoFrameCallback(f)}
   else{let last=-1;const f=()=>{if(g!==loopGen)return;const ct=vid.currentTime;if(ct!==last){last=ct;onFrame(clock())}requestAnimationFrame(f)};requestAnimationFrame(f)}}
+function regularStart(E){
+  // first index from which 3+ switch-ons come at an even pace (0.12-0.9 s apart, longest/shortest <= 1.6)
+  for(let i=0;i+2<E.length;i++){const g=E.slice(i,i+8),iv=[];for(let j=1;j<g.length;j++)iv.push(g[j]-g[j-1]);
+    const mn=Math.min(...iv),mx=Math.max(...iv);if(mn>=0.12&&mx<=0.9&&mx/mn<=1.6)return i}
+  return -1;
+}
 function resetDetectors(){
   // forget everything tied to playback time: last shot, last blink, pending candidates, lamp background
   S.lastRel=-1e9;S.lastFlash=-1e9;S.cand=null;S.edges=[];S.weak=null;S.wasOn=false;S.onSince=null;
@@ -489,20 +495,23 @@ function onFrame(t){
   if(S.warm==null)S.warm=t;const warm=t-S.warm>3;
   S.devAbs.push(Math.abs(dev));if(S.devAbs.length>300)S.devAbs.shift();
   if(S.devAbs.length%15===0)S.sigma=Math.max(1,1.48*median(S.devAbs));
-  const thr=Math.max(10,5*S.sigma),on=warm&&dev>thr;
+  const thr=Math.max(10,3.5*S.sigma),on=warm&&dev>thr;
   // evidence ring
   evx.fillStyle='#000';evx.fillRect(0,0,EVW,EVH);sdraw(evx,r.x-r.w,r.y-r.h*0.6,r.w*3,r.h*2.2,0,0,EVW,EVH);
   S.ring.push({t,img:evx.getImageData(0,0,EVW,EVH),dev,thr});while(S.ring.length&&t-S.ring[0].t>7)S.ring.shift();
   if(S.running)S.raw.v.push([+tRel(t).toFixed(3),+dev.toFixed(1),+thr.toFixed(1)]);
   $('lampNow').textContent=on?'켜짐':'꺼짐';
-  // flash logic: 3+ switch-ons within 2 s = lamp blink; 1-2 = weak (only counted when a shot is pending)
+  // flash logic: a lamp blinks at a steady rhythm (Bibong 0.2 s, Ondal 0.63 s); shake-induced blips do not
   if(on&&!S.wasOn){S.edges.push(t);S.onSince=t}
   if(!on&&S.wasOn)S.onSince=null;
   S.wasOn=on;
   S.edges=S.edges.filter(e=>t-e<=2.0);
-  if(S.edges.length>=3&&t-S.lastFlash>3){S.lastFlash=S.edges[0];S.weak=null;if(S.running)onFlash(S.edges[0],'blink',{n:S.edges.length})}
-  else if(S.edges.length>=1&&t-S.lastFlash>3){if(!S.weak||S.weak.t!==S.edges[0])S.weak={t:S.edges[0],n:S.edges.length};else S.weak.n=S.edges.length}
-  if(S.weak&&t-S.weak.t>2.0&&t-S.lastFlash>3){const w=S.weak;S.weak=null;if(w.n>=2){if(S.running)onFlash(w.t,'weak',{n:w.n})}}
+  if(S.edges.length>=3&&t-S.lastFlash>3){
+    const st=regularStart(S.edges);
+    if(st>=0){S.lastFlash=S.edges[st];S.weak=null;if(S.running)onFlash(S.edges[st],'blink',{n:S.edges.length-st})}
+  }
+  if(S.edges.length>=2&&t-S.lastFlash>3&&(!S.weak||S.weak.t!==S.edges[0]))S.weak={t:S.edges[0],n:S.edges.length};
+  if(S.weak&&t-S.weak.t>2.0){const w=S.weak;S.weak=null;if(t-S.lastFlash>3&&S.running)onFlash(w.t,'weak',{n:w.n})}
   tick(t);drawMeter(t);drawInset();
 }
 function drawOverlay(){
@@ -541,7 +550,7 @@ function onRelease(t,src,info){
 function onFlash(tf,kind,info){
   const c=cfg();
   const cands=S.arrows.filter(a=>a.res==='pending'&&tf-a.tRel>=c.wa-0.3&&tf-a.tRel<=c.wb+0.3);
-  if(kind==='weak'&&!cands.length){log('note',`약한 점멸 ${info.n}회 · 대기 중인 발시 없음, 무시`,tf);return}
+  if(kind==='weak'){if(cands.length){const a=cands[cands.length-1];if(!a.flags.includes('점멸 의심'))a.flags.push('점멸 의심');log('note',`${a.p+1}번 ${a.s+1}시 · 불규칙한 깜박임 ${info.n}회, 판정은 그대로 · 확인 필요`,tf);render()}return}
   if(cands.length){const a=cands[cands.length-1];a.res='hit';a.tFlash=tf;if(kind==='weak')a.flags.push('약한 점멸');
     log('hit',`관중 ${a.p+1}번 ${a.s+1}시 · 발시 후 ${(tf-a.tRel).toFixed(2)}초`+(kind==='weak'?' (약한 점멸, 확인 필요)':''),tf);
     setTimeout(()=>captureEv(a),1800);}
