@@ -121,7 +121,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
 <body>
 <div class="wrap">
 <header>
-  <h1>관중 판정기 <span class="ver" id="h1ver">시험판 v12</span></h1>
+  <h1>관중 판정기 <span class="ver" id="h1ver">시험판 v13</span></h1>
   <p class="sub">발시음과 과녁 점멸을 짝지어 관중·불을 자동으로 채웁니다. 시험판이라 결과는 반드시 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -561,7 +561,8 @@ window.addEventListener('resize',()=>{if(!vid.hidden){sizeOverlay();redraw()}});
 function clampView(){const V=S.view,cw=vid.clientWidth,ch=vid.clientHeight;V.z=Math.max(1,Math.min(8,V.z));
   V.tx=Math.min(0,Math.max(cw-cw*V.z,V.tx));V.ty=Math.min(0,Math.max(ch-ch*V.z,V.ty))}
 function applyView(){clampView();const V=S.view;
-  vid.style.transform=V.z===1?'':`translate(${V.tx}px,${V.ty}px) scale(${V.z})`;
+  // the video element itself is never scaled: on iPhone a scaled video layer grows to a huge GPU texture and the tab is killed.
+  // when zoomed, the visible crop is painted onto the overlay canvas instead (drawOverlay)
   $('zTxt').textContent=(V.z<1.95?V.z.toFixed(1):Math.round(V.z))+'×';redraw()}
 function zoomAt(px,py,nz){const V=S.view;nz=Math.max(1,Math.min(8,nz));const cx=(px-V.tx)/V.z,cy=(py-V.ty)/V.z;V.z=nz;V.tx=px-cx*nz;V.ty=py-cy*nz;applyView()}
 function resetView(){S.view={z:1,tx:0,ty:0};vid.style.transform='';$('zTxt').textContent='1×'}
@@ -711,7 +712,11 @@ function onFrame(t){
   tick(t);drawMeter(t);drawInset();
 }
 function drawOverlay(){
-  const W=ov.width,H=ov.height;ovx.clearRect(0,0,W,H);if(!S.roi||!vid.videoWidth)return;
+  const W=ov.width,H=ov.height;ovx.clearRect(0,0,W,H);if(!vid.videoWidth)return;
+  if(S.view.z>1){const V=S.view,kx=vid.videoWidth/vid.clientWidth,ky=vid.videoHeight/vid.clientHeight;
+    const sx0=-V.tx/V.z*kx,sy0=-V.ty/V.z*ky,sw=vid.clientWidth/V.z*kx,sh=vid.clientHeight/V.z*ky;
+    try{ovx.drawImage(vid,sx0,sy0,sw,sh,0,0,W,H)}catch(_){}}
+  if(!S.roi)return;
   const V=S.view,dpr=devicePixelRatio,sx=W/vid.videoWidth*V.z,sy=H/vid.videoHeight*V.z,ox=V.tx*dpr,oy=V.ty*dpr,r=eff(),lit=S.wasOn;
   ovx.lineWidth=2*dpr;ovx.strokeStyle=lit?'#FFC53D':'#ffffff';
   ovx.strokeRect(ox+r.x*sx,oy+r.y*sy,Math.max(4,r.w*sx),Math.max(4,r.h*sy));
