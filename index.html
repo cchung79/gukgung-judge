@@ -121,7 +121,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
 <body>
 <div class="wrap">
 <header>
-  <h1>관중 판정기 <span class="ver" id="h1ver">시험판 v13</span></h1>
+  <h1>관중 판정기 <span class="ver" id="h1ver">시험판 v14</span></h1>
   <p class="sub">발시음과 과녁 점멸을 짝지어 관중·불을 자동으로 채웁니다. 시험판이라 결과는 반드시 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -159,7 +159,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
     <label class="f" for="myNo" id="myNoWrap" hidden>내 번호<input type="number" id="myNo" min="1" max="12" value="1"></label>
     <label class="f" for="winA">관중 대기 시작(초)<input type="number" id="winA" min="0.5" max="6" step="0.1" value="2.0"></label>
     <label class="f" for="winB">관중 대기 끝(초)<input type="number" id="winB" min="2" max="9" step="0.1" value="4.5"></label>
-    <label class="f" for="gap">발시 최소 간격(초)<input type="number" id="gap" min="2" max="30" step="0.5" value="5"></label>
+    <label class="f" for="gap">발시 최소 간격(초)<input type="number" id="gap" min="1" max="30" step="0.5" value="2.5"></label>
     <label class="f" for="sens">발시음 감도<select id="sens"><option value="n">보통</option><option value="h">민감</option><option value="l">둔감</option></select></label>
   </div>
 </section>
@@ -268,7 +268,7 @@ const S={mode:'idle',running:false,roi:null,roiScale:1,stream:null,actx:null,
   abuf:{rms:[],hf:[]},med:{rms:1e-4,hf:1e-4},aCount:0,cand:null,lastRel:-1e9,
   raw:{v:[],a:[],ev:[]},fps:{n:0,t0:0},startedAt:null,view:{z:1,tx:0,ty:0},aimOpen:true,hold:null,lastTone:-1e9,pcm:{chunks:[],n:0,t0:0,full:false},pcmRate:16000};
 const cfg=()=>({N:clampI($('nShooter').value,1,12,6),A:clampI($('nArrow').value,1,10,5),single:$('recMode').value==='single',me:clampI($('myNo').value,1,clampI($('nShooter').value,1,12,6),1)-1,
-  wa:clampF($('winA').value,0.5,6,2),wb:clampF($('winB').value,1,9,4.5),gap:clampF($('gap').value,2,30,5),sens:SENS[$('sens').value]||SENS.n});
+  wa:clampF($('winA').value,0.5,6,2),wb:clampF($('winB').value,1,9,4.5),gap:clampF($('gap').value,1,30,2.5),sens:SENS[$('sens').value]||SENS.n});
 function clampI(v,a,b,d){v=parseInt(v,10);return isFinite(v)?Math.min(b,Math.max(a,v)):d}
 function clampF(v,a,b,d){v=parseFloat(v);return isFinite(v)?Math.min(b,Math.max(a,v)):d}
 const clock=()=>S.mode==='file'?vid.currentTime:performance.now()/1000;
@@ -466,10 +466,10 @@ $('btnAuto').addEventListener('click',async()=>{
 });
 
 /* ---------- audio ---------- */
-const WORKLET=`class F extends AudioWorkletProcessor{constructor(o){super();const p=o.processorOptions;this.hop=p.hop;this.a=p.a;this.D=p.D;this.n=0;this.s2=0;this.d2=0;this.l2=0;this.p=0;this.lp=0;this.acc=0;this.k=0;this.pb=new Float32Array(Math.ceil(p.hop/p.D)+4);this.pi=0}
-process(inp){const c=inp[0]&&inp[0][0];if(!c)return true;for(let i=0;i<c.length;i++){const x=c[i],d=x-this.p;this.p=x;this.lp+=this.a*(x-this.lp);this.s2+=x*x;this.d2+=d*d;this.l2+=this.lp*this.lp;
-this.acc+=x;if(++this.k>=this.D){if(this.pi<this.pb.length)this.pb[this.pi++]=this.acc/this.D;this.acc=0;this.k=0}
-if(++this.n>=this.hop){const n=this.n;this.port.postMessage([Math.sqrt(this.s2/n),Math.sqrt(this.d2/n),Math.sqrt(this.l2/n),this.pb.slice(0,this.pi)]);this.pi=0;this.n=0;this.s2=0;this.d2=0;this.l2=0}}return true}}
+const WORKLET=`class F extends AudioWorkletProcessor{constructor(o){super();const p=o.processorOptions;this.hop=p.hop;this.a=p.a;this.D=p.D;this.n=0;this.s2=0;this.d2=0;this.l2=0;this.p=0;this.lp=0;this.acc=0;this.acc2=0;this.k=0;this.pb=new Float32Array(2*Math.ceil(p.hop/p.D)+8);this.pi=0}
+process(inp){const c=inp[0]&&inp[0][0];if(!c)return true;const c2=inp[0][1]||null,nc=c2?2:1;for(let i=0;i<c.length;i++){const x=c[i],d=x-this.p;this.p=x;this.lp+=this.a*(x-this.lp);this.s2+=x*x;this.d2+=d*d;this.l2+=this.lp*this.lp;
+this.acc+=x;if(c2)this.acc2+=c2[i];if(++this.k>=this.D){if(this.pi+nc<=this.pb.length){this.pb[this.pi++]=this.acc/this.D;if(c2)this.pb[this.pi++]=this.acc2/this.D}this.acc=0;this.acc2=0;this.k=0}
+if(++this.n>=this.hop){const n=this.n;this.port.postMessage([Math.sqrt(this.s2/n),Math.sqrt(this.d2/n),Math.sqrt(this.l2/n),this.pb.slice(0,this.pi),nc]);this.pi=0;this.n=0;this.s2=0;this.d2=0;this.l2=0}}return true}}
 registerProcessor('feat',F);`;
 async function setupAudio(mk){
   const AC=window.AudioContext||window.webkitAudioContext;const c=new AC();S.actx=c;
@@ -483,20 +483,21 @@ async function setupAudio(mk){
     try{const url=URL.createObjectURL(new Blob([WORKLET],{type:'application/javascript'}));
       await c.audioWorklet.addModule(url);
       node=new AudioWorkletNode(c,'feat',{processorOptions:{hop,a,D}});
-      node.port.onmessage=e=>onAudio(e.data[0],e.data[1],e.data[2],e.data[3]);}catch(_){node=null}
+      node.port.onmessage=e=>onAudio(e.data[0],e.data[1],e.data[2],e.data[3],e.data[4]);}catch(_){node=null}
   }
   if(!node){
-    node=c.createScriptProcessor(1024,1,1);let n=0,s2=0,d2=0,l2=0,p=0,lp=0,acc=0,k=0,pb=[];
-    node.onaudioprocess=e=>{const x=e.inputBuffer.getChannelData(0);for(let i=0;i<x.length;i++){const v=x[i],d=v-p;p=v;lp+=a*(v-lp);s2+=v*v;d2+=d*d;l2+=lp*lp;
-      acc+=v;if(++k>=D){pb.push(acc/D);acc=0;k=0}
-      if(++n>=hop){onAudio(Math.sqrt(s2/n),Math.sqrt(d2/n),Math.sqrt(l2/n),Float32Array.from(pb));pb=[];n=0;s2=0;d2=0;l2=0}}};
+    node=c.createScriptProcessor(1024,2,1);let n=0,s2=0,d2=0,l2=0,p=0,lp=0,acc=0,acc2=0,k=0,pb=[];
+    node.onaudioprocess=e=>{const ib=e.inputBuffer,x=ib.getChannelData(0),x2=ib.numberOfChannels>1?ib.getChannelData(1):null,nc=x2?2:1;
+      for(let i=0;i<x.length;i++){const v=x[i],d=v-p;p=v;lp+=a*(v-lp);s2+=v*v;d2+=d*d;l2+=lp*lp;
+      acc+=v;if(x2)acc2+=x2[i];if(++k>=D){pb.push(acc/D);if(x2)pb.push(acc2/D);acc=0;acc2=0;k=0}
+      if(++n>=hop){onAudio(Math.sqrt(s2/n),Math.sqrt(d2/n),Math.sqrt(l2/n),Float32Array.from(pb),nc);pb=[];n=0;s2=0;d2=0;l2=0}}};
   }
   const src=mk(c);src.connect(node);node.connect(mute);
 }
-const TONE_PRE=1.5,TONE_POST=0.8;
-function onAudio(rms,hf,lf,pcm){
+const TONE_PRE=0.6,TONE_POST=0.8,LAMP_MIN_RISE=40,SHARP_MIN=0.09;   // sharpness = HF/RMS at the peak: releases >=0.15, arrow impacts ~0.05
+function onAudio(rms,hf,lf,pcm,nc){
   const t=clock();if(S.mode==='file'&&vid.paused)return;
-  if(S.running&&pcm&&pcm.length)keepPcm(t,pcm);
+  if(S.running&&pcm&&pcm.length)keepPcm(t,pcm,nc||1);
   const A=S.abuf;A.rms.push(rms);A.hf.push(hf);if(A.rms.length>300){A.rms.shift();A.hf.shift()}
   S.aCount++;if(S.aCount%10===0&&A.rms.length>=50){S.med.rms=Math.max(1e-5,median(A.rms));S.med.hf=Math.max(1e-6,median(A.hf))}
   const rr=rms/S.med.rms,hr=hf/S.med.hf;
@@ -507,39 +508,48 @@ function onAudio(rms,hf,lf,pcm){
   // a release is held briefly: the target's hit sound (온달정 뻐꾸기) is a ringing two-note tone,
   // and its first note can look like a release until the ringing second note arrives
   if(S.hold&&t-S.hold.t>TONE_POST){const h=S.hold;S.hold=null;onRelease(h.t,'sound',h.info)}
-  if(S.cand){const k=S.cand;k.n++;k.rms.push(rms);k.lf.push(lf);
+  if(S.cand){const k=S.cand;k.n++;k.rms.push(rms);k.lf.push(lf);k.hfa.push(hf);
     if(k.n>=15){S.cand=null;let pi=0;for(let i=1;i<k.rms.length;i++)if(k.rms[i]>k.rms[pi])pi=i;
-      const peak=k.rms[pi],pr=peak/k.mr,low=Math.pow(k.lf[pi]/peak,2),dec=rms/peak,ok=pr>c.sens.krms&&low<c.sens.low&&dec<0.3;
+      const peak=k.rms[pi],pr=peak/k.mr,low=Math.pow(k.lf[pi]/peak,2),dec=rms/peak,sharp=k.hfa[pi]/peak,dull=sharp<SHARP_MIN,ok=pr>c.sens.krms&&low<c.sens.low&&dec<0.3&&!dull;
       const free=k.t-S.lastRel>c.gap;
       if(pr>5&&dec>0.5){   // ringing tone = target sound
         if(S.hold&&k.t-S.hold.t<=TONE_POST){log('note',`과녁 소리(뻐꾸기) 제외 · 앞의 발시 후보 취소`,S.hold.t);S.lastRel=S.hold.prev;S.hold=null}
         if(k.t-S.lastTone>1)log('note','과녁 소리(뻐꾸기)',k.t);
         S.lastTone=k.t;}
+      else if(ok&&!free&&k.t-S.lastRel<2&&k.t-S.lastTone>=TONE_PRE){
+        // a much stronger release right after a faint one: the faint one was a precursor noise, move the release here
+        const info={rr:+pr.toFixed(1),hr:+k.hr.toFixed(1),low:+low.toFixed(2),dec:+dec.toFixed(2)};
+        const h=S.hold,a=h?null:S.arrows.findLast(x=>x.src==='sound'&&x.tRel===S.lastRel&&x.res==='pending'&&!x.tFlash);
+        const prev=h?h.info:a&&a.info;
+        if(prev&&pr>2*prev.rr){log('note',`발시 시각 보정 ${(k.t-S.lastRel).toFixed(2)}초 뒤 더 큰 소리 (${prev.rr}배 → ${info.rr}배)`,k.t);
+          if(h){h.t=k.t;h.info=info}else{a.tRel=k.t;a.info=info}S.lastRel=k.t}}
       else if(ok&&free){
         const info={rr:+pr.toFixed(1),hr:+k.hr.toFixed(1),low:+low.toFixed(2),dec:+dec.toFixed(2)};
         if(k.t-S.lastTone<TONE_PRE)log('note',`과녁 소리 직후라 발시에서 제외 (크기 ${info.rr}배)`,k.t);
         else{S.hold={t:k.t,info,prev:S.lastRel};S.lastRel=k.t}}
-      else if(free&&pr>2&&!ok)log('note',`충격음 제외 (크기 ${pr.toFixed(1)}배, 저음 ${Math.round(low*100)}%, 잔향 ${Math.round(dec*100)}%)`,k.t);}
+      else if(free&&pr>2&&!ok)log('note',dull?`둔탁한 소리 제외 (화살 맞는 소리 등, 크기 ${pr.toFixed(1)}배)`:`충격음 제외 (크기 ${pr.toFixed(1)}배, 저음 ${Math.round(low*100)}%, 잔향 ${Math.round(dec*100)}%)`,k.t);}
     return;}
   // every sharp onset is examined (tones must be seen even inside the release gap); the gap only limits accepted releases
-  if(hr>c.sens.khf)S.cand={t,n:0,rms:[rms],lf:[lf],mr:S.med.rms,hr};
+  if(hr>c.sens.khf)S.cand={t,n:0,rms:[rms],lf:[lf],hfa:[hf],mr:S.med.rms,hr};
 }
-const PCM_MAX_MIN=40;
-function keepPcm(t,pcm){
-  const P=S.pcm,tr=tRel(t);if(P.n===0){P.t0=tr-pcm.length/S.pcmRate;P.sync=[];P.lastSync=-1e9}   // time of the first kept sample, same clock as the record file
-  if(P.n>S.pcmRate*60*PCM_MAX_MIN){if(!P.full){P.full=true;log('note',`소리 저장은 ${PCM_MAX_MIN}분까지만 합니다`)}return}
+const PCM_MAX_BYTES=80*1048576;   // ~20 min stereo / ~40 min mono at 16 kHz; keeps phones from killing the tab
+function keepPcm(t,pcm,nc){
+  const P=S.pcm,tr=tRel(t);if(P.n===0){P.nc=nc;P.t0=tr-pcm.length/nc/S.pcmRate;P.sync=[];P.lastSync=-1e9}
+  if(nc!==P.nc)return;   // channel count must not change inside one file
+  const fr=pcm.length/nc;   // time of the first kept sample, same clock as the record file
+  if(P.n*P.nc*2>PCM_MAX_BYTES){if(!P.full){P.full=true;log('note',`소리 저장 한도(${Math.round(PCM_MAX_BYTES/P.nc/2/S.pcmRate/60)}분)에 도달해 이후 소리는 저장하지 않습니다`)}return}
   // keep the WAV on the record clock: if audio blocks went missing, fill the hole with silence
-  const lag=(tr-pcm.length/S.pcmRate)-(P.t0+P.n/S.pcmRate);
-  if(lag>0.03){const z=new Int16Array(Math.round(lag*S.pcmRate));P.chunks.push(z);P.n+=z.length}
+  const lag=(tr-fr/S.pcmRate)-(P.t0+P.n/S.pcmRate);   // P.n counts frames (one sample per channel)
+  if(lag>0.03){const z=new Int16Array(Math.round(lag*S.pcmRate)*nc);P.chunks.push(z);P.n+=z.length/nc}
   if(tr-P.lastSync>=1){P.sync.push([P.n,+tr.toFixed(3)]);P.lastSync=tr}
   const q=new Int16Array(pcm.length);for(let i=0;i<pcm.length;i++){const v=pcm[i];q[i]=v>=1?32767:v<=-1?-32768:Math.round(v*32767)}
-  P.chunks.push(q);P.n+=q.length;
+  P.chunks.push(q);P.n+=fr;
 }
 function wavBlob(){
-  const P=S.pcm,rate=Math.round(S.pcmRate),n=P.n,buf=new ArrayBuffer(44+n*2),dv=new DataView(buf);
+  const P=S.pcm,rate=Math.round(S.pcmRate),nc=P.nc||1,n=P.n*nc,buf=new ArrayBuffer(44+n*2),dv=new DataView(buf);
   const w=(o,str)=>{for(let i=0;i<str.length;i++)dv.setUint8(o+i,str.charCodeAt(i))};
-  w(0,'RIFF');dv.setUint32(4,36+n*2,true);w(8,'WAVE');w(12,'fmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);
-  dv.setUint32(24,rate,true);dv.setUint32(28,rate*2,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);w(36,'data');dv.setUint32(40,n*2,true);
+  w(0,'RIFF');dv.setUint32(4,36+n*2,true);w(8,'WAVE');w(12,'fmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,nc,true);
+  dv.setUint32(24,rate,true);dv.setUint32(28,rate*2*nc,true);dv.setUint16(32,2*nc,true);dv.setUint16(34,16,true);w(36,'data');dv.setUint32(40,n*2,true);
   let o=44;for(const c of P.chunks){new Int16Array(buf,o,c.length).set(c);o+=c.length*2}
   return new Blob([buf],{type:'audio/wav'});
 }
@@ -643,7 +653,7 @@ function setROI(cxp,cyp,scale){
   const w=Math.max(8,Math.round(Math.min(W,H)*0.034*S.roiScale)),h=Math.max(6,Math.round(w*0.62));
   S.roi={x:Math.round(Math.min(W-w,Math.max(0,cxp-w/2))),y:Math.round(Math.min(H-h,Math.max(0,cyp-h/2))),w,h};
   S.roiT=S.mode==='file'?vid.currentTime:null;
-  S.trk=null;S.bg=null;S.weak=null;S.roiDims=[W,H];S.vbuf=[];S.devAbs=[];S.edges=[];S.ring=[];S.single=null;S.wasOn=false;S.onSince=null;S.warm=null;
+  S.trk=null;S.bg=null;S.weak=null;S.roiDims=[W,H];S.vbuf=[];S.devAbs=[];S.lampMed=0;S.sigma=3;S.edges=[];S.ring=[];S.single=null;S.wasOn=false;S.onSince=null;S.warm=null;
   chip('chRoi','on');$('btnGo').disabled=false;aimUI();
   buildTemplate();$('trkTxt').textContent='';
   redraw();
@@ -665,7 +675,7 @@ function regularStart(E){
 function resetDetectors(){
   // forget everything tied to playback time: last shot, last blink, pending candidates, lamp background
   S.lastRel=-1e9;S.lastFlash=-1e9;S.cand=null;S.hold=null;S.lastTone=-1e9;S.edges=[];S.weak=null;S.wasOn=false;S.onSince=null;
-  S.warm=null;S.bg=null;S.lastT=null;S.ring=[];S.devAbs=[];S.lastFrameT=null;
+  S.warm=null;S.bg=null;S.lastT=null;S.ring=[];S.devAbs=[];S.lampMed=0;S.sigma=3;S.lastFrameT=null;
   S.arrows.forEach(a=>{if(a.res==='pending')a.res='miss'});
 }
 function onFrame(t){
@@ -690,9 +700,11 @@ function onFrame(t){
   df.sort();const k=Math.min(6,np);let hi=0,lo=0;for(let i=0;i<k;i++){hi+=df[np-1-i];lo+=df[i]}hi/=k;lo/=k;
   const dev=hi-Math.max(0,-lo);   // brightening minus darkening cancels edge jitter
   if(S.warm==null)S.warm=t;const warm=t-S.warm>3;
-  S.devAbs.push(Math.abs(dev));if(S.devAbs.length>300)S.devAbs.shift();
-  if(S.devAbs.length%15===0)S.sigma=Math.max(1,1.48*median(S.devAbs));
-  const thr=Math.max(10,3.5*S.sigma),on=warm&&dev>thr;
+  // threshold = baseline + spread. A steady offset (light change, compression shimmer) raises the baseline, not the
+  // spread, so real blinks (~+200) stay detectable; the old |dev|-median treated the offset as noise (온달정 0928 missed 3 of 6)
+  S.devAbs.push(dev);if(S.devAbs.length>300)S.devAbs.shift();
+  if(S.devAbs.length%15===0){S.lampMed=median(S.devAbs);S.sigma=Math.max(1,1.48*median(S.devAbs.map(v=>Math.abs(v-S.lampMed))))}
+  const thr=Math.max(10,(S.lampMed||0)+Math.max(LAMP_MIN_RISE,3.5*S.sigma)),on=warm&&dev>thr;
   // evidence ring
   evx.fillStyle='#000';evx.fillRect(0,0,EVW,EVH);sdraw(evx,r.x-r.w,r.y-r.h*0.6,r.w*3,r.h*2.2,0,0,EVW,EVH);
   S.ring.push({t,img:evx.getImageData(0,0,EVW,EVH),dev,thr});while(S.ring.length&&t-S.ring[0].t>7)S.ring.shift();
@@ -866,12 +878,12 @@ function dl(blob,name){const u=URL.createObjectURL(blob);const a=document.create
 function stampNow(){if(!S.stamp)S.stamp='gwanjung-'+new Date().toISOString().slice(0,16).replace(/[:T]/g,'');return S.stamp}
 $('btnSaveWav').onclick=()=>{
   if(!S.pcm.n){toast('저장할 소리가 없습니다. 판정을 돌린 뒤에 누르세요');return}
-  dl(wavBlob(),stampNow()+'-sound.wav');toast(`소리 파일을 저장했습니다 (${Math.round(S.pcm.n/S.pcmRate)}초, ${(S.pcm.n*2/1048576).toFixed(1)}MB)`)};
+  dl(wavBlob(),stampNow()+'-sound.wav');toast(`소리 파일을 저장했습니다 (${Math.round(S.pcm.n/S.pcmRate)}초, ${S.pcm.nc===2?'스테레오':'모노'}, ${(S.pcm.n*2*(S.pcm.nc||1)/1048576).toFixed(1)}MB)`)};
 $('btnSave').onclick=()=>{
   const stamp=stampNow();
   const data={app:'관중 판정기 '+$('h1ver').textContent,saved:new Date().toISOString(),mode:S.mode,settings:cfg(),roi:S.roi,video:{w:vid.videoWidth,h:vid.videoHeight},camera:S.mode==='live'?S.camInfo||null:null,
     arrows:S.arrows.map(a=>({sun:a.sun,shooter:a.p+1,arrow:a.s+1,res:a.res,src:a.src,tRelease:a.tRel==null?null:+tRel(a.tRel).toFixed(3),tFlash:a.tFlash==null?null:+tRel(a.tFlash).toFixed(3),flags:a.flags,info:a.info})),
-    events:S.raw.ev,lamp:S.raw.v,audio:S.raw.a,sound:S.pcm.n?{file:stamp+'-sound.wav',rate:Math.round(S.pcmRate),t0:+S.pcm.t0.toFixed(3),seconds:+(S.pcm.n/S.pcmRate).toFixed(1),sync:S.pcm.sync}:null};
+    events:S.raw.ev,lamp:S.raw.v,audio:S.raw.a,sound:S.pcm.n?{file:stamp+'-sound.wav',rate:Math.round(S.pcmRate),t0:+S.pcm.t0.toFixed(3),seconds:+(S.pcm.n/S.pcmRate).toFixed(1),channels:S.pcm.nc||1,sync:S.pcm.sync}:null};
   dl(new Blob([JSON.stringify(data)],{type:'application/json'}),stamp+'.json');
   toast(S.pcm.n?'기록 파일을 저장했습니다. 소리 파일도 저장해 주세요':'기록 파일을 저장했습니다');
 };
