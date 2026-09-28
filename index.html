@@ -59,6 +59,9 @@ input[type=number],select{font:600 15px var(--mono);padding:8px 10px;border-radi
 select{width:auto;font-family:var(--font)}
 .devs select{width:100%;max-width:100%}
 .settings{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.camctl{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+.camctl input[type=range]{width:100%;accent-color:var(--focus)}
+.camctl .v{font:600 12px var(--mono);color:var(--ink)}
 .stage{position:relative;background:#000;border-radius:10px;overflow:hidden;touch-action:manipulation}
 .stage video{display:block;width:100%;height:auto}
 .stage canvas{position:absolute;inset:0;width:100%;height:100%}
@@ -111,7 +114,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
 <body>
 <div class="wrap">
 <header>
-  <h1>관중 판정기 <span class="ver">시험판 v7</span></h1>
+  <h1>관중 판정기 <span class="ver">시험판 v8</span></h1>
   <p class="sub">발시음과 과녁 점멸을 짝지어 관중·불을 자동으로 채웁니다. 시험판이라 결과는 반드시 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -133,6 +136,15 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
     <label class="f" for="resSel">해상도<select id="resSel"><option value="1080">1080p</option><option value="720">720p</option><option value="2160">4K</option></select></label>
   </div>
   <p class="muted" id="camInfo" hidden></p>
+  <details id="camAdv" hidden><summary>카메라 세부 설정</summary>
+    <p class="muted" id="capTxt" style="margin:8px 0"></p>
+    <div class="settings camctl" id="camCtl"></div>
+    <div class="row" id="camBtns" style="margin-top:10px">
+      <button class="grow" id="btnLock">노출·색 지금 값으로 고정</button>
+      <button class="grow" id="btnAuto">모두 자동으로</button>
+    </div>
+    <p class="muted" style="margin:8px 0 0">점멸 판정에는 노출·화이트밸런스를 고정하는 편이 좋습니다. 과녁이 잘 보이는 상태에서 「고정」을 누르세요. 바꾼 값은 이 카메라 이름으로 기억됩니다. 렌즈 줌·초점(링)은 손으로 돌려야 하며 앱에서는 바꿀 수 없습니다.</p>
+  </details>
   <div class="settings">
     <label class="f" for="nShooter">선수 수<input type="number" id="nShooter" min="1" max="12" value="6"></label>
     <label class="f" for="nArrow">순당 시 수<input type="number" id="nArrow" min="1" max="10" value="5"></label>
@@ -162,7 +174,6 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
         <button id="nL" aria-label="왼쪽으로">←</button><button id="nC" aria-label="크게/작게">⤢</button><button id="nR" aria-label="오른쪽으로">→</button>
         <span></span><button id="nD" aria-label="아래로">↓</button><span></span>
       </div>
-      <label class="f" for="zoom" id="zoomWrap" hidden>카메라 줌<input type="range" id="zoom"></label>
     </div>
   </div>
   <div>
@@ -267,14 +278,17 @@ async function startLive(){
     const camId=$('camSel').value||pref('cam'),micId=$('micSel').value||pref('mic'),rh=+($('resSel').value||1080),rw=Math.round(rh*16/9);
     const vc={width:{ideal:rw},height:{ideal:rh},frameRate:{ideal:30}};
     if(camId)vc.deviceId={exact:camId};else vc.facingMode={ideal:'environment'};
+    // desktop Chrome only exposes UVC pan/tilt/zoom after its own permission, asked together with the camera
+    let ptz=false;try{const sc=navigator.mediaDevices.getSupportedConstraints();ptz=!!(sc&&sc.pan&&sc.tilt)}catch(_){}
+    if(ptz){vc.pan=true;vc.tilt=true;vc.zoom=true}
     const ac={echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1};
     if(micId)ac.deviceId={exact:micId};
     let st;
     try{st=await navigator.mediaDevices.getUserMedia({video:vc,audio:ac})}
-    catch(e){if(camId||micId){delete vc.deviceId;delete ac.deviceId;vc.facingMode={ideal:'environment'};st=await navigator.mediaDevices.getUserMedia({video:vc,audio:ac})}else throw e}
+    catch(e){if(camId||micId||ptz){delete vc.deviceId;delete ac.deviceId;delete vc.pan;delete vc.tilt;delete vc.zoom;vc.facingMode={ideal:'environment'};st=await navigator.mediaDevices.getUserMedia({video:vc,audio:ac})}else throw e}
     S.stream=st;S.mode='live';vid.srcObject=st;vid.muted=true;await vid.play();
     await setupAudio(c=>c.createMediaStreamSource(st));
-    setupZoom(st.getVideoTracks()[0]);
+    await setupCamCtl(st.getVideoTracks()[0]);
     await fillDevices(st);
     try{if(navigator.wakeLock)S.wake=await navigator.wakeLock.request('screen')}catch(_){}
     onVideoReady();chip('chCam','on');chip('chMic','on');log('note','카메라·마이크 시작');
@@ -338,6 +352,7 @@ $('btnShow').addEventListener('click',async()=>{
 });
 function stopAll(){
   if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null}
+  S.camTrack=null;$('camAdv').hidden=true;
   if(S.actx){try{S.actx.close()}catch(_){}S.actx=null}
   S.running=false;
 }
@@ -347,12 +362,92 @@ function onVideoReady(){
   sizeOverlay();$('btnGo').disabled=!S.roi;startFrameLoop();
   requestAnimationFrame(redraw);setTimeout(redraw,300);
 }
-function setupZoom(track){
-  const caps=track.getCapabilities?track.getCapabilities():{};
-  if(caps.zoom){const z=$('zoom');z.min=caps.zoom.min;z.max=caps.zoom.max;z.step=caps.zoom.step||0.1;
-    z.value=(track.getSettings().zoom)||caps.zoom.min;$('zoomWrap').hidden=false;
-    z.oninput=()=>track.applyConstraints({advanced:[{zoom:+z.value}]}).catch(()=>{});}
+/* ---------- camera controls (W3C Image Capture constraints; Chrome maps them to UVC controls) ---------- */
+const CTL=[
+  ['exposureMode','노출 방식','mode'],['exposureTime','노출 시간','range','exposureMode'],['exposureCompensation','노출 보정','range'],
+  ['whiteBalanceMode','화이트밸런스','mode'],['colorTemperature','색온도','range','whiteBalanceMode'],
+  ['focusMode','초점 방식','mode'],['focusDistance','초점 거리','range','focusMode'],
+  ['zoom','줌(디지털/전동)','range'],['pan','팬','range'],['tilt','틸트','range'],
+  ['brightness','밝기','range'],['contrast','대비','range'],['saturation','채도','range'],['sharpness','선명도','range']];
+const MODE_KO={continuous:'자동',manual:'수동','single-shot':'한 번 맞춤',none:'없음'};
+const camKey=t=>'camset_'+((t&&t.label)||'cam').replace(/\s+/g,' ').slice(0,60);
+function ctlText(k,v){
+  if(v==null||isNaN(v))return '—';
+  if(k==='exposureTime')return (v/10).toFixed(v<100?1:0)+' ms';   // spec unit is 100 µs
+  if(k==='colorTemperature')return Math.round(v)+' K';
+  return (Math.round(v*100)/100).toString();
 }
+function camSaved(t){try{return JSON.parse(pref(camKey(t))||'{}')}catch(_){return {}}}
+function camSave(t,o){pref(camKey(t),JSON.stringify(o))}
+async function camApply(t,c){
+  try{await t.applyConstraints({advanced:[c]});return true}
+  catch(e){log('warn','카메라 설정 거부: '+Object.keys(c).join(',')+' ('+(e&&e.name||e)+')');return false}
+}
+function camRefresh(){
+  const t=S.camTrack;if(!t)return;const s=t.getSettings?t.getSettings():{};
+  for(const [k,,kind] of CTL){const el=$('cc_'+k);if(!el||s[k]==null)continue;
+    if(kind==='mode')el.value=s[k];else{el.value=s[k];const v=$('cv_'+k);if(v)v.textContent=ctlText(k,s[k])}}
+  S.camInfo={settings:s,caps:t.getCapabilities?t.getCapabilities():{}};
+}
+async function setupCamCtl(track){
+  S.camTrack=track;const box=$('camCtl');box.innerHTML='';
+  const caps=track&&track.getCapabilities?track.getCapabilities():{},set=track&&track.getSettings?track.getSettings():{};
+  const saved=camSaved(track),have=[];
+  // restore this camera's remembered values first (modes before values)
+  const modes={},vals={};for(const [k,,kind] of CTL)if(saved[k]!=null&&caps[k])(kind==='mode'?modes:vals)[k]=saved[k];
+  if(Object.keys(modes).length)await camApply(track,modes);
+  if(Object.keys(vals).length)await camApply(track,Object.assign({},modes,vals));
+  for(const [k,name,kind,modeKey] of CTL){
+    const c=caps[k];if(!c)continue;
+    const lab=document.createElement('label');lab.className='f';lab.htmlFor='cc_'+k;
+    if(kind==='mode'){
+      if(!Array.isArray(c)||c.length<2)continue;
+      const sel=document.createElement('select');sel.id='cc_'+k;sel.style.width='100%';
+      c.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=MODE_KO[m]||m;sel.appendChild(o)});
+      sel.onchange=async()=>{if(await camApply(track,{[k]:sel.value})){const o=camSaved(track);o[k]=sel.value;camSave(track,o)}camRefresh()};
+      lab.append(name,sel);
+    }else{
+      if(typeof c.min!=='number'||!(c.max>c.min))continue;
+      const r=document.createElement('input');r.type='range';r.id='cc_'+k;r.min=c.min;r.max=c.max;r.step=c.step||((c.max-c.min)/200);
+      const v=document.createElement('span');v.className='v';v.id='cv_'+k;
+      const head=document.createElement('span');head.append(name+' ',v);
+      let busy=false,want=null;
+      const go=async()=>{if(busy)return;busy=true;
+        while(want!=null){const x=want;want=null;const cc={[k]:x};
+          // a manual value only sticks when its mode is manual in the same request
+          if(modeKey&&Array.isArray(caps[modeKey])&&caps[modeKey].includes('manual'))cc[modeKey]='manual';
+          if(await camApply(track,cc)){const o=camSaved(track);Object.assign(o,cc);camSave(track,o)}}
+        busy=false;camRefresh()};
+      r.oninput=()=>{want=+r.value;v.textContent=ctlText(k,+r.value);go()};
+      lab.append(head,r);
+    }
+    box.appendChild(lab);have.push(name);
+  }
+  const iOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+  $('capTxt').textContent=have.length
+    ?`이 카메라가 브라우저에 알려 준 조정 항목 ${have.length}개: ${have.join(', ')}`
+    :(iOS?'iPhone·iPad 브라우저는 카메라 세부 조정을 열어 주지 않습니다. 해상도만 고를 수 있습니다.'
+         :'이 카메라(또는 브라우저)는 세부 조정 항목을 알려 주지 않습니다. 해상도만 고를 수 있습니다.');
+  $('camBtns').hidden=!have.length;$('camAdv').hidden=false;
+  camRefresh();
+  if(have.length)log('note','카메라 조정 항목: '+have.join(', '));
+}
+$('btnLock').addEventListener('click',async()=>{
+  const t=S.camTrack;if(!t)return;const caps=t.getCapabilities(),s=t.getSettings(),c={};
+  const man=k=>Array.isArray(caps[k])&&caps[k].includes('manual');
+  if(man('exposureMode')){c.exposureMode='manual';if(s.exposureTime!=null&&caps.exposureTime)c.exposureTime=s.exposureTime}
+  if(man('whiteBalanceMode')){c.whiteBalanceMode='manual';if(s.colorTemperature!=null&&caps.colorTemperature)c.colorTemperature=s.colorTemperature}
+  if(man('focusMode')){c.focusMode='manual';if(s.focusDistance!=null&&caps.focusDistance)c.focusDistance=s.focusDistance}
+  if(!Object.keys(c).length){toast('이 카메라는 수동 고정을 지원하지 않습니다');return}
+  if(await camApply(t,c)){const o=camSaved(t);Object.assign(o,c);camSave(t,o);toast('지금 값으로 고정했습니다');log('note','카메라 고정: '+Object.keys(c).join(', '))}
+  camRefresh();
+});
+$('btnAuto').addEventListener('click',async()=>{
+  const t=S.camTrack;if(!t)return;const caps=t.getCapabilities(),c={};
+  for(const k of ['exposureMode','whiteBalanceMode','focusMode'])if(Array.isArray(caps[k])&&caps[k].includes('continuous'))c[k]='continuous';
+  camSave(t,{});if(Object.keys(c).length)await camApply(t,c);
+  toast('자동으로 되돌렸습니다. 밝기·대비 등은 카메라를 뽑았다 다시 꽂으면 기본값이 됩니다');camRefresh();
+});
 
 /* ---------- audio ---------- */
 const WORKLET=`class F extends AudioWorkletProcessor{constructor(o){super();const p=o.processorOptions;this.hop=p.hop;this.a=p.a;this.n=0;this.s2=0;this.d2=0;this.l2=0;this.p=0;this.lp=0}
@@ -631,7 +726,7 @@ $('btnCopy').onclick=async()=>{
   try{await navigator.clipboard.writeText(out);ta.hidden=true;toast('결과를 복사했습니다')}catch(_){ta.hidden=false;ta.focus();ta.select();toast('자동 복사가 막혀 있습니다. 아래 글을 길게 눌러 복사하세요')}
 };
 $('btnSave').onclick=()=>{
-  const data={app:'관중 판정기 시험판 v1',saved:new Date().toISOString(),mode:S.mode,settings:cfg(),roi:S.roi,video:{w:vid.videoWidth,h:vid.videoHeight},
+  const data={app:'관중 판정기 시험판 v8',saved:new Date().toISOString(),mode:S.mode,settings:cfg(),roi:S.roi,video:{w:vid.videoWidth,h:vid.videoHeight},camera:S.mode==='live'?S.camInfo||null:null,
     arrows:S.arrows.map(a=>({sun:a.sun,shooter:a.p+1,arrow:a.s+1,res:a.res,src:a.src,tRelease:a.tRel==null?null:+tRel(a.tRel).toFixed(3),tFlash:a.tFlash==null?null:+tRel(a.tFlash).toFixed(3),flags:a.flags,info:a.info})),
     events:S.raw.ev,lamp:S.raw.v,audio:S.raw.a};
   const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const u=URL.createObjectURL(blob);
