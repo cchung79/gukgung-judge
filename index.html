@@ -121,7 +121,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
 <body>
 <div class="wrap">
 <header>
-  <h1>관중 판정기 <span class="ver">시험판 v9</span></h1>
+  <h1>관중 판정기 <span class="ver">시험판 v10</span></h1>
   <p class="sub">발시음과 과녁 점멸을 짝지어 관중·불을 자동으로 채웁니다. 시험판이라 결과는 반드시 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -157,7 +157,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
     <label class="f" for="nArrow">순당 시 수<input type="number" id="nArrow" min="1" max="10" value="5"></label>
     <label class="f" for="winA">관중 대기 시작(초)<input type="number" id="winA" min="0.5" max="6" step="0.1" value="2.0"></label>
     <label class="f" for="winB">관중 대기 끝(초)<input type="number" id="winB" min="2" max="9" step="0.1" value="4.5"></label>
-    <label class="f" for="gap">발시 최소 간격(초)<input type="number" id="gap" min="2" max="30" step="1" value="8"></label>
+    <label class="f" for="gap">발시 최소 간격(초)<input type="number" id="gap" min="2" max="30" step="0.5" value="5"></label>
     <label class="f" for="sens">발시음 감도<select id="sens"><option value="n">보통</option><option value="h">민감</option><option value="l">둔감</option></select></label>
   </div>
 </section>
@@ -262,9 +262,9 @@ const S={mode:'idle',running:false,roi:null,roiScale:1,stream:null,actx:null,
   arrows:[],sun:1,ptr:{p:0,s:0},sel:1,
   vbuf:[],ring:[],devAbs:[],sigma:3,edges:[],lastFlash:-1e9,onSince:null,wasOn:false,single:null,
   abuf:{rms:[],hf:[]},med:{rms:1e-4,hf:1e-4},aCount:0,cand:null,lastRel:-1e9,
-  raw:{v:[],a:[],ev:[]},fps:{n:0,t0:0},startedAt:null,view:{z:1,tx:0,ty:0},aimOpen:true};
+  raw:{v:[],a:[],ev:[]},fps:{n:0,t0:0},startedAt:null,view:{z:1,tx:0,ty:0},aimOpen:true,hold:null,lastTone:-1e9};
 const cfg=()=>({N:clampI($('nShooter').value,1,12,6),A:clampI($('nArrow').value,1,10,5),
-  wa:clampF($('winA').value,0.5,6,2),wb:clampF($('winB').value,1,9,4.5),gap:clampF($('gap').value,2,30,8),sens:SENS[$('sens').value]||SENS.n});
+  wa:clampF($('winA').value,0.5,6,2),wb:clampF($('winB').value,1,9,4.5),gap:clampF($('gap').value,2,30,5),sens:SENS[$('sens').value]||SENS.n});
 function clampI(v,a,b,d){v=parseInt(v,10);return isFinite(v)?Math.min(b,Math.max(a,v)):d}
 function clampF(v,a,b,d){v=parseFloat(v);return isFinite(v)?Math.min(b,Math.max(a,v)):d}
 const clock=()=>S.mode==='file'?vid.currentTime:performance.now()/1000;
@@ -485,6 +485,7 @@ async function setupAudio(mk){
   }
   const src=mk(c);src.connect(node);node.connect(mute);
 }
+const TONE_PRE=1.5,TONE_POST=0.8;
 function onAudio(rms,hf,lf){
   const t=clock();if(S.mode==='file'&&vid.paused)return;
   const A=S.abuf;A.rms.push(rms);A.hf.push(hf);if(A.rms.length>300){A.rms.shift();A.hf.shift()}
@@ -494,13 +495,25 @@ function onAudio(rms,hf,lf){
   if(S.aCount%5===0)drawLevel(rr);
   if(!S.running||A.rms.length<150)return;
   const c=cfg();
+  // a release is held briefly: the target's hit sound (온달정 뻐꾸기) is a ringing two-note tone,
+  // and its first note can look like a release until the ringing second note arrives
+  if(S.hold&&t-S.hold.t>TONE_POST){const h=S.hold;S.hold=null;onRelease(h.t,'sound',h.info)}
   if(S.cand){const k=S.cand;k.n++;k.rms.push(rms);k.lf.push(lf);
     if(k.n>=15){S.cand=null;let pi=0;for(let i=1;i<k.rms.length;i++)if(k.rms[i]>k.rms[pi])pi=i;
       const peak=k.rms[pi],pr=peak/k.mr,low=Math.pow(k.lf[pi]/peak,2),dec=rms/peak,ok=pr>c.sens.krms&&low<c.sens.low&&dec<0.3;
-      if(ok)onRelease(k.t,'sound',{rr:+pr.toFixed(1),hr:+k.hr.toFixed(1),low:+low.toFixed(2),dec:+dec.toFixed(2)});
-      else if(pr>2)log('note',`충격음 제외 (크기 ${pr.toFixed(1)}배, 저음 ${Math.round(low*100)}%, 잔향 ${Math.round(dec*100)}%)`,k.t);}
+      const free=k.t-S.lastRel>c.gap;
+      if(pr>5&&dec>0.5){   // ringing tone = target sound
+        if(S.hold&&k.t-S.hold.t<=TONE_POST){log('note',`과녁 소리(뻐꾸기) 제외 · 앞의 발시 후보 취소`,S.hold.t);S.lastRel=S.hold.prev;S.hold=null}
+        if(k.t-S.lastTone>1)log('note','과녁 소리(뻐꾸기)',k.t);
+        S.lastTone=k.t;}
+      else if(ok&&free){
+        const info={rr:+pr.toFixed(1),hr:+k.hr.toFixed(1),low:+low.toFixed(2),dec:+dec.toFixed(2)};
+        if(k.t-S.lastTone<TONE_PRE)log('note',`과녁 소리 직후라 발시에서 제외 (크기 ${info.rr}배)`,k.t);
+        else{S.hold={t:k.t,info,prev:S.lastRel};S.lastRel=k.t}}
+      else if(free&&pr>2&&!ok)log('note',`충격음 제외 (크기 ${pr.toFixed(1)}배, 저음 ${Math.round(low*100)}%, 잔향 ${Math.round(dec*100)}%)`,k.t);}
     return;}
-  if(t-S.lastRel>c.gap&&hr>c.sens.khf)S.cand={t,n:0,rms:[rms],lf:[lf],mr:S.med.rms,hr};
+  // every sharp onset is examined (tones must be seen even inside the release gap); the gap only limits accepted releases
+  if(hr>c.sens.khf)S.cand={t,n:0,rms:[rms],lf:[lf],mr:S.med.rms,hr};
 }
 function drawLevel(rr){const x=Math.min(1,Math.log10(Math.max(1,rr))/2);$('lvl').style.width=(x*100)+'%';
   $('lvlThr').style.left=(Math.log10(cfg().sens.krms)/2*100)+'%';$('sndNow').textContent=rr.toFixed(1)+'배'}
@@ -622,7 +635,7 @@ function regularStart(E){
 }
 function resetDetectors(){
   // forget everything tied to playback time: last shot, last blink, pending candidates, lamp background
-  S.lastRel=-1e9;S.lastFlash=-1e9;S.cand=null;S.edges=[];S.weak=null;S.wasOn=false;S.onSince=null;
+  S.lastRel=-1e9;S.lastFlash=-1e9;S.cand=null;S.hold=null;S.lastTone=-1e9;S.edges=[];S.weak=null;S.wasOn=false;S.onSince=null;
   S.warm=null;S.bg=null;S.lastT=null;S.ring=[];S.devAbs=[];S.lastFrameT=null;
   S.arrows.forEach(a=>{if(a.res==='pending')a.res='miss'});
 }
@@ -720,7 +733,7 @@ function tick(t){const c=cfg();let ch=false;
   const p=S.arrows.find(a=>a.res==='pending');
   $('state').textContent=p?`판정 중 · ${(t-p.tRel).toFixed(1)}초`:(S.running?'발시 대기':'대기');$('state').classList.toggle('wait',!!p);
   if(ch)render();}
-function finalizeAll(){const t=clock();for(const a of S.arrows)if(a.res==='pending'){a.res='miss';captureEv(a)}render()}
+function finalizeAll(){const t=clock();if(S.hold){const h=S.hold;S.hold=null;onRelease(h.t,'sound',h.info)}for(const a of S.arrows)if(a.res==='pending'){a.res='miss';captureEv(a)}render()}
 function advance(){const c=cfg();S.ptr.p++;if(S.ptr.p>=c.N){S.ptr.p=0;S.ptr.s++}
   if(S.ptr.s>=c.A){S.ptr={p:0,s:0};S.sun++;S.sel=S.sun;log('note',`${S.sun-1}순 끝. ${S.sun}순 시작`)}}
 function captureEv(a){
@@ -786,7 +799,7 @@ $('btnCopy').onclick=async()=>{
   try{await navigator.clipboard.writeText(out);ta.hidden=true;toast('결과를 복사했습니다')}catch(_){ta.hidden=false;ta.focus();ta.select();toast('자동 복사가 막혀 있습니다. 아래 글을 길게 눌러 복사하세요')}
 };
 $('btnSave').onclick=()=>{
-  const data={app:'관중 판정기 시험판 v9',saved:new Date().toISOString(),mode:S.mode,settings:cfg(),roi:S.roi,video:{w:vid.videoWidth,h:vid.videoHeight},camera:S.mode==='live'?S.camInfo||null:null,
+  const data={app:'관중 판정기 시험판 v10',saved:new Date().toISOString(),mode:S.mode,settings:cfg(),roi:S.roi,video:{w:vid.videoWidth,h:vid.videoHeight},camera:S.mode==='live'?S.camInfo||null:null,
     arrows:S.arrows.map(a=>({sun:a.sun,shooter:a.p+1,arrow:a.s+1,res:a.res,src:a.src,tRelease:a.tRel==null?null:+tRel(a.tRel).toFixed(3),tFlash:a.tFlash==null?null:+tRel(a.tFlash).toFixed(3),flags:a.flags,info:a.info})),
     events:S.raw.ev,lamp:S.raw.v,audio:S.raw.a};
   const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const u=URL.createObjectURL(blob);
@@ -821,7 +834,7 @@ function closeDlg(){if(play){clearInterval(play);play=null;$('dPlay').textConten
 $('dClose').onclick=closeDlg;
 
 /* test hook for replay verification */
-window.__gg={S,setROI,cfg,onRelease};
+window.__gg={S,setROI,cfg,onRelease,onAudio,onFlash,tick,finalizeAll,resetDetectors,vid:()=>vid};
 render();
 })();
 </script>
