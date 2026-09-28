@@ -121,7 +121,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
 <body>
 <div class="wrap">
 <header>
-  <h1>관중 판정기 <span class="ver">시험판 v10</span></h1>
+  <h1>관중 판정기 <span class="ver">시험판 v11</span></h1>
   <p class="sub">발시음과 과녁 점멸을 짝지어 관중·불을 자동으로 채웁니다. 시험판이라 결과는 반드시 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -155,6 +155,8 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
   <div class="settings">
     <label class="f" for="nShooter">선수 수<input type="number" id="nShooter" min="1" max="12" value="6"></label>
     <label class="f" for="nArrow">순당 시 수<input type="number" id="nArrow" min="1" max="10" value="5"></label>
+    <label class="f" for="recMode">기록 방식<select id="recMode"><option value="all">전체</option><option value="single">싱글 (나만)</option></select></label>
+    <label class="f" for="myNo" id="myNoWrap" hidden>내 번호<input type="number" id="myNo" min="1" max="12" value="1"></label>
     <label class="f" for="winA">관중 대기 시작(초)<input type="number" id="winA" min="0.5" max="6" step="0.1" value="2.0"></label>
     <label class="f" for="winB">관중 대기 끝(초)<input type="number" id="winB" min="2" max="9" step="0.1" value="4.5"></label>
     <label class="f" for="gap">발시 최소 간격(초)<input type="number" id="gap" min="2" max="30" step="0.5" value="5"></label>
@@ -203,6 +205,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
   <div class="row">
     <button class="primary grow" id="btnGo" disabled>판정 시작</button>
     <button id="btnManual" disabled>발시 수동 추가</button>
+    <button id="btnMine" hidden>다음은 내 차례</button>
     <button id="btnUndo" disabled>마지막 취소</button>
   </div>
   <div class="row"><span class="muted grow" id="sunLabel">1순</span><select id="sunSel" aria-label="순 선택"></select></div>
@@ -263,7 +266,7 @@ const S={mode:'idle',running:false,roi:null,roiScale:1,stream:null,actx:null,
   vbuf:[],ring:[],devAbs:[],sigma:3,edges:[],lastFlash:-1e9,onSince:null,wasOn:false,single:null,
   abuf:{rms:[],hf:[]},med:{rms:1e-4,hf:1e-4},aCount:0,cand:null,lastRel:-1e9,
   raw:{v:[],a:[],ev:[]},fps:{n:0,t0:0},startedAt:null,view:{z:1,tx:0,ty:0},aimOpen:true,hold:null,lastTone:-1e9};
-const cfg=()=>({N:clampI($('nShooter').value,1,12,6),A:clampI($('nArrow').value,1,10,5),
+const cfg=()=>({N:clampI($('nShooter').value,1,12,6),A:clampI($('nArrow').value,1,10,5),single:$('recMode').value==='single',me:clampI($('myNo').value,1,clampI($('nShooter').value,1,12,6),1)-1,
   wa:clampF($('winA').value,0.5,6,2),wb:clampF($('winB').value,1,9,4.5),gap:clampF($('gap').value,2,30,5),sens:SENS[$('sens').value]||SENS.n});
 function clampI(v,a,b,d){v=parseInt(v,10);return isFinite(v)?Math.min(b,Math.max(a,v)):d}
 function clampF(v,a,b,d){v=parseFloat(v);return isFinite(v)?Math.min(b,Math.max(a,v)):d}
@@ -746,7 +749,10 @@ function undo(){const a=S.arrows.pop();if(!a)return;S.sun=a.sun;S.ptr={p:a.p,s:a
 
 /* ---------- render ---------- */
 function render(){
-  const c=cfg();$('who').textContent=`${S.ptr.p+1}번 · ${S.ptr.s+1}시`;
+  const c=cfg();
+  $('myNoWrap').hidden=!c.single;$('btnMine').hidden=!c.single;$('sunSel').hidden=c.single;
+  if(c.single){renderSingle(c);$('btnUndo').disabled=!S.arrows.length;return}
+  $('who').textContent=`${S.ptr.p+1}번 · ${S.ptr.s+1}시`;
   const sel=$('sunSel');const n=Math.max(S.sun,...S.arrows.map(a=>a.sun),1);
   if(sel.options.length!==n){sel.innerHTML='';for(let i=1;i<=n;i++){const o=document.createElement('option');o.value=i;o.textContent=i+'순';sel.appendChild(o)}}
   sel.value=S.sel;$('sunLabel').textContent=`${S.sel}순 · 선수 ${c.N}명 × ${c.A}시`;
@@ -764,9 +770,33 @@ function render(){
     const sm=tr.insertCell();sm.className='sum';sm.textContent=hits}
   $('btnUndo').disabled=!S.arrows.length;
 }
+function renderSingle(c){
+  // single mode: releases still cycle through every shooter, but only my row is kept, one line per 순
+  const d=(c.me-S.ptr.p+c.N)%c.N;
+  $('who').textContent=d===0?`내 차례 · ${S.ptr.s+1}시`:`${S.ptr.p+1}번 차례 · ${d}명 뒤 나`;
+  const mine=S.arrows.filter(a=>a.p===c.me);const n=Math.max(S.sun,...mine.map(a=>a.sun),1);
+  let tot=0,shot=0;mine.forEach(a=>{if(a.res==='hit')tot++;if(a.res!=='pending')shot++});
+  $('sunLabel').textContent=`싱글 · ${c.N}명 중 ${c.me+1}번 · 누적 ${shot}시 ${tot}中`;
+  const tb=$('sheet');tb.innerHTML='';const hd=tb.insertRow();hd.appendChild(th('','name'));
+  for(let s=0;s<c.A;s++)hd.appendChild(th(s+1+'시'));hd.appendChild(th('계'));
+  for(let u=1;u<=n;u++){const tr=tb.insertRow();tr.appendChild(th(u+'순','name'));let hits=0;
+    for(let s=0;s<c.A;s++){const td=tr.insertCell();const b=document.createElement('button');b.className='cell';
+      const a=mine.find(x=>x.sun===u&&x.s===s);
+      if(a){if(a.res==='hit'){b.classList.add('hit');b.textContent='中';hits++}else if(a.res==='miss'){b.classList.add('miss');b.textContent='/'}else{b.classList.add('pending');b.textContent='…'}
+        if(a.flags.length||a.src!=='sound'){const f=document.createElement('span');f.className='flag';f.textContent='?';b.appendChild(f)}
+        b.setAttribute('aria-label',`${u}순 ${s+1}시 ${a.res==='hit'?'관중':a.res==='miss'?'불':'판정 중'}`);b.onclick=()=>openEv(a);}
+      else{b.textContent='';b.disabled=true;if(u===S.sun&&s===S.ptr.s&&S.ptr.p===c.me)b.classList.add('cur')}
+      td.appendChild(b)}
+    const sm=tr.insertCell();sm.className='sum';sm.textContent=hits}
+}
 function th(txt,cls){const e=document.createElement('th');e.textContent=txt;if(cls)e.className=cls;return e}
 $('sunSel').onchange=e=>{S.sel=+e.target.value;render()};
-['nShooter','nArrow'].forEach(id=>$(id).addEventListener('change',render));
+['nShooter','nArrow','recMode','myNo'].forEach(id=>$(id).addEventListener('change',()=>{if(id==='recMode'||id==='myNo')pref(id,$(id).value);render()}));
+if(pref('recMode'))$('recMode').value=pref('recMode');if(pref('myNo'))$('myNo').value=pref('myNo');
+$('btnMine').onclick=()=>{const c=cfg();if(S.ptr.p===c.me){toast('이미 내 차례로 되어 있습니다');return}
+  // re-sync after a missed or extra release: the next release is mine
+  if(S.ptr.p>c.me){S.ptr.s++;if(S.ptr.s>=c.A){S.ptr.s=0;S.sun++;S.sel=S.sun}}
+  S.ptr.p=c.me;log('note',`순서 맞춤: 다음 발시는 나(${c.me+1}번) ${S.ptr.s+1}시`);render()};
 
 /* ---------- run controls ---------- */
 function setRunning(on){S.running=on;$('btnGo').textContent=on?'판정 멈춤':'판정 시작';$('btnManual').disabled=!on;
@@ -792,6 +822,10 @@ $('btnResetYes').onclick=()=>{
 $('btnCopy').onclick=async()=>{
   const c=cfg();let out=`관중 판정기 · ${new Date().toLocaleString('ko-KR')}\n`;
   const suns=[...new Set(S.arrows.map(a=>a.sun))].sort((a,b)=>a-b);
+  if(c.single){let T=0,N=0;out+=`싱글 · ${c.N}명 중 ${c.me+1}번\n`;
+    for(const u of suns){let row=`${u}순 `,h=0;for(let s=0;s<c.A;s++){const a=S.arrows.find(x=>x.sun===u&&x.p===c.me&&x.s===s);row+=a?(a.res==='hit'?(h++,'中'):a.res==='miss'?'/':'…'):'·';row+=' ';if(a&&a.res!=='pending')N++}
+      T+=h;out+=row+` ${h}中\n`}
+    out+=`\n합계 ${N}시 ${T}中\n`;suns.length=0}
   for(const u of suns){out+=`\n${u}순\n`;for(let p=0;p<c.N;p++){let row=`${p+1}번 `,h=0;
     for(let s=0;s<c.A;s++){const a=S.arrows.find(x=>x.sun===u&&x.p===p&&x.s===s);row+=a?(a.res==='hit'?(h++,'中'):a.res==='miss'?'/':'…'):'·';row+=' '}
     out+=row+` ${h}中\n`}}
@@ -799,7 +833,7 @@ $('btnCopy').onclick=async()=>{
   try{await navigator.clipboard.writeText(out);ta.hidden=true;toast('결과를 복사했습니다')}catch(_){ta.hidden=false;ta.focus();ta.select();toast('자동 복사가 막혀 있습니다. 아래 글을 길게 눌러 복사하세요')}
 };
 $('btnSave').onclick=()=>{
-  const data={app:'관중 판정기 시험판 v10',saved:new Date().toISOString(),mode:S.mode,settings:cfg(),roi:S.roi,video:{w:vid.videoWidth,h:vid.videoHeight},camera:S.mode==='live'?S.camInfo||null:null,
+  const data={app:'관중 판정기 시험판 v11',saved:new Date().toISOString(),mode:S.mode,settings:cfg(),roi:S.roi,video:{w:vid.videoWidth,h:vid.videoHeight},camera:S.mode==='live'?S.camInfo||null:null,
     arrows:S.arrows.map(a=>({sun:a.sun,shooter:a.p+1,arrow:a.s+1,res:a.res,src:a.src,tRelease:a.tRel==null?null:+tRel(a.tRel).toFixed(3),tFlash:a.tFlash==null?null:+tRel(a.tFlash).toFixed(3),flags:a.flags,info:a.info})),
     events:S.raw.ev,lamp:S.raw.v,audio:S.raw.a};
   const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const u=URL.createObjectURL(blob);
