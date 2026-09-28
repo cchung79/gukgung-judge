@@ -121,7 +121,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
 <body>
 <div class="wrap">
 <header>
-  <h1>관중 판정기 <span class="ver">시험판 v11</span></h1>
+  <h1>관중 판정기 <span class="ver" id="h1ver">시험판 v12</span></h1>
   <p class="sub">발시음과 과녁 점멸을 짝지어 관중·불을 자동으로 채웁니다. 시험판이라 결과는 반드시 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -213,6 +213,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
   <div class="row">
     <button class="grow" id="btnCopy">결과 복사</button>
     <button class="grow" id="btnSave">기록 파일 저장</button>
+    <button class="grow" id="btnSaveWav">소리 파일 저장</button>
     <button class="grow" id="btnReset">새로 시작</button>
   </div>
   <textarea id="copyOut" rows="8" hidden style="width:100%;font:12px/1.5 var(--mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px"></textarea>
@@ -265,7 +266,7 @@ const S={mode:'idle',running:false,roi:null,roiScale:1,stream:null,actx:null,
   arrows:[],sun:1,ptr:{p:0,s:0},sel:1,
   vbuf:[],ring:[],devAbs:[],sigma:3,edges:[],lastFlash:-1e9,onSince:null,wasOn:false,single:null,
   abuf:{rms:[],hf:[]},med:{rms:1e-4,hf:1e-4},aCount:0,cand:null,lastRel:-1e9,
-  raw:{v:[],a:[],ev:[]},fps:{n:0,t0:0},startedAt:null,view:{z:1,tx:0,ty:0},aimOpen:true,hold:null,lastTone:-1e9};
+  raw:{v:[],a:[],ev:[]},fps:{n:0,t0:0},startedAt:null,view:{z:1,tx:0,ty:0},aimOpen:true,hold:null,lastTone:-1e9,pcm:{chunks:[],n:0,t0:0,full:false},pcmRate:16000};
 const cfg=()=>({N:clampI($('nShooter').value,1,12,6),A:clampI($('nArrow').value,1,10,5),single:$('recMode').value==='single',me:clampI($('myNo').value,1,clampI($('nShooter').value,1,12,6),1)-1,
   wa:clampF($('winA').value,0.5,6,2),wb:clampF($('winB').value,1,9,4.5),gap:clampF($('gap').value,2,30,5),sens:SENS[$('sens').value]||SENS.n});
 function clampI(v,a,b,d){v=parseInt(v,10);return isFinite(v)?Math.min(b,Math.max(a,v)):d}
@@ -465,32 +466,37 @@ $('btnAuto').addEventListener('click',async()=>{
 });
 
 /* ---------- audio ---------- */
-const WORKLET=`class F extends AudioWorkletProcessor{constructor(o){super();const p=o.processorOptions;this.hop=p.hop;this.a=p.a;this.n=0;this.s2=0;this.d2=0;this.l2=0;this.p=0;this.lp=0}
+const WORKLET=`class F extends AudioWorkletProcessor{constructor(o){super();const p=o.processorOptions;this.hop=p.hop;this.a=p.a;this.D=p.D;this.n=0;this.s2=0;this.d2=0;this.l2=0;this.p=0;this.lp=0;this.acc=0;this.k=0;this.pb=new Float32Array(Math.ceil(p.hop/p.D)+4);this.pi=0}
 process(inp){const c=inp[0]&&inp[0][0];if(!c)return true;for(let i=0;i<c.length;i++){const x=c[i],d=x-this.p;this.p=x;this.lp+=this.a*(x-this.lp);this.s2+=x*x;this.d2+=d*d;this.l2+=this.lp*this.lp;
-if(++this.n>=this.hop){const n=this.n;this.port.postMessage([Math.sqrt(this.s2/n),Math.sqrt(this.d2/n),Math.sqrt(this.l2/n)]);this.n=0;this.s2=0;this.d2=0;this.l2=0}}return true}}
+this.acc+=x;if(++this.k>=this.D){if(this.pi<this.pb.length)this.pb[this.pi++]=this.acc/this.D;this.acc=0;this.k=0}
+if(++this.n>=this.hop){const n=this.n;this.port.postMessage([Math.sqrt(this.s2/n),Math.sqrt(this.d2/n),Math.sqrt(this.l2/n),this.pb.slice(0,this.pi)]);this.pi=0;this.n=0;this.s2=0;this.d2=0;this.l2=0}}return true}}
 registerProcessor('feat',F);`;
 async function setupAudio(mk){
   const AC=window.AudioContext||window.webkitAudioContext;const c=new AC();S.actx=c;
   try{await c.resume()}catch(_){}
   const hop=Math.round(c.sampleRate*0.01),a=1-Math.exp(-2*Math.PI*300/c.sampleRate);
+  // raw sound is also kept (averaged down to ~16 kHz) so a whole 순 can be saved as a small WAV for later analysis
+  const D=Math.max(1,Math.round(c.sampleRate/16000));S.pcmRate=c.sampleRate/D;
   const mute=c.createGain();mute.gain.value=0;mute.connect(c.destination);
   let node=null;
   if(c.audioWorklet&&window.AudioWorkletNode){
     try{const url=URL.createObjectURL(new Blob([WORKLET],{type:'application/javascript'}));
       await c.audioWorklet.addModule(url);
-      node=new AudioWorkletNode(c,'feat',{processorOptions:{hop,a}});
-      node.port.onmessage=e=>onAudio(e.data[0],e.data[1],e.data[2]);}catch(_){node=null}
+      node=new AudioWorkletNode(c,'feat',{processorOptions:{hop,a,D}});
+      node.port.onmessage=e=>onAudio(e.data[0],e.data[1],e.data[2],e.data[3]);}catch(_){node=null}
   }
   if(!node){
-    node=c.createScriptProcessor(1024,1,1);let n=0,s2=0,d2=0,l2=0,p=0,lp=0;
+    node=c.createScriptProcessor(1024,1,1);let n=0,s2=0,d2=0,l2=0,p=0,lp=0,acc=0,k=0,pb=[];
     node.onaudioprocess=e=>{const x=e.inputBuffer.getChannelData(0);for(let i=0;i<x.length;i++){const v=x[i],d=v-p;p=v;lp+=a*(v-lp);s2+=v*v;d2+=d*d;l2+=lp*lp;
-      if(++n>=hop){onAudio(Math.sqrt(s2/n),Math.sqrt(d2/n),Math.sqrt(l2/n));n=0;s2=0;d2=0;l2=0}}};
+      acc+=v;if(++k>=D){pb.push(acc/D);acc=0;k=0}
+      if(++n>=hop){onAudio(Math.sqrt(s2/n),Math.sqrt(d2/n),Math.sqrt(l2/n),Float32Array.from(pb));pb=[];n=0;s2=0;d2=0;l2=0}}};
   }
   const src=mk(c);src.connect(node);node.connect(mute);
 }
 const TONE_PRE=1.5,TONE_POST=0.8;
-function onAudio(rms,hf,lf){
+function onAudio(rms,hf,lf,pcm){
   const t=clock();if(S.mode==='file'&&vid.paused)return;
+  if(S.running&&pcm&&pcm.length)keepPcm(t,pcm);
   const A=S.abuf;A.rms.push(rms);A.hf.push(hf);if(A.rms.length>300){A.rms.shift();A.hf.shift()}
   S.aCount++;if(S.aCount%10===0&&A.rms.length>=50){S.med.rms=Math.max(1e-5,median(A.rms));S.med.hf=Math.max(1e-6,median(A.hf))}
   const rr=rms/S.med.rms,hr=hf/S.med.hf;
@@ -517,6 +523,25 @@ function onAudio(rms,hf,lf){
     return;}
   // every sharp onset is examined (tones must be seen even inside the release gap); the gap only limits accepted releases
   if(hr>c.sens.khf)S.cand={t,n:0,rms:[rms],lf:[lf],mr:S.med.rms,hr};
+}
+const PCM_MAX_MIN=40;
+function keepPcm(t,pcm){
+  const P=S.pcm,tr=tRel(t);if(P.n===0){P.t0=tr-pcm.length/S.pcmRate;P.sync=[];P.lastSync=-1e9}   // time of the first kept sample, same clock as the record file
+  if(P.n>S.pcmRate*60*PCM_MAX_MIN){if(!P.full){P.full=true;log('note',`소리 저장은 ${PCM_MAX_MIN}분까지만 합니다`)}return}
+  // keep the WAV on the record clock: if audio blocks went missing, fill the hole with silence
+  const lag=(tr-pcm.length/S.pcmRate)-(P.t0+P.n/S.pcmRate);
+  if(lag>0.03){const z=new Int16Array(Math.round(lag*S.pcmRate));P.chunks.push(z);P.n+=z.length}
+  if(tr-P.lastSync>=1){P.sync.push([P.n,+tr.toFixed(3)]);P.lastSync=tr}
+  const q=new Int16Array(pcm.length);for(let i=0;i<pcm.length;i++){const v=pcm[i];q[i]=v>=1?32767:v<=-1?-32768:Math.round(v*32767)}
+  P.chunks.push(q);P.n+=q.length;
+}
+function wavBlob(){
+  const P=S.pcm,rate=Math.round(S.pcmRate),n=P.n,buf=new ArrayBuffer(44+n*2),dv=new DataView(buf);
+  const w=(o,str)=>{for(let i=0;i<str.length;i++)dv.setUint8(o+i,str.charCodeAt(i))};
+  w(0,'RIFF');dv.setUint32(4,36+n*2,true);w(8,'WAVE');w(12,'fmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);
+  dv.setUint32(24,rate,true);dv.setUint32(28,rate*2,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);w(36,'data');dv.setUint32(40,n*2,true);
+  let o=44;for(const c of P.chunks){new Int16Array(buf,o,c.length).set(c);o+=c.length*2}
+  return new Blob([buf],{type:'audio/wav'});
 }
 function drawLevel(rr){const x=Math.min(1,Math.log10(Math.max(1,rr))/2);$('lvl').style.width=(x*100)+'%';
   $('lvlThr').style.left=(Math.log10(cfg().sens.krms)/2*100)+'%';$('sndNow').textContent=rr.toFixed(1)+'배'}
@@ -814,7 +839,7 @@ $('btnReset').onclick=()=>{$('resetAsk').hidden=false};
 $('btnResetNo').onclick=()=>{$('resetAsk').hidden=true};
 $('btnResetYes').onclick=()=>{
   if(S.running){if(S.mode==='file')vid.pause();setRunning(false)}
-  S.arrows=[];S.sun=1;S.sel=1;S.ptr={p:0,s:0};S.raw={v:[],a:[],ev:[]};S.startedAt=null;resetDetectors();
+  S.arrows=[];S.sun=1;S.sel=1;S.ptr={p:0,s:0};S.raw={v:[],a:[],ev:[]};S.pcm={chunks:[],n:0,t0:0,full:false};S.stamp=null;S.startedAt=null;resetDetectors();
   if(S.mode==='file'){try{vid.pause();vid.currentTime=S.roiT!=null?S.roiT:0.05}catch(_){}
     if(S.trk){S.trk.dx=0;S.trk.dy=0;S.trk.scores=[];S.trk.bad=0;$('trkTxt').textContent=''}}
   $('log').innerHTML='';$('resetAsk').hidden=true;render();redraw();
@@ -832,13 +857,18 @@ $('btnCopy').onclick=async()=>{
   const ta=$('copyOut');ta.value=out;
   try{await navigator.clipboard.writeText(out);ta.hidden=true;toast('결과를 복사했습니다')}catch(_){ta.hidden=false;ta.focus();ta.select();toast('자동 복사가 막혀 있습니다. 아래 글을 길게 눌러 복사하세요')}
 };
+function dl(blob,name){const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),8000)}
+function stampNow(){if(!S.stamp)S.stamp='gwanjung-'+new Date().toISOString().slice(0,16).replace(/[:T]/g,'');return S.stamp}
+$('btnSaveWav').onclick=()=>{
+  if(!S.pcm.n){toast('저장할 소리가 없습니다. 판정을 돌린 뒤에 누르세요');return}
+  dl(wavBlob(),stampNow()+'-sound.wav');toast(`소리 파일을 저장했습니다 (${Math.round(S.pcm.n/S.pcmRate)}초, ${(S.pcm.n*2/1048576).toFixed(1)}MB)`)};
 $('btnSave').onclick=()=>{
-  const data={app:'관중 판정기 시험판 v11',saved:new Date().toISOString(),mode:S.mode,settings:cfg(),roi:S.roi,video:{w:vid.videoWidth,h:vid.videoHeight},camera:S.mode==='live'?S.camInfo||null:null,
+  const stamp=stampNow();
+  const data={app:'관중 판정기 '+$('h1ver').textContent,saved:new Date().toISOString(),mode:S.mode,settings:cfg(),roi:S.roi,video:{w:vid.videoWidth,h:vid.videoHeight},camera:S.mode==='live'?S.camInfo||null:null,
     arrows:S.arrows.map(a=>({sun:a.sun,shooter:a.p+1,arrow:a.s+1,res:a.res,src:a.src,tRelease:a.tRel==null?null:+tRel(a.tRel).toFixed(3),tFlash:a.tFlash==null?null:+tRel(a.tFlash).toFixed(3),flags:a.flags,info:a.info})),
-    events:S.raw.ev,lamp:S.raw.v,audio:S.raw.a};
-  const blob=new Blob([JSON.stringify(data)],{type:'application/json'});const u=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=u;a.download='gwanjung-'+new Date().toISOString().slice(0,16).replace(/[:T]/g,'')+'.json';document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(u),5000);toast('기록 파일을 저장했습니다');
+    events:S.raw.ev,lamp:S.raw.v,audio:S.raw.a,sound:S.pcm.n?{file:stamp+'-sound.wav',rate:Math.round(S.pcmRate),t0:+S.pcm.t0.toFixed(3),seconds:+(S.pcm.n/S.pcmRate).toFixed(1),sync:S.pcm.sync}:null};
+  dl(new Blob([JSON.stringify(data)],{type:'application/json'}),stamp+'.json');
+  toast(S.pcm.n?'기록 파일을 저장했습니다. 소리 파일도 저장해 주세요':'기록 파일을 저장했습니다');
 };
 
 /* ---------- evidence dialog ---------- */
