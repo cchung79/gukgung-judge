@@ -16,10 +16,10 @@ const V=()=>G().vid();
 function loadScript(u){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=u;s.onload=res;s.onerror=()=>rej(new Error('스크립트 로드 실패'));document.head.appendChild(s)})}
 M.init=async()=>{
   if(M.sess||M.loading)return;M.loading=true;st('자세 모델 불러오는 중… (처음 한 번 13MB)');
-  try{await loadScript(ORT+'ort.wasm.min.js');ort.env.wasm.wasmPaths=ORT;ort.env.wasm.proxy=true;
+  try{await loadScript(ORT+'ort.wasm.min.js');ort.env.wasm.wasmPaths=ORT;ort.env.wasm.proxy=!new URLSearchParams(location.search).has('noproxy');
     ort.env.wasm.numThreads=self.crossOriginIsolated?Math.min(4,navigator.hardwareConcurrency||2):1;
     M.sess=await ort.InferenceSession.create(MODEL,{executionProviders:['wasm']});st('자세 모델 준비됨. 선수들이 서 있는 화면에서 「선수 위치 잡기」를 누르세요.');
-  }catch(e){st('모델 로드 실패: '+(e&&e.message||e))}
+  }catch(e){st('모델 로드 실패: '+(e&&e.message||e)+' · 주소 끝에 ?noproxy=1 을 붙여 다시 열어 보세요')}
   M.loading=false;G().updateGo();
 };
 /* ---------- pose ---------- */
