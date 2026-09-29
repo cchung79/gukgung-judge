@@ -935,7 +935,7 @@ document.addEventListener('visibilitychange',async()=>{
     else if(S.mode==='live'&&S.hiddenAt!=null){const g=clock()-S.hiddenAt;log('warn',`화면이 ${g.toFixed(0)}초 가려져 그동안 램프를 보지 못했습니다`);toast('화면이 가려진 동안 램프 판정이 멈췄습니다')}
     S.hiddenAt=null}
 });
-/* ---------- Sony camera Bluetooth remote (RMT-P1BT protocol: service 8000FF00…, write FF01; record down 01 0E / up 01 0F) ---------- */
+/* ---------- Sony camera Bluetooth remote (RMT-P1BT protocol: service 8000FF00…, write FF01; record press 01 0F / release 01 0E; notify FF02 02 D5 20 = recording, 02 D5 00 = stopped) ---------- */
 const SONY_SVC='8000ff00-ff00-ffff-ffff-ffffffffffff';
 S.ble=null;
 const bleAutoOn=()=>$('bleAuto').value==='1';
@@ -963,8 +963,9 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function blePress(why){
   const B=S.ble;if(!B||!B.cmd||B.busy)return false;B.busy=true;
   try{
-    // press and release as two separate writes: a single 4-byte write leaves the button "held" and later presses are ignored
-    await B.cmd.writeValue(new Uint8Array([0x01,0x0e]));await sleep(120);await B.cmd.writeValue(new Uint8Array([0x01,0x0f]));
+    // Sony remote codes: odd = press, even = release (record 01 0F / 01 0E). Two separate writes, press first:
+    // release-then-press leaves the button held and every later command is ignored
+    await B.cmd.writeValue(new Uint8Array([0x01,0x0f]));await sleep(120);await B.cmd.writeValue(new Uint8Array([0x01,0x0e]));
     B.last=performance.now()/1000;log('note','카메라 녹화 버튼 누름 ('+why+')');return true;
   }catch(e){log('warn','카메라 명령 실패: '+(e&&e.name||e));bleState('명령 실패 — 연결을 확인하세요');return false}
   finally{B.busy=false}
