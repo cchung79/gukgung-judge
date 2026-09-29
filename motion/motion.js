@@ -5,7 +5,7 @@
 const MW=640,MH=352,DS=4,HOLD_MIN=1.5,GAP_TOL=0.3,WIN=2.2,FRAC=0.35,DIFF_MIN=10;
 const ORT=new URL(new URLSearchParams(location.search).get('ort')||'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/',location.href).href;
 const MODEL=new URL('../gwan-motion/models/yolov8n-pose_352x640.onnx',location.href).href;
-const SND_MATCH=0.7, RESOLVE_LAG=1.2, TONE_POST=0.8, TONE_WAIT=1.35;
+const LOCK=6,SND_MATCH=0.7, RESOLVE_LAG=1.2, TONE_POST=0.8, TONE_WAIT=1.35;
 const $=id=>document.getElementById(id);
 const G=()=>window.__gg;
 const M=window.GM={on:false,slots:[],snd:[],pend:[],tones:[],sess:null,loading:false,busy:false,lastPoseT:-9,inferMs:[],prev:null,ring:[],ringRate:16000};
@@ -133,8 +133,13 @@ M.tick=t=>{
   // 동작 발시 ↔ 소리 발시 결합 (소리는 뻐꾸기로 취소될 수 있어 RESOLVE_LAG 뒤에 확정)
   for(let i=M.pend.length-1;i>=0;i--){const p=M.pend[i];if(t<p.tM+RESOLVE_LAG)continue;M.pend.splice(i,1);
     let best=null;for(const e of M.snd){if(e.used||e.cancel)continue;const d=Math.abs(e.t-p.tM);if(d<=SND_MATCH&&(!best||d<Math.abs(best.t-p.tM)))best=e}
-    if(best)best.used=true;
-    const S=g.S;if(p.idx!==S.ptr.p){g.log('note',`순서 다름: 차례 ${S.ptr.p+1}번, 동작은 ${p.no}번 · 동작 기준으로 맞춤`,p.tM);S.ptr.p=p.idx}
+    const S=g.S,sl=M.slots[p.idx];
+    // 이미 발시한 선수는 다음 차례까지 잠금: 발시 뒤 손이 올라가도 새 발시로 세지 않는다
+    if(sl&&sl.lastRelT!=null&&p.tM-sl.lastRelT<LOCK){g.log('note',`${p.no}번은 방금 발시해서 동작 무시 (${(p.tM-sl.lastRelT).toFixed(1)}초 전)`,p.tM);continue}
+    // 소리 없는 동작이 차례가 아닌 선수에게서 나오면 잡음으로 본다
+    if(!best&&p.idx!==S.ptr.p){g.log('note',`${p.no}번 동작은 차례(${S.ptr.p+1}번)도 아니고 발시음도 없어 제외`,p.tM);continue}
+    if(best)best.used=true;if(p.idx!==S.ptr.p){g.log('note',`순서 다름: 차례 ${S.ptr.p+1}번, 동작은 ${p.no}번 · 동작 기준으로 맞춤`,p.tM);S.ptr.p=p.idx}
+    if(sl)sl.lastRelT=best?best.t:p.tM;
     if(best)g.onRelease(best.t,'sound',{...best.info,motion:+(p.tM-best.t).toFixed(2)});
     else{g.onRelease(p.tM,'motion',{rr:0});const a=S.arrows[S.arrows.length-1];if(a)a.flags.push('소리 미확인')}
   }
@@ -145,7 +150,7 @@ M.tick=t=>{
     else g.log('note','뻐꾸기 종류 불명 · 제외 '+(r.why||`(A${r.nA}/B${r.nB})`),e.t)}
   while(M.tones.length&&M.tones[0].done&&t-M.tones[0].t>10)M.tones.shift();
 };
-M.resetState=()=>{M.snd=[];M.pend=[];M.tones=[];M.prev=null;for(const s of M.slots){s.diffs=[];s.holdStart=null;s.lastPos=null;s.state='대기';s.holdDur=0}};
+M.resetState=()=>{for(const s of M.slots)s.lastRelT=null;M.snd=[];M.pend=[];M.tones=[];M.prev=null;for(const s of M.slots){s.diffs=[];s.holdStart=null;s.lastPos=null;s.state='대기';s.holdDur=0}};
 M.draw=(ovx,W,H,view)=>{
   if(!M.slots.length)return;const v=V(),dpr=devicePixelRatio,sx=W/v.videoWidth*view.z,sy=H/v.videoHeight*view.z,ox=view.tx*dpr,oy=view.ty*dpr;
   ovx.lineWidth=2*dpr;ovx.font=`bold ${13*dpr}px sans-serif`;
