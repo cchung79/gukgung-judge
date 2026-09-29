@@ -39,6 +39,10 @@ async function pose(){
     return{box:[(d.b[0]-g.dw)/g.sc,(d.b[1]-g.dh)/g.sc,(d.b[2]-g.dw)/g.sc,(d.b[3]-g.dh)/g.sc],kp,s:d.s}});
 }
 const upOf=p=>{const h=p.box[3]-p.box[1],sh=(p.kp[5][1]+p.kp[6][1])/2;return Math.max((sh-p.kp[9][1])/h,(sh-p.kp[10][1])/h)};
+/* 선수 수: 위치 잡기로 사람 수를 세면 자동 입력하고 잠근다. 0명이면 직접 입력할 수 있게 둔다 */
+function autoN(n){const el=$('nShooter'),lb=el.parentElement&&el.parentElement.firstChild;
+  if(n>0){el.value=Math.min(12,n);el.disabled=true;el.dispatchEvent(new Event('change'));if(lb&&lb.nodeType===3)lb.textContent='선수 수 (자동) '}
+  else{el.disabled=false;if(lb&&lb.nodeType===3)lb.textContent='선수 수'}}
 /* ---------- calibration ---------- */
 M.calibrate=async()=>{
   if(!M.sess){st('모델이 아직 준비되지 않았습니다');return}
@@ -49,7 +53,7 @@ M.calibrate=async()=>{
     const ps=ps0.sort((a,b)=>(a.box[0]+a.box[2])-(b.box[0]+b.box[2]));
     M.slots=ps.map((p,i)=>({no:i+1,box:p.box,cx:(p.box[0]+p.box[2])/2,diffs:[],holdStart:null,lastPos:null,state:'대기',holdDur:0}));
     M.spacing=M.slots.length>1?(M.slots[M.slots.length-1].cx-M.slots[0].cx)/(M.slots.length-1):400;
-    if(M.slots.length){$('nShooter').value=M.slots.length;$('nShooter').dispatchEvent(new Event('input'))}
+    autoN(M.slots.length);
     st(M.slots.length?`선수 ${M.slots.length}명 설정 (맨 왼쪽이 1번). 서 있는 사람이 다르면 다시 누르세요.`:'사람이 잡히지 않았습니다');
     setupDiff();
   }catch(e){st('위치 잡기 실패: '+(e&&e.message||e))}
@@ -160,7 +164,7 @@ M.draw=(ovx,W,H,view)=>{
 /* ---------- UI ---------- */
 window.addEventListener('DOMContentLoaded',()=>{
   const cb=$('gmOn');if(!cb)return;
-  cb.addEventListener('change',()=>{M.on=cb.checked;$('gmBox').hidden=!M.on;if(M.on)M.init();else st('');G()&&G().updateGo()});
+  cb.addEventListener('change',()=>{M.on=cb.checked;if(!M.on)autoN(0);$('gmBox').hidden=!M.on;if(M.on)M.init();else st('');G()&&G().updateGo()});
   $('gmCal').addEventListener('click',M.calibrate);
 });
 })();
