@@ -45,7 +45,8 @@ M.calibrate=async()=>{
   const v=V();if(!v.videoWidth){st('영상이 아직 없습니다');return}
   $('gmCal').disabled=true;st('선수 위치 찾는 중…');
   try{
-    const ps=(await pose()).sort((a,b)=>(a.box[0]+a.box[2])-(b.box[0]+b.box[2]));
+    while(M.busy)await new Promise(r=>setTimeout(r,50));M.busy=true;let ps0;try{ps0=await pose()}finally{M.busy=false}
+    const ps=ps0.sort((a,b)=>(a.box[0]+a.box[2])-(b.box[0]+b.box[2]));
     M.slots=ps.map((p,i)=>({no:i+1,box:p.box,cx:(p.box[0]+p.box[2])/2,diffs:[],holdStart:null,lastPos:null,state:'대기',holdDur:0}));
     M.spacing=M.slots.length>1?(M.slots[M.slots.length-1].cx-M.slots[0].cx)/(M.slots.length-1):400;
     if(M.slots.length){$('nShooter').value=M.slots.length;$('nShooter').dispatchEvent(new Event('input'))}
@@ -79,6 +80,7 @@ function onPose(t,ps){
   for(const s of M.slots){
     let best=null,bd=1e9;for(const p of ps){const d=Math.abs((p.box[0]+p.box[2])/2-s.cx);if(d<bd){bd=d;best=p}}
     const up=(best&&bd<M.spacing*0.45)?upOf(best):-0.3;
+    if(best&&bd<M.spacing*0.45&&s.state==='대기'&&up<=0){const dcx=(best.box[0]+best.box[2])/2-s.cx;s.cx+=dcx*0.1;s.box=s.box.map((v,i)=>i%2===0?v+dcx*0.1:v)}
     if(up>0){if(s.holdStart==null)s.holdStart=t;s.lastPos=t;const dur=t-s.holdStart;s.holdDur=dur;s.state=dur>=HOLD_MIN?'만작':'준비'}
     else if(s.holdStart!=null&&t-s.lastPos>=tol){
       const dur=s.lastPos-s.holdStart;if(dur>=HOLD_MIN)motionRelease(s,s.lastPos,s.holdStart,dur);
@@ -100,7 +102,7 @@ M.pcm=(t,pcm,nc)=>{   // keep ~4 s of mono sound (time of the last sample = t)
   const n=pcm.length/nc,m=new Float32Array(n);for(let i=0;i<n;i++){let a=0;for(let c=0;c<nc;c++)a+=pcm[i*nc+c];m[i]=a/nc}
   M.ringRate=G().S.pcmRate;M.ring.push({t,m});let tot=0;for(const r of M.ring)tot+=r.m.length;while(tot>M.ringRate*5&&M.ring.length>1){tot-=M.ring[0].m.length;M.ring.shift()}
 };
-M.onTone=t=>{M.tones.push({t,done:false})};
+M.onTone=t=>{if($('gmTone')&&$('gmTone').checked)M.tones.push({t,done:false})};
 function segment(t0,t1){   // samples between t0..t1 (audio clock), or null
   const R=M.ringRate,out=[];let start=null;
   for(const r of M.ring){const rt1=r.t,rt0=r.t-r.m.length/R;if(rt1<t0||rt0>t1)continue;

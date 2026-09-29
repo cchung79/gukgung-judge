@@ -121,7 +121,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
 <body>
 <div class="wrap">
 <header>
-  <h1>관중 판정기 <span class="ver" id="h1ver">시험판 v17-동작</span></h1>
+  <h1>관중 판정기 <span class="ver" id="h1ver">시험판 v17b-발시만</span></h1>
   <p class="sub">발시음과 과녁 점멸을 짝지어 관중·불을 자동으로 채웁니다. 시험판이라 결과는 반드시 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -164,7 +164,9 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
   <details id="gmDet" open><summary>동작 판정 (선수 뒷모습 화면)</summary>
     <label class="f" for="gmOn" style="flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="gmOn">동작 모드 켜기 (발시=동작, 관중=뻐꾸기 소리)</label>
     <div id="gmBox" hidden>
-      <p class="muted" style="margin:6px 0">선수가 모두 서 있는 화면에서 「선수 위치 잡기」→ 「판정 시작」. 맨 왼쪽이 1번, 왼쪽부터 오른쪽 순서로 돕니다. 과녁 지정은 필요 없습니다.</p>
+      <label class="f" for="gmShot" style="flex-direction:row;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="gmShot" checked>발시만 세기 (관중·불 판정 안 함, 칸에 ● 표시)</label>
+      <label class="f" for="gmTone" style="flex-direction:row;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" id="gmTone">온달정 뻐꾸기 소리로 관중 판정 (선택)</label>
+      <p class="muted" style="margin:6px 0">선수가 모두 서 있는 화면에서 「선수 위치 잡기」→ 「판정 시작」. 맨 왼쪽이 1번, 왼쪽부터 오른쪽 순서로 돕니다. 과녁(램프) 지정은 필요 없고, 지정하면 램프가 깜박일 때 中으로 표시됩니다. 선수들이 다시 나와 서면 「선수 위치 잡기」를 판정 중에도 다시 누를 수 있습니다.</p>
       <button id="gmCal" class="grow">선수 위치 잡기</button>
       <p class="muted" id="gmStat" style="margin:6px 0"></p>
     </div>
@@ -287,6 +289,7 @@ const S={mode:'idle',running:false,roi:null,roiScale:1,stream:null,actx:null,
   raw:{v:[],a:[],ev:[]},fps:{n:0,t0:0},startedAt:null,view:{z:1,tx:0,ty:0},aimOpen:true,hold:null,lastTone:-1e9,pcm:{chunks:[],n:0,t0:0,full:false},pcmRate:16000};
 const cfg=()=>({N:clampI($('nShooter').value,1,12,6),A:clampI($('nArrow').value,1,10,5),single:$('recMode').value==='single',me:clampI($('myNo').value,1,clampI($('nShooter').value,1,12,6),1)-1,
   wa:clampF($('winA').value,0.5,6,2),wb:clampF($('winB').value,1,9,4.5),gap:clampF($('gap').value,1,30,2.5),sens:SENS[$('sens').value]||SENS.n});
+const shotOnly=()=>!!(window.GM&&GM.on&&$('gmShot')&&$('gmShot').checked);
 function clampI(v,a,b,d){v=parseInt(v,10);return isFinite(v)?Math.min(b,Math.max(a,v)):d}
 function clampF(v,a,b,d){v=parseFloat(v);return isFinite(v)?Math.min(b,Math.max(a,v)):d}
 const clock=()=>S.mode==='file'?vid.currentTime:performance.now()/1000;
@@ -698,7 +701,7 @@ function resetDetectors(){
   // forget everything tied to playback time: last shot, last blink, pending candidates, lamp background
   S.lastRel=-1e9;S.lastFlash=-1e9;S.cand=null;S.hold=null;S.lastTone=-1e9;S.edges=[];S.weak=null;S.wasOn=false;S.onSince=null;
   if(window.GM)GM.resetState();S.warm=null;S.bg=null;S.lastT=null;S.ring=[];S.devAbs=[];S.lampMed=0;S.sigma=3;S.lastFrameT=null;
-  S.arrows.forEach(a=>{if(a.res==='pending')a.res='miss'});
+  if(!shotOnly())S.arrows.forEach(a=>{if(a.res==='pending')a.res='miss'});
 }
 function onFrame(t){
   if(S.lastFrameT!=null&&t<S.lastFrameT-0.5){resetDetectors();log('note','재생 위치가 앞으로 돌아가 감지 상태를 초기화')}
@@ -798,11 +801,11 @@ function onFlash(tf,kind,info){
   if(kind!=='tone')log('fl',kind==='blink'?`점멸 ${info.n}회 이상`:`약한 점멸 ${info.n}회`,tf);render();
 }
 function tick(t){const c=cfg();let ch=false;
-  for(const a of S.arrows)if(a.res==='pending'&&t>a.tRel+c.wb+MISS_GRACE){a.res='miss';captureEv(a);log('note',`불 ${a.p+1}번 ${a.s+1}시`,t);ch=true}
+  for(const a of S.arrows)if(a.res==='pending'&&!shotOnly()&&t>a.tRel+c.wb+MISS_GRACE){a.res='miss';captureEv(a);log('note',`불 ${a.p+1}번 ${a.s+1}시`,t);ch=true}
   const p=S.arrows.find(a=>a.res==='pending');
-  $('state').textContent=p?`판정 중 · ${(t-p.tRel).toFixed(1)}초`:(S.running?'발시 대기':'대기');$('state').classList.toggle('wait',!!p);
+  $('state').textContent=shotOnly()?(S.running?`발시 ${S.arrows.length}발`:'대기'):(p?`판정 중 · ${(t-p.tRel).toFixed(1)}초`:(S.running?'발시 대기':'대기'));$('state').classList.toggle('wait',!!p&&!shotOnly());
   if(ch)render();}
-function finalizeAll(){const t=clock();if(S.hold){const h=S.hold;S.hold=null;onRelease(h.t,'sound',h.info)}for(const a of S.arrows)if(a.res==='pending'){a.res='miss';captureEv(a)}render()}
+function finalizeAll(){const t=clock();if(S.hold){const h=S.hold;S.hold=null;onRelease(h.t,'sound',h.info)}for(const a of S.arrows)if(a.res==='pending'){if(!shotOnly())a.res='miss';captureEv(a)}render()}
 function advance(){const c=cfg();S.ptr.p++;if(S.ptr.p>=c.N){S.ptr.p=0;S.ptr.s++}
   if(S.ptr.s>=c.A){S.ptr={p:0,s:0};S.sun++;S.sel=S.sun;log('note',`${S.sun-1}순 끝. ${S.sun}순 시작`)}}
 function captureEv(a){
@@ -821,15 +824,15 @@ function render(){
   $('who').textContent=`${S.ptr.p+1}번 · ${S.ptr.s+1}시`;
   const sel=$('sunSel');const n=Math.max(S.sun,...S.arrows.map(a=>a.sun),1);
   if(sel.options.length!==n){sel.innerHTML='';for(let i=1;i<=n;i++){const o=document.createElement('option');o.value=i;o.textContent=i+'순';sel.appendChild(o)}}
-  sel.value=S.sel;$('sunLabel').textContent=`${S.sel}순 · 선수 ${c.N}명 × ${c.A}시`;
+  sel.value=S.sel;$('sunLabel').textContent=`${S.sel}순 · 선수 ${c.N}명 × ${c.A}시`+(shotOnly()?` · 총 ${S.arrows.length}발`:'');
   const tb=$('sheet');tb.innerHTML='';const hd=tb.insertRow();hd.appendChild(th('','name'));
   for(let s=0;s<c.A;s++)hd.appendChild(th(s+1+'시'));hd.appendChild(th('계'));
   for(let p=0;p<c.N;p++){const tr=tb.insertRow();tr.appendChild(th(p+1+'번','name'));let hits=0;
     for(let s=0;s<c.A;s++){const td=tr.insertCell();const b=document.createElement('button');b.className='cell';
       const a=S.arrows.find(x=>x.sun===S.sel&&x.p===p&&x.s===s);
-      if(a){if(a.res==='hit'){b.classList.add('hit');b.textContent='中';hits++}else if(a.res==='miss'){b.classList.add('miss');b.textContent='/'}else{b.classList.add('pending');b.textContent='…'}
+      if(a){if(a.res==='hit'){b.classList.add('hit');b.textContent='中';hits++}else if(a.res==='miss'){b.classList.add('miss');b.textContent='/'}else{b.classList.add('pending');b.textContent=shotOnly()?'●':'…'}
         if(a.flags.length||a.src!=='sound'){const f=document.createElement('span');f.className='flag';f.textContent='?';b.appendChild(f)}
-        b.setAttribute('aria-label',`${p+1}번 ${s+1}시 ${a.res==='hit'?'관중':a.res==='miss'?'불':'판정 중'}`);b.onclick=()=>openEv(a);}
+        b.setAttribute('aria-label',`${p+1}번 ${s+1}시 ${a.res==='hit'?'관중':a.res==='miss'?'불':shotOnly()?'발시':'판정 중'}`);b.onclick=()=>openEv(a);}
       else{b.textContent='';b.setAttribute('aria-label',`${p+1}번 ${s+1}시 빈칸`);b.disabled=true;
         if(S.sel===S.sun&&p===S.ptr.p&&s===S.ptr.s)b.classList.add('cur')}
       td.appendChild(b)}
@@ -841,16 +844,16 @@ function renderSingle(c){
   const d=(c.me-S.ptr.p+c.N)%c.N;
   $('who').textContent=d===0?`내 차례 · ${S.ptr.s+1}시`:`${S.ptr.p+1}번 차례 · ${d}명 뒤 나`;
   const mine=S.arrows.filter(a=>a.p===c.me);const n=Math.max(S.sun,...mine.map(a=>a.sun),1);
-  let tot=0,shot=0;mine.forEach(a=>{if(a.res==='hit')tot++;if(a.res!=='pending')shot++});
+  let tot=0,shot=0;mine.forEach(a=>{if(a.res==='hit')tot++;if(a.res!=='pending'||shotOnly())shot++});
   $('sunLabel').textContent=`싱글 · ${c.N}명 중 ${c.me+1}번 · 누적 ${shot}시 ${tot}中`;
   const tb=$('sheet');tb.innerHTML='';const hd=tb.insertRow();hd.appendChild(th('','name'));
   for(let s=0;s<c.A;s++)hd.appendChild(th(s+1+'시'));hd.appendChild(th('계'));
   for(let u=1;u<=n;u++){const tr=tb.insertRow();tr.appendChild(th(u+'순','name'));let hits=0;
     for(let s=0;s<c.A;s++){const td=tr.insertCell();const b=document.createElement('button');b.className='cell';
       const a=mine.find(x=>x.sun===u&&x.s===s);
-      if(a){if(a.res==='hit'){b.classList.add('hit');b.textContent='中';hits++}else if(a.res==='miss'){b.classList.add('miss');b.textContent='/'}else{b.classList.add('pending');b.textContent='…'}
+      if(a){if(a.res==='hit'){b.classList.add('hit');b.textContent='中';hits++}else if(a.res==='miss'){b.classList.add('miss');b.textContent='/'}else{b.classList.add('pending');b.textContent=shotOnly()?'●':'…'}
         if(a.flags.length||a.src!=='sound'){const f=document.createElement('span');f.className='flag';f.textContent='?';b.appendChild(f)}
-        b.setAttribute('aria-label',`${u}순 ${s+1}시 ${a.res==='hit'?'관중':a.res==='miss'?'불':'판정 중'}`);b.onclick=()=>openEv(a);}
+        b.setAttribute('aria-label',`${u}순 ${s+1}시 ${a.res==='hit'?'관중':a.res==='miss'?'불':shotOnly()?'발시':'판정 중'}`);b.onclick=()=>openEv(a);}
       else{b.textContent='';b.disabled=true;if(u===S.sun&&s===S.ptr.s&&S.ptr.p===c.me)b.classList.add('cur')}
       td.appendChild(b)}
     const sm=tr.insertCell();sm.className='sum';sm.textContent=hits}
@@ -889,12 +892,13 @@ $('btnCopy').onclick=async()=>{
   const c=cfg();let out=`관중 판정기 · ${new Date().toLocaleString('ko-KR')}\n`;
   const suns=[...new Set(S.arrows.map(a=>a.sun))].sort((a,b)=>a-b);
   if(c.single){let T=0,N=0;out+=`싱글 · ${c.N}명 중 ${c.me+1}번\n`;
-    for(const u of suns){let row=`${u}순 `,h=0;for(let s=0;s<c.A;s++){const a=S.arrows.find(x=>x.sun===u&&x.p===c.me&&x.s===s);row+=a?(a.res==='hit'?(h++,'中'):a.res==='miss'?'/':'…'):'·';row+=' ';if(a&&a.res!=='pending')N++}
+    for(const u of suns){let row=`${u}순 `,h=0;for(let s=0;s<c.A;s++){const a=S.arrows.find(x=>x.sun===u&&x.p===c.me&&x.s===s);row+=a?(a.res==='hit'?(h++,'中'):a.res==='miss'?'/':shotOnly()?'●':'…'):'·';row+=' ';if(a&&a.res!=='pending')N++}
       T+=h;out+=row+` ${h}中\n`}
     out+=`\n합계 ${N}시 ${T}中\n`;suns.length=0}
   for(const u of suns){out+=`\n${u}순\n`;for(let p=0;p<c.N;p++){let row=`${p+1}번 `,h=0;
-    for(let s=0;s<c.A;s++){const a=S.arrows.find(x=>x.sun===u&&x.p===p&&x.s===s);row+=a?(a.res==='hit'?(h++,'中'):a.res==='miss'?'/':'…'):'·';row+=' '}
+    for(let s=0;s<c.A;s++){const a=S.arrows.find(x=>x.sun===u&&x.p===p&&x.s===s);row+=a?(a.res==='hit'?(h++,'中'):a.res==='miss'?'/':shotOnly()?'●':'…'):'·';row+=' '}
     out+=row+` ${h}中\n`}}
+  out+='\n발시 기록 (순·번호·시·시각·근거)\n'+S.arrows.map(a=>`${a.sun}순 ${a.p+1}번 ${a.s+1}시 ${a.tRel!=null?fmt(a.tRel):'-'} ${a.src==='sound'?'소리':a.src==='motion'?'동작만':a.src}${a.res==='hit'?' 中':''}${a.flags.length?' ('+a.flags.join(',')+')':''}`).join('\n')+`\n총 ${S.arrows.length}발\n`;
   const ta=$('copyOut');ta.value=out;
   try{await navigator.clipboard.writeText(out);ta.hidden=true;toast('결과를 복사했습니다')}catch(_){ta.hidden=false;ta.focus();ta.select();toast('자동 복사가 막혀 있습니다. 아래 글을 길게 눌러 복사하세요')}
 };
@@ -915,7 +919,7 @@ $('btnSave').onclick=()=>{
 /* ---------- evidence dialog ---------- */
 const dlg=$('dlg'),flip=$('flip'),fx=flip.getContext('2d'),trace=$('trace'),tx=trace.getContext('2d');let cur=null,play=null,fi=0;
 function openEv(a){cur=a;fi=0;const fr=a.ev?a.ev.frames:[];
-  $('dlgT').textContent=`${a.sun}순 ${a.p+1}번 ${a.s+1}시 · ${a.res==='hit'?'관중':a.res==='miss'?'불':'판정 중'}`;
+  $('dlgT').textContent=`${a.sun}순 ${a.p+1}번 ${a.s+1}시 · ${a.res==='hit'?'관중':a.res==='miss'?'불':shotOnly()?'발시':'판정 중'}`;
   $('dlgMeta').textContent=[a.src==='sound'?`소리 ${a.info.rr}배`:a.src==='manual'?'수동 발시':'발시음 없음',a.tFlash&&a.tRel?`비행 ${(a.tFlash-a.tRel).toFixed(2)}초`:'',...a.flags].filter(Boolean).join(' · ');
   $('scrub').max=Math.max(0,fr.length-1);$('scrub').value=0;drawFlip();drawTrace();
   if(dlg.showModal)dlg.showModal();else dlg.setAttribute('open','')}
