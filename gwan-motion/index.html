@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>관중 동작 판정 시험</title>
+<style>
+body{font-family:'Nanum Gothic',system-ui,sans-serif;font-size:14px;margin:0;padding:10px;background:#111;color:#eee}
+h1{font-size:18px;margin:0 0 4px}.m{color:#9aa;font-size:12px}
+button,select,input{font:inherit}
+button{padding:10px 12px;border:0;border-radius:8px;background:#2a6;color:#fff;margin:3px 3px 3px 0}
+button.b{background:#36a}button.r{background:#a33}button:disabled{background:#444;color:#888}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:6px 0}
+label{display:inline-flex;gap:4px;align-items:center}input[type=number]{width:64px;padding:4px}
+#wrap{position:relative;max-width:100%}canvas{width:100%;height:auto;background:#000;border-radius:6px;display:block}
+#ev{margin-top:6px;font-size:15px;line-height:1.6}
+.slot{display:inline-block;min-width:22%;padding:4px 6px;margin:2px;border-radius:6px;background:#222}
+.slot.hold{background:#a60}.slot.rel{background:#a22}
+#log{font-size:12px;line-height:1.5;max-height:26vh;overflow:auto;background:#181818;padding:6px;border-radius:6px;white-space:pre-wrap}
+.ok{color:#6d8}.warn{color:#fb4}
+</style></head><body>
+<h1>관중 동작 판정 시험 <small id="ver" class="m">v0.1</small></h1>
+<div class="m">선수의 동작(만작 유지 → 풀림)으로 발시를 잡는 시험 페이지입니다. 소리는 쓰지 않습니다. 삼각대에 고정하고 가로로 촬영한 영상을 권장합니다.</div>
+<div class="row">
+  <input id="file" type="file" accept="video/*">
+  <button id="bCam" class="b">카메라 사용</button>
+</div>
+<div class="row">
+  <label>선수 수 <input id="nSh" type="number" value="4" min="1" max="7"></label>
+  <label>자세 간격(초) <input id="pint" type="number" value="0.25" min="0.1" max="2" step="0.05"></label>
+  <label><input id="precise" type="checkbox"> 정밀(프레임 단위, 느림)</label>
+</div>
+<div class="row">
+  <button id="bCal" class="b" disabled>① 선수 위치 잡기 (모두 서 있는 화면에서)</button>
+  <button id="bGo" disabled>② 분석 시작</button>
+  <button id="bStop" class="r" disabled>정지</button>
+  <button id="bDl" class="b" disabled>기록 저장(JSON)</button>
+</div>
+<div id="wrap"><canvas id="cv" width="960" height="540"></canvas></div>
+<div id="slots"></div>
+<div id="ev"></div>
+<div class="m" id="stat">모델 대기 중</div>
+<div id="log"></div>
+<video id="v" playsinline muted style="display:none"></video>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const q=new URLSearchParams(location.search);
+const ORT_BASE=new URL(q.get('ort')||'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/',location.href).href;
+const MODEL='./models/yolov8n-pose_352x640.onnx';
+const MW=640,MH=352;                 // model input
+const DS=4;                          // diff canvas = video/DS (target width 480)
+const HOLD_MIN=1.5, GAP_TOL=0.3, WIN=2.2, FRAC=0.35, DIFF_MIN=10;
+const v=$('v'),cv=$('cv'),cx=cv.getContext('2d');
+const S={sess:null,slots:[],events:[],running:false,precise:false,trace:{},lastPoseT:-9,busy:false,prev:null,dw:0,dh:0,ipf:0,inferMs:[],src:''};
+const lc=document.createElement('canvas');lc.width=MW;lc.height=MH;const lx=lc.getContext('2d',{willReadFrequently:true});
+const dc=document.createElement('canvas');const dx=dc.getContext('2d',{willReadFrequently:true});
+function log(c,m){const d=document.createElement('div');d.className=c;d.textContent=m;const L=$('log');L.prepend(d);while(L.children.length>150)L.lastChild.remove()}
+function stat(t){$('stat').textContent=t}
+function loadScript(u){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=u;s.onload=res;s.onerror=()=>rej(new Error('스크립트 로드 실패 '+u));document.head.appendChild(s)})}
+async function init(){
+  try{
+    await loadScript(ORT_BASE+'ort.wasm.min.js');
+    ort.env.wasm.wasmPaths=ORT_BASE;
+    ort.env.wasm.numThreads=self.crossOriginIsolated?Math.min(4,navigator.hardwareConcurrency||2):1;
+    S.sess=await ort.InferenceSession.create(MODEL,{executionProviders:['wasm']});
+    stat('모델 준비됨 (wasm, 스레드 '+ort.env.wasm.numThreads+'). 영상을 고르세요.');log('ok','모델 로드 완료');
+  }catch(e){stat('모델 로드 실패: '+(e&&e.message||e));log('warn',String(e&&e.stack||e))}
+}
+/* ---------- pose ---------- */
+function letterbox(){
+  const vw=v.videoWidth,vh=v.videoHeight,sc=Math.min(MW/vw,MH/vh),nw=Math.round(vw*sc),nh=Math.round(vh*sc);
+  const dw=(MW-nw)/2,dh=(MH-nh)/2;
+  lx.fillStyle='#727272';lx.fillRect(0,0,MW,MH);lx.drawImage(v,Math.round(dw-0.1),Math.round(dh-0.1),nw,nh);
+  return {sc,dw,dh};
+}
+function iou(a,b){const x1=Math.max(a[0],b[0]),y1=Math.max(a[1],b[1]),x2=Math.min(a[2],b[2]),y2=Math.min(a[3],b[3]);const i=Math.max(0,x2-x1)*Math.max(0,y2-y1);return i/((a[2]-a[0])*(a[3]-a[1])+(b[2]-b[0])*(b[3]-b[1])-i)}
+async function pose(){
+  const g=letterbox(),id=lx.getImageData(0,0,MW,MH).data,N=MW*MH,f=new Float32Array(3*N);
+  for(let i=0,p=0;i<N;i++,p+=4){f[i]=id[p]/255;f[N+i]=id[p+1]/255;f[2*N+i]=id[p+2]/255}
+  const t0=performance.now();
+  const out=await S.sess.run({[S.sess.inputNames[0]]:new ort.Tensor('float32',f,[1,3,MH,MW])});
+  S.inferMs.push(performance.now()-t0);if(S.inferMs.length>20)S.inferMs.shift();
+  const o=out[S.sess.outputNames[0]],A=o.data,n=o.dims[2],C=o.dims[1];
+  const c=[];
+  for(let i=0;i<n;i++){const sc=A[4*n+i];if(sc>0.25){const cxx=A[i],cyy=A[n+i],w=A[2*n+i],h=A[3*n+i];c.push({s:sc,i,b:[cxx-w/2,cyy-h/2,cxx+w/2,cyy+h/2]})}}
+  c.sort((a,b)=>b.s-a.s);const keep=[];
+  for(const d of c){if(keep.every(k=>iou(k.b,d.b)<0.5))keep.push(d)}
+  return keep.map(d=>{const kp=[];for(let k=0;k<17;k++)kp.push([(A[(5+3*k)*n+d.i]-g.dw)/g.sc,(A[(6+3*k)*n+d.i]-g.dh)/g.sc,A[(7+3*k)*n+d.i]]);
+    return {box:[(d.b[0]-g.dw)/g.sc,(d.b[1]-g.dh)/g.sc,(d.b[2]-g.dw)/g.sc,(d.b[3]-g.dh)/g.sc],kp,s:d.s}});
+}
+function upOf(p){ // wrist height above shoulder line, normalised by body height (positive = wrist above shoulders)
+  const h=p.box[3]-p.box[1],sh=(p.kp[5][1]+p.kp[6][1])/2;
+  return Math.max((sh-p.kp[9][1])/h,(sh-p.kp[10][1])/h)
+}
+/* ---------- calibration ---------- */
+$('bCal').onclick=async()=>{
+  $('bCal').disabled=true;stat('선수 위치 찾는 중…');
+  try{
+    const ps=(await pose()).sort((a,b)=>(a.box[0]+a.box[2])-(b.box[0]+b.box[2]));
+    const want=+$('nSh').value||4;
+    if(ps.length!==want)log('warn',`${ps.length}명이 잡혔습니다 (설정 ${want}명). 모두 서 있는 화면에서 다시 시도하세요.`);
+    S.slots=ps.map((p,i)=>({no:i+1,box:p.box,cx:(p.box[0]+p.box[2])/2,up:[],diffs:[],holdStart:null,lastPos:null,state:'대기',holdDur:0,lastRel:null}));
+    S.spacing=S.slots.length>1?(S.slots[S.slots.length-1].cx-S.slots[0].cx)/(S.slots.length-1):400;
+    S.events=[];renderEv();drawFrame();
+    log('ok',`선수 ${S.slots.length}명 위치 설정`);stat(`선수 ${S.slots.length}명 설정됨`);$('bGo').disabled=S.slots.length===0;
+  }catch(e){log('warn','위치 잡기 실패: '+(e&&e.message||e))}
+  $('bCal').disabled=false;
+};
+/* ---------- per-frame diff ---------- */
+function setupDiff(){const vw=v.videoWidth,vh=v.videoHeight;dc.width=Math.round(vw/DS);dc.height=Math.round(vh/DS);S.prev=null}
+function diffFrame(t){
+  const W=dc.width,H=dc.height;dx.drawImage(v,0,0,W,H);const d=dx.getImageData(0,0,W,H).data;
+  const g=new Uint8Array(W*H);for(let i=0,p=0;i<g.length;i++,p+=4)g[i]=(d[p]*77+d[p+1]*150+d[p+2]*29)>>8;
+  if(S.prev){
+    const hist=new Uint32Array(256),ab=new Uint8Array(W*H);
+    for(let i=0;i<g.length;i++){const a=Math.abs(g[i]-S.prev[i]);ab[i]=a;hist[a]++}
+    let acc=0,med=0;for(let k=0;k<256;k++){acc+=hist[k];if(acc>=g.length/2){med=k;break}}
+    for(const s of S.slots){
+      const [bx0,by0,bx1,by1]=s.box;const x0=Math.max(0,Math.floor(bx0/DS)-4),x1=Math.min(W,Math.ceil(bx1/DS)+4);
+      const y0=Math.max(0,Math.floor(by0/DS)),y1=Math.min(H,Math.floor((by0+(by1-by0)*0.6)/DS));
+      const h2=new Uint32Array(256);let cnt=0;
+      for(let y=y0;y<y1;y++){for(let x=x0;x<x1;x++){h2[ab[y*W+x]]++;cnt++}}
+      let a2=0,p97=0;const target=cnt*0.97;for(let k=0;k<256;k++){a2+=h2[k];if(a2>=target){p97=k;break}}
+      s.diffs.push([t,p97-med]);if(s.diffs.length>600)s.diffs.shift();
+    }
+  }
+  S.prev=g;
+}
+/* ---------- state machine ---------- */
+function onPose(t,ps){
+  const inter=+$('pint').value||0.25,tol=Math.max(GAP_TOL,inter*1.5);
+  for(const s of S.slots){
+    let best=null,bd=1e9;for(const p of ps){const d=Math.abs((p.box[0]+p.box[2])/2-s.cx);if(d<bd){bd=d;best=p}}
+    const up=(best&&bd<S.spacing*0.45)?upOf(best):-0.3;
+    s.up.push([t,up]);if(s.up.length>4000)s.up.shift();
+    if(up>0){
+      if(s.holdStart==null)s.holdStart=t;
+      s.lastPos=t;
+      const dur=t-s.holdStart;s.holdDur=dur;s.state=dur>=HOLD_MIN?'만작':'준비';
+    }else if(s.holdStart!=null&&t-s.lastPos>=tol){
+      const dur=s.lastPos-s.holdStart;
+      if(dur>=HOLD_MIN)detectRelease(s,s.lastPos,s.holdStart,dur);
+      s.holdStart=null;s.lastPos=null;s.holdDur=0;if(s.state!=='발시')s.state='대기';
+    }
+  }
+}
+function detectRelease(s,end,hs,dur){
+  const lo=Math.max(hs+1.0,end-WIN),hi=end+0.15;
+  const w=s.diffs.filter(d=>d[0]>=lo&&d[0]<=hi);
+  let tRel=end,method='자세';
+  if(w.length>3){
+    const mx=Math.max(...w.map(d=>d[1])),thr=Math.max(DIFF_MIN,FRAC*mx);
+    const f=w.find(d=>d[1]>thr);if(f){tRel=f[0];method='동작'}
+  }
+  const ev={no:s.no,t:tRel,hold:dur,end,method};S.events.push(ev);s.lastRel=tRel;s.state='발시';setTimeout(()=>{if(s.state==='발시')s.state='대기';renderEv()},1500);
+  log('ok',`${s.no}번 발시 ${tRel.toFixed(2)}초 (만작 ${dur.toFixed(1)}초, ${method})`);renderEv();
+}
+function renderEv(){
+  $('slots').innerHTML=S.slots.map(s=>`<span class="slot ${s.state==='만작'?'hold':s.state==='발시'?'rel':''}">${s.no}번 ${s.state}${s.state==='만작'?' '+s.holdDur.toFixed(1)+'초':''}</span>`).join('');
+  $('ev').innerHTML=S.events.map(e=>`<div>${e.no}번 발시 <b>${e.t.toFixed(2)}초</b> <span class="m">(만작 ${e.hold.toFixed(1)}초 · ${e.method})</span></div>`).join('')
+}
+function drawFrame(){
+  if(!v.videoWidth)return;
+  if(cv.width!==v.videoWidth/2){cv.width=Math.round(v.videoWidth/2);cv.height=Math.round(v.videoHeight/2)}
+  cx.drawImage(v,0,0,cv.width,cv.height);
+  cx.lineWidth=3;cx.font='bold 22px sans-serif';
+  for(const s of S.slots){
+    cx.strokeStyle=s.state==='발시'?'#f44':s.state==='만작'?'#fa0':s.state==='준비'?'#ee4':'#8c8';
+    const b=s.box.map(x=>x/2);cx.strokeRect(b[0],b[1],b[2]-b[0],b[3]-b[1]);cx.fillStyle=cx.strokeStyle;cx.fillText(s.no+'번 '+s.state,b[0]+4,b[1]+24)
+  }
+}
+/* ---------- run loops ---------- */
+async function inferAt(t){
+  S.busy=true;try{const ps=await pose();onPose(t,ps)}catch(e){log('warn','자세 인식 오류: '+(e&&e.message||e))}finally{S.busy=false}
+}
+function onFrame(t){
+  diffFrame(t);
+  const inter=+$('pint').value||0.25;
+  if(!S.busy&&t-S.lastPoseT>=inter){S.lastPoseT=t;inferAt(t)}
+  drawFrame();renderSlotsLight();
+  const m=S.inferMs.length?S.inferMs.reduce((a,b)=>a+b)/S.inferMs.length:0;
+  stat(`t=${t.toFixed(1)}초 · 자세 ${m.toFixed(0)}ms/회 · ${S.precise?'정밀':'실시간'}`);
+}
+let lastSlotsHtml='';function renderSlotsLight(){const h=S.slots.map(s=>s.state+s.holdDur.toFixed(0)).join();if(h!==lastSlotsHtml){lastSlotsHtml=h;renderEv()}}
+function sleepFrame(){return new Promise(r=>requestAnimationFrame(r))}
+function waitSeek(t){return new Promise(res=>{const h=()=>{v.removeEventListener('seeked',h);res()};v.addEventListener('seeked',h);v.currentTime=t})}
+$('bGo').onclick=async()=>{
+  if(!S.slots.length)return;
+  S.running=true;S.precise=$('precise').checked;S.events=[];S.lastPoseT=-9;lastSlotsHtml='';
+  for(const s of S.slots){s.up=[];s.diffs=[];s.holdStart=null;s.lastPos=null;s.state='대기';s.holdDur=0}
+  setupDiff();$('bGo').disabled=true;$('bStop').disabled=false;$('bDl').disabled=true;renderEv();
+  if(S.precise&&S.src==='file'){
+    const fps=30,dur=v.duration;
+    for(let t=0;t<dur&&S.running;t+=1/fps){
+      await waitSeek(t);diffFrame(t);
+      const inter=+$('pint').value||0.25;
+      if(t-S.lastPoseT>=inter-1e-6){S.lastPoseT=t;await inferAt(t)}
+      if(Math.round(t*fps)%15===0){drawFrame();renderEv();stat(`정밀 분석 ${t.toFixed(1)} / ${dur.toFixed(1)}초`)}
+    }
+    finish();
+  }else{
+    v.currentTime=S.src==='file'?0:v.currentTime;
+    if(S.src==='file')await waitSeek(0);
+    v.onended=()=>{if(S.running)finish()};
+    v.play();
+    const loop=(now,meta)=>{
+      if(!S.running)return;
+      onFrame(meta&&meta.mediaTime!=null?meta.mediaTime:v.currentTime);
+      if(v.ended){finish();return}
+      v.requestVideoFrameCallback(loop)
+    };
+    v.requestVideoFrameCallback(loop);
+  }
+};
+function finish(){S.running=false;v.pause();$('bGo').disabled=false;$('bStop').disabled=true;$('bDl').disabled=false;renderEv();drawFrame();log('ok',`분석 끝: 발시 ${S.events.length}건`);S.done=true}
+$('bStop').onclick=()=>finish();
+$('bDl').onclick=()=>{
+  const data={src:S.src,events:S.events,slots:S.slots.map(s=>({no:s.no,box:s.box,up:s.up,diffs:s.diffs}))};
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data)],{type:'application/json'}));
+  a.download='gwan-motion-'+Date.now()+'.json';a.click()
+};
+/* ---------- sources ---------- */
+$('file').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  if(v.srcObject){v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null}
+  S.src='file';S.slots=[];S.events=[];renderEv();
+  v.src=URL.createObjectURL(f);v.muted=true;v.onloadeddata=()=>{drawFrame();$('bCal').disabled=!S.sess;stat('영상을 불러왔습니다. 0초 근처 화면에서 ①을 누르세요.')};
+  v.onloadedmetadata=()=>{v.currentTime=0.1};
+  v.onseeked=()=>{if(!S.running)drawFrame()};
+};
+$('bCam').onclick=async()=>{
+  try{
+    const st=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920},height:{ideal:1080}},audio:false});
+    v.srcObject=st;S.src='cam';await v.play();S.slots=[];S.events=[];renderEv();
+    const loop=()=>{if(!S.running){drawFrame();v.requestVideoFrameCallback(loop)}};v.requestVideoFrameCallback(loop);
+    $('bCal').disabled=!S.sess;stat('카메라 연결됨. 선수들이 서 있는 상태에서 ①을 누르세요.');
+  }catch(e){stat('카메라 실패: '+(e&&e.message||e))}
+};
+$('file').addEventListener('click',()=>{});
+window.__gm={S,init,pose,onPose,detectRelease};
+init().then(()=>{if(v.videoWidth)$('bCal').disabled=false});
+})();
+</script></body></html>
