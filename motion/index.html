@@ -121,7 +121,7 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
 <body>
 <div class="wrap">
 <header>
-  <h1>관중 판정기 <span class="ver" id="h1ver">시험판 v17b-발시만</span></h1>
+  <h1>관중 판정기 <span class="ver" id="h1ver">동작판 v17c</span></h1>
   <p class="sub">발시음과 과녁 점멸을 짝지어 관중·불을 자동으로 채웁니다. 시험판이라 결과는 반드시 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -143,15 +143,6 @@ details summary{cursor:pointer;font-weight:700;font-size:14px}
     <label class="f" for="resSel">해상도<select id="resSel"><option value="1080">1080p</option><option value="720">720p</option><option value="2160">4K</option></select></label>
   </div>
   <p class="muted" id="camInfo" hidden></p>
-  <details id="bleCam"><summary>소니 카메라 자동 녹화 (블루투스)</summary>
-    <p class="muted" id="bleTxt" style="margin:8px 0">발시음이 나면 소니 카메라(RX100·ZV·알파)의 녹화 버튼을 대신 누릅니다. HFR을 「End Trigger」로 두면 발시 앞뒤 장면이 저장됩니다. 카메라는 먼저 폰과 블루투스 리모컨으로 페어링돼 있어야 하며, 안드로이드 Chrome에서만 됩니다.</p>
-    <div class="row"><button class="grow" id="btnBle">카메라 연결</button><button class="grow" id="btnBleTest" disabled>녹화 버튼 누르기 (시험)</button></div>
-    <div class="settings" style="margin-top:10px">
-      <label class="f" for="bleAuto">발시 때 자동으로<select id="bleAuto"><option value="0">끔</option><option value="1">켬</option></select></label>
-      <label class="f" for="bleDelay">발시 후 누를 때까지(초)<input type="number" id="bleDelay" min="0" max="3" step="0.1" value="0.3"></label>
-    </div>
-    <p class="muted" id="bleState" style="margin:8px 0 0">연결 안 됨</p>
-  </details>
   <details id="camAdv" hidden><summary>카메라 세부 설정</summary>
     <p class="muted" id="capTxt" style="margin:8px 0"></p>
     <div class="settings camctl" id="camCtl"></div>
@@ -552,7 +543,7 @@ function onAudio(rms,hf,lf,pcm,nc){
         const info={rr:+pr.toFixed(1),hr:+k.hr.toFixed(1),low:+low.toFixed(2),dec:+dec.toFixed(2)};
         if(k.t-S.lastTone<TONE_PRE)log('note',`과녁 소리 직후라 발시에서 제외 (크기 ${info.rr}배)`,k.t);
         else if(gm){GM.onSoundRel(k.t,info);log('note',`발시음 후보 (크기 ${info.rr}배) · 동작과 맞추는 중`,k.t)}
-        else{S.hold={t:k.t,info,prev:S.lastRel};S.lastRel=k.t;bleOnRelease(k.t)}}
+        else{S.hold={t:k.t,info,prev:S.lastRel};S.lastRel=k.t}}
       else if(free&&pr>2&&!ok)log('note',dull?`둔탁한 소리 제외 (화살 맞는 소리 등, 크기 ${pr.toFixed(1)}배)`:`충격음 제외 (크기 ${pr.toFixed(1)}배, 저음 ${Math.round(low*100)}%, 잔향 ${Math.round(dec*100)}%)`,k.t);}
     return;}
   // every sharp onset is examined (tones must be seen even inside the release gap); the gap only limits accepted releases
@@ -873,7 +864,7 @@ $('btnMine').onclick=()=>{const c=cfg();if(S.ptr.p===c.me){toast('이미 내 차
 function setRunning(on){S.running=on;$('btnGo').textContent=on?'판정 멈춤':'판정 시작';$('btnManual').disabled=!on;
   if(on&&S.startedAt==null)S.startedAt=clock();}
 $('btnGo').onclick=async()=>{
-  if(!S.roi&&!(window.GM&&GM.on&&GM.slots.length)&&!(bleAutoOn()&&S.mode==='live')){toast('먼저 화면에서 점멸 자리를 누르세요 (카메라 자동 녹화만 쓸 때는 과녁 지정 없이 시작됩니다)');return}
+  if(!S.roi&&!(window.GM&&GM.on&&GM.slots.length)){toast('먼저 화면에서 점멸 자리를 누르세요 (동작 모드는 선수 위치 잡기)');return}
   if(S.actx&&S.actx.state!=='running'){try{await S.actx.resume()}catch(_){}}
   if(!S.running&&S.mode==='file'&&vid.ended){toast('영상이 끝났습니다. 「새로 시작」을 누르면 처음부터 다시 판정합니다');return}
   if(!S.running){if(S.mode==='file'){vid.muted=false;try{await vid.play()}catch(e){toast('재생을 시작하지 못했습니다')}}setRunning(true);log('note','판정 시작')}
@@ -955,51 +946,8 @@ document.addEventListener('visibilitychange',async()=>{
     else if(S.mode==='live'&&S.hiddenAt!=null){const g=clock()-S.hiddenAt;log('warn',`화면이 ${g.toFixed(0)}초 가려져 그동안 램프를 보지 못했습니다`);toast('화면이 가려진 동안 램프 판정이 멈췄습니다')}
     S.hiddenAt=null}
 });
-/* ---------- Sony camera Bluetooth remote (RMT-P1BT protocol: service 8000FF00…, write FF01; record down 01 0E / up 01 0F) ---------- */
-const SONY_SVC='8000ff00-ff00-ffff-ffff-ffffffffffff';
-S.ble=null;
-const bleAutoOn=()=>$('bleAuto').value==='1';
-function bleState(txt){$('bleState').textContent=txt}
-if(!navigator.bluetooth){$('btnBle').disabled=true;bleState('이 브라우저는 블루투스를 쓸 수 없습니다 (아이폰 불가). 안드로이드 Chrome에서 열어 주세요.')}
-async function bleAttach(dev){
-  bleState('연결 중… '+(dev.name||''));
-  const g=await dev.gatt.connect();const sv=await g.getPrimaryService(SONY_SVC);
-  S.ble={dev,cmd:await sv.getCharacteristic(0xff01),busy:false,last:-1e9};
-  try{const n=await sv.getCharacteristic(0xff02);await n.startNotifications();
-    n.addEventListener('characteristicvaluechanged',e=>{const v=new Uint8Array(e.target.value.buffer);log('note','카메라 응답 '+[...v].map(b=>b.toString(16).padStart(2,'0')).join('-'))})}catch(_){}
-  $('btnBleTest').disabled=false;bleState('연결됨: '+(dev.name||'소니 카메라'));log('note','소니 카메라 연결: '+(dev.name||''));
-}
-$('btnBle').addEventListener('click',async()=>{
-  try{
-    let dev;
-    try{dev=await navigator.bluetooth.requestDevice({filters:[{manufacturerData:[{companyIdentifier:0x012d}]},{namePrefix:'DSC-'},{namePrefix:'ZV-'},{namePrefix:'ILCE-'},{namePrefix:'ILME-'}],optionalServices:[SONY_SVC]})}
-    catch(e){if(e.name!=='TypeError')throw e;dev=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:[SONY_SVC]})}
-    dev.addEventListener('gattserverdisconnected',()=>{$('btnBleTest').disabled=true;bleState('연결 끊김 — 다시 붙는 중');log('warn','소니 카메라 연결 끊김');
-      setTimeout(()=>{if(S.ble&&S.ble.dev===dev)bleAttach(dev).catch(()=>bleState('연결 끊김 — 「카메라 연결」을 다시 누르세요'))},1000)});
-    await bleAttach(dev);
-  }catch(e){bleState('연결 실패: '+(e&&e.message||e));toast('카메라에 연결하지 못했습니다. 카메라를 켜고, 폰과 리모컨 페어링이 돼 있는지 확인하세요')}
-});
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function blePress(why){
-  const B=S.ble;if(!B||!B.cmd||B.busy)return false;B.busy=true;
-  try{
-    // press and release as two separate writes: a single 4-byte write leaves the button "held" and later presses are ignored
-    await B.cmd.writeValue(new Uint8Array([0x01,0x0e]));await sleep(120);await B.cmd.writeValue(new Uint8Array([0x01,0x0f]));
-    B.last=performance.now()/1000;log('note','카메라 녹화 버튼 누름 ('+why+')');return true;
-  }catch(e){log('warn','카메라 명령 실패: '+(e&&e.name||e));bleState('명령 실패 — 연결을 확인하세요');return false}
-  finally{B.busy=false}
-}
-$('btnBleTest').addEventListener('click',()=>blePress('시험'));
-function updateGo(){modeTxt();const gm=!!(window.GM&&GM.on&&GM.slots.length&&GM.sess);$('btnGo').disabled=!S.roi&&!gm&&!(bleAutoOn()&&S.mode==='live')}
-$('bleAuto').addEventListener('change',updateGo);
-function bleOnRelease(tRel){
-  if(!bleAutoOn()||S.mode!=='live'||!S.ble)return;
-  const now=performance.now()/1000,wait=Math.max(0,tRel+(+$('bleDelay').value||0)-clock());
-  if(now<(S.ble.armedUntil||0))return;   // one press per shot, counted from scheduling; HFR ignores presses while saving anyway
-  S.ble.armedUntil=now+wait+2;
-  setTimeout(()=>blePress('발시'),wait*1000);
-}
-window.__gg={updateGo,log,clock,tRel,S,setROI,cfg,onRelease,onAudio,onFlash,tick,finalizeAll,resetDetectors,bleOnRelease,vid:()=>vid};
+function updateGo(){modeTxt();const gm=!!(window.GM&&GM.on&&GM.slots.length&&GM.sess);$('btnGo').disabled=!S.roi&&!gm}
+window.__gg={updateGo,log,clock,tRel,S,setROI,cfg,onRelease,onAudio,onFlash,tick,finalizeAll,resetDetectors,vid:()=>vid};
 render();
 })();
 </script>
