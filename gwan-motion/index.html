@@ -16,14 +16,14 @@ label{display:inline-flex;gap:4px;align-items:center}input[type=number]{width:64
 #log{font-size:12px;line-height:1.5;max-height:26vh;overflow:auto;background:#181818;padding:6px;border-radius:6px;white-space:pre-wrap}
 .ok{color:#6d8}.warn{color:#fb4}
 </style></head><body>
-<h1>관중 동작 판정 시험 <small id="ver" class="m">v0.2 (iOS 영상 로드 수정)</small></h1>
+<h1>관중 동작 판정 시험 <small id="ver" class="m">v0.3 (사대 순서)</small></h1>
 <div class="m">선수의 동작(만작 유지 → 풀림)으로 발시를 잡는 시험 페이지입니다. 소리는 쓰지 않습니다. 삼각대에 고정하고 가로로 촬영한 영상을 권장합니다.</div>
 <div class="row">
   <input id="file" type="file" accept="video/*">
   <button id="bCam" class="b">카메라 사용</button>
 </div>
 <div class="row">
-  <label>선수 수 <input id="nSh" type="number" value="4" min="1" max="7"></label>
+  <label>선수 수 <input id="nSh" type="number" value="4" min="1" max="7"></label> <label>맨 왼쪽 사대 <input id="sd0" type="number" value="1" min="1" max="7"></label>
   <label>자세 간격(초) <input id="pint" type="number" value="0.25" min="0.1" max="2" step="0.05"></label>
   <label><input id="precise" type="checkbox"> 정밀(프레임 단위, 느림)</label>
 </div>
@@ -97,7 +97,7 @@ $('bCal').onclick=async()=>{
     const ps=(await pose()).sort((a,b)=>(a.box[0]+a.box[2])-(b.box[0]+b.box[2]));
     const want=+$('nSh').value||4;
     if(ps.length!==want)log('warn',`${ps.length}명이 잡혔습니다 (설정 ${want}명). 모두 서 있는 화면에서 다시 시도하세요.`);
-    S.slots=ps.map((p,i)=>({no:i+1,box:p.box,cx:(p.box[0]+p.box[2])/2,up:[],diffs:[],holdStart:null,lastPos:null,state:'대기',holdDur:0,lastRel:null}));
+    S.next=0;S.rel=0;const sd0=+$('sd0').value||1;S.slots=ps.map((p,i)=>({no:sd0+i,box:p.box,cx:(p.box[0]+p.box[2])/2,up:[],diffs:[],holdStart:null,lastPos:null,state:'대기',holdDur:0,lastRel:null}));
     S.spacing=S.slots.length>1?(S.slots[S.slots.length-1].cx-S.slots[0].cx)/(S.slots.length-1):400;
     S.events=[];renderEv();drawFrame();
     log('ok',`선수 ${S.slots.length}명 위치 설정`);stat(`선수 ${S.slots.length}명 설정됨`);$('bGo').disabled=S.slots.length===0;
@@ -150,12 +150,17 @@ function detectRelease(s,end,hs,dur){
     const mx=Math.max(...w.map(d=>d[1])),thr=Math.max(DIFF_MIN,FRAC*mx);
     const f=w.find(d=>d[1]>thr);if(f){tRel=f[0];method='동작'}
   }
-  const ev={no:s.no,t:tRel,hold:dur,end,method};S.events.push(ev);s.lastRel=tRel;s.state='발시';setTimeout(()=>{if(s.state==='발시')s.state='대기';renderEv()},1500);
+  const n=S.slots.length,idx=S.slots.indexOf(s),k=S.events.length,per=n*5;
+  const shot=k%per,jun=Math.floor(k/per)+1,arrow=Math.floor(shot/n)+1;
+  const exp=(S.next||0)%n;let order='ok';
+  if(idx!==exp){const skipped=(idx-exp+n)%n;order='순서 어긋남(차례 '+S.slots[exp].no+'번, 실제 '+s.no+'번 · 건너뜀 '+skipped+')';log('warn',order)}
+  S.next=(idx+1)%n;
+  const ev={no:s.no,t:tRel,hold:dur,end,method,jun,arrow,order};S.events.push(ev);s.lastRel=tRel;s.state='발시';setTimeout(()=>{if(s.state==='발시')s.state='대기';renderEv()},1500);
   log('ok',`${s.no}번 발시 ${tRel.toFixed(2)}초 (만작 ${dur.toFixed(1)}초, ${method})`);renderEv();
 }
 function renderEv(){
   $('slots').innerHTML=S.slots.map(s=>`<span class="slot ${s.state==='만작'?'hold':s.state==='발시'?'rel':''}">${s.no}번 ${s.state}${s.state==='만작'?' '+s.holdDur.toFixed(1)+'초':''}</span>`).join('');
-  $('ev').innerHTML=S.events.map(e=>`<div>${e.no}번 발시 <b>${e.t.toFixed(2)}초</b> <span class="m">(만작 ${e.hold.toFixed(1)}초 · ${e.method})</span></div>`).join('')
+  $('ev').innerHTML=(S.slots.length?`<div class="m">다음 차례: <b>${S.slots[(S.next||0)%S.slots.length].no}번 사대</b> · ${S.events.length%(S.slots.length*5)===0&&S.events.length?'새 순 시작':(Math.floor((S.events.length%(S.slots.length*5))/S.slots.length)+1)+'발째'} · 누적 ${S.events.length}발 / 순당 ${S.slots.length*5}발</div>`:'')+S.events.map(e=>`<div>${e.jun}순 ${e.arrow}발 · ${e.no}번 발시 <b>${e.t.toFixed(2)}초</b> <span class="m">(만작 ${e.hold.toFixed(1)}초 · ${e.method})</span>${e.order==='ok'?'':' <b style="color:#f66">⚠ '+e.order+'</b>'}</div>`).join('')
 }
 function drawFrame(){
   if(!v.videoWidth)return;
@@ -184,7 +189,7 @@ function sleepFrame(){return new Promise(r=>requestAnimationFrame(r))}
 function waitSeek(t){return new Promise(res=>{const h=()=>{v.removeEventListener('seeked',h);res()};v.addEventListener('seeked',h);v.currentTime=t})}
 $('bGo').onclick=async()=>{
   if(!S.slots.length)return;
-  S.running=true;S.precise=$('precise').checked;S.events=[];S.lastPoseT=-9;lastSlotsHtml='';
+  S.next=0;S.running=true;S.precise=$('precise').checked;S.events=[];S.lastPoseT=-9;lastSlotsHtml='';
   for(const s of S.slots){s.up=[];s.diffs=[];s.holdStart=null;s.lastPos=null;s.state='대기';s.holdDur=0}
   setupDiff();$('bGo').disabled=true;$('bStop').disabled=false;$('bDl').disabled=true;renderEv();
   if(S.precise&&S.src==='file'){
