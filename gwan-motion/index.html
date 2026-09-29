@@ -38,7 +38,7 @@ label{display:inline-flex;gap:4px;align-items:center}input[type=number]{width:64
 <div id="ev"></div>
 <div class="m" id="stat">모델 대기 중</div>
 <div id="log"></div>
-<video id="v" playsinline muted style="display:none"></video>
+<video id="v" playsinline webkit-playsinline muted preload="auto" style="position:absolute;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none"></video>
 <script>
 (()=>{
 const $=id=>document.getElementById(id);
@@ -222,9 +222,12 @@ $('file').onchange=e=>{
   const f=e.target.files[0];if(!f)return;
   if(v.srcObject){v.srcObject.getTracks().forEach(t=>t.stop());v.srcObject=null}
   S.src='file';S.slots=[];S.events=[];renderEv();
-  v.src=URL.createObjectURL(f);v.muted=true;v.onloadeddata=()=>{drawFrame();$('bCal').disabled=!S.sess;stat('영상을 불러왔습니다. 0초 근처 화면에서 ①을 누르세요.')};
-  v.onloadedmetadata=()=>{v.currentTime=0.1};
-  v.onseeked=()=>{if(!S.running)drawFrame()};
+  v.src=URL.createObjectURL(f);v.muted=true;const rdy=()=>{if(!v.videoWidth||S.running)return;drawFrame();$('bCal').disabled=!S.sess;stat('영상을 불러왔습니다. 0초 근처 화면에서 ①을 누르세요.')};
+  v.onloadeddata=rdy;v.oncanplay=rdy;
+  v.onloadedmetadata=()=>{stat('영상 정보 읽음 ('+v.videoWidth+'x'+v.videoHeight+')…');try{v.currentTime=0.1}catch(_){}};
+  v.onerror=()=>{log('warn','영상을 열 수 없습니다 (코덱 미지원 가능)')};v.load();
+  setTimeout(()=>{if(v.videoWidth&&$('bCal').disabled)rdy()},3000);
+  v.onseeked=()=>{if(!S.running){drawFrame();if(!S.slots.length)rdy()}};
 };
 $('bCam').onclick=async()=>{
   try{
