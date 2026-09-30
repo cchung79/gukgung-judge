@@ -134,7 +134,7 @@ ol.muted{padding-left:20px;margin:8px 0}
 <body>
 <div class="wrap">
 <header>
-  <h1>single-shot <span class="ver" id="h1ver">v2.1</span></h1>
+  <h1>single-shot <span class="ver" id="h1ver">v2.2</span></h1>
   <p class="sub">폰 한 대로 내 시수를 기록합니다. 내 뒷모습의 발시(동작+현소리)를 세고, 과녁 램프나 뻐꾸기 소리로 관중·불을 가립니다. 시험판이라 결과는 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -191,7 +191,8 @@ ol.muted{padding-left:20px;margin:8px 0}
   </div>
   <p class="muted" id="fileInfo" hidden></p>
   <div class="row">
-    <label class="btn grow" for="selfie">셀피로 내 옷색 등록 (선택)<input type="file" id="selfie" accept="image/*" capture="user"></label>
+    <label class="btn grow" for="selfie">셀피로 옷색 등록<input type="file" id="selfie" accept="image/*" capture="user"></label>
+    <label class="btn grow" for="backPhoto">뒷모습 사진으로 등록<input type="file" id="backPhoto" accept="image/*"></label>
     <button id="btnRefClear" disabled>옷색 지우기</button>
   </div>
   <div class="row" style="flex-wrap:nowrap"><canvas id="refPrev" width="36" height="48" hidden style="image-rendering:pixelated;border:1px solid var(--line);border-radius:6px"></canvas><span class="muted" id="refTxt"></span></div>
@@ -262,7 +263,7 @@ ol.muted{padding-left:20px;margin:8px 0}
   <details><summary>사용 순서</summary>
     <ol class="muted">
       <li>폰을 사대 뒤에 고정하고 카메라·마이크를 시작합니다.</li>
-      <li>(선택) 「셀피로 내 옷색 등록」: 폰 앞 카메라로 상반신이 나오게 찍으면 상의 색을 기억합니다. 이후 화면에서 같은 색의 사람을 자동으로 나로 잡고 따라갑니다.</li>
+      <li>(선택) 옷색 등록: 「셀피로 옷색 등록」은 폰 앞 카메라로 상반신을 찍습니다. 옷의 앞뒤가 다르면 「뒷모습 사진으로 등록」에서 동료에게 내 뒷모습을 찍어 달라고 하거나 앨범에서 고르세요. 이후 화면에서 같은 색의 사람을 자동으로 나로 잡고 따라갑니다. 사진 없이 폰을 세워 두고 「① 내 위치 잡기」를 눌러도 그때의 등 색을 기억합니다.</li>
       <li>「① 내 위치 잡기」: 내가 서 있는 상태에서 누르면 화면의 사람을 찾습니다(옷색을 등록했으면 색이 맞는 사람). 내가 아닌 사람이 잡히면 내 상자를 눌러 고릅니다. 누른 사람의 등 색도 함께 배웁니다.</li>
       <li>「② 램프 지정」: 확대해서 램프 자리를 한 번 톡 누릅니다. 램프가 안 보이는 활터는 건너뛰세요.</li>
       <li>「기록 시작」 후 평소처럼 쏩니다. 만작을 1.5초 이상 유지했다가 놓으면 한 발로 세고, 현소리가 같이 잡히면 시각을 맞춥니다.</li>
@@ -390,20 +391,20 @@ function inter(a,b){let s=0;for(let i=0;i<27;i++)s+=Math.min(a[i],b[i]);return s
 function simTo(g){let s=-1;for(const r of [S.ref,S.back])if(r)s=Math.max(s,(inter(r.u,g.u)+inter(r.l,g.l))/2);return s<0?null:s}
 function learnBack(p){const g=sigOf(p);if(g){S.back=g;return true}return false}
 function refUI(){const has=!!(S.ref||S.back);$('btnRefClear').disabled=!has;
-  $('refTxt').textContent=S.ref?'셀피 옷색 등록됨 · 화면에서 같은 색의 사람을 나로 잡습니다.':S.back?'셀피는 없고, 잡은 내 등 색으로 따라갑니다.':'셀피를 찍으면 자동으로 나를 찾습니다. (없어도 됩니다)';
+  $('refTxt').textContent=S.ref?'사진으로 옷색 등록됨 · 화면에서 같은 색의 사람을 나로 잡습니다.':S.back?'셀피는 없고, 잡은 내 등 색으로 따라갑니다.':'셀피나 뒷모습 사진을 등록하면 자동으로 나를 찾습니다. (없어도 됩니다)';
   $('refPrev').hidden=!S.ref}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
 async function onSelfie(f){
-  st('셀피에서 옷색을 읽는 중…');
+  st('사진에서 옷색을 읽는 중…');
   try{
     if(!(await modelReady())){st('자세 모델이 준비되지 않아 셀피를 읽지 못했습니다');return}
     const img=await createImageBitmap(f);
     while(S.busy)await sleep(50);S.busy=true;let ps;try{ps=await pose(img)}finally{S.busy=false}
-    if(!ps.length){st('셀피에서 사람을 찾지 못했습니다. 상반신이 크게 나오게 다시 찍어 주세요.');return}
+    if(!ps.length){st('사진에서 사람을 찾지 못했습니다. 상반신이 크게 나오게 다시 찍어 주세요.');return}
     ps.sort((a,b)=>barea(b.box)-barea(a.box));const g=sigOf(ps[0],img);
     if(!g){st('어깨가 잘 보이지 않습니다. 상반신이 나오게 다시 찍어 주세요.');return}
     S.ref=g;const pv=$('refPrev'),px=pv.getContext('2d');px.imageSmoothingEnabled=false;px.drawImage(sgc,0,0,pv.width,pv.height);
-    refUI();st('옷색을 등록했습니다. 카메라에 내가 보이면 자동으로 나를 찾습니다.');log('note','셀피 옷색 등록');
+    refUI();st('옷색을 등록했습니다. 카메라에 내가 보이면 자동으로 나를 찾습니다.');log('note','사진으로 옷색 등록');
     if(S.sess&&vid.videoWidth&&!S.me)calibrate();
   }catch(e){st('셀피 읽기 실패: '+(e&&e.message||e))}
 }
@@ -1259,6 +1260,7 @@ $('place').addEventListener('change',()=>{pref('place',$('place').value);schedul
 $('tone').addEventListener('change',()=>{pref('tone',$('tone').checked?'1':'0');render()});
 if(pref('sens'))$('sens').value=pref('sens');if(pref('place'))$('place').value=pref('place');$('tone').checked=pref('tone')==='1';
 $('selfie').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)onSelfie(f)});
+$('backPhoto').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)onSelfie(f)});
 $('btnRefClear').onclick=()=>{S.ref=null;S.back=null;refUI();st('옷색 정보를 지웠습니다.')};
 $('follow').addEventListener('change',()=>pref('follow',$('follow').checked?'1':'0'));
 if(pref('follow'))$('follow').checked=pref('follow')==='1';
