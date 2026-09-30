@@ -134,11 +134,11 @@ ol.muted{padding-left:20px;margin:8px 0}
 <body>
 <div class="wrap">
 <header>
-  <h1>single-shot <span class="ver" id="h1ver">v2.2</span></h1>
+  <h1>single-shot <span class="ver" id="h1ver">v2.3</span></h1>
   <p class="sub">폰 한 대로 내 시수를 기록합니다. 내 뒷모습의 발시(동작+현소리)를 세고, 과녁 램프나 뻐꾸기 소리로 관중·불을 가립니다. 시험판이라 결과는 시지와 대조하세요.</p>
   <div class="chips">
-    <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
-    <span class="chip" id="chMic"><span class="dot"></span>마이크</span>
+    <span class="chip" id="chCam"><span class="dot"></span><span id="chCamT">카메라</span></span>
+    <span class="chip" id="chMic"><span class="dot"></span><span id="chMicT">마이크</span></span>
     <span class="chip" id="chMe"><span class="dot"></span>내 위치</span>
     <span class="chip" id="chRoi"><span class="dot"></span>램프</span>
     <span class="chip" id="chFps"><span class="dot"></span>처리 속도 <span id="fpsTxt">— fps</span></span>
@@ -148,9 +148,10 @@ ol.muted{padding-left:20px;margin:8px 0}
 <section aria-labelledby="h-src">
   <h2 id="h-src">1. 입력과 설정</h2>
   <div class="row">
-    <button class="primary grow" id="btnLive">카메라·마이크 시작</button>
-    <label class="btn grow" for="fileIn">녹화 파일로 시험<input type="file" id="fileIn" accept="video/*"></label>
+    <button class="grow" id="btnLive">카메라·마이크 시작</button>
+    <label class="btn grow" for="fileIn" id="lblFile">녹화 파일로 시험<input type="file" id="fileIn" accept="video/*"></label>
   </div>
+  <p class="muted" id="srcTxt" style="margin:0">현재 입력: 없음 — 카메라·마이크를 시작하거나 녹화 파일을 고르세요.</p>
   <div class="settings devs" id="devRow" hidden>
     <label class="f" for="camSel">카메라<select id="camSel"></select></label>
     <label class="f" for="micSel">마이크<select id="micSel"></select></label>
@@ -556,7 +557,7 @@ async function startLive(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){toast('이 브라우저에서는 카메라를 쓸 수 없습니다. https 주소로 열어 주세요.');return}
   try{
     if(S.running){setRunning(false);log('note','장치 변경으로 판정 멈춤')}
-    stopAll();
+    stopAll();setSourceUI('live');
     const camId=$('camSel').value||pref('cam'),micId=$('micSel').value||pref('mic'),rh=+($('resSel').value||1080),rw=Math.round(rh*16/9);
     const vc={width:{ideal:rw},height:{ideal:rh},frameRate:{ideal:30}};
     if(camId)vc.deviceId={exact:camId};else vc.facingMode={ideal:'environment'};
@@ -600,7 +601,7 @@ function freshVideo(){
 }
 async function startFile(f){
   if(S.running)setRunning(false);
-  stopAll();freshVideo();S.mode='file';
+  stopAll();freshVideo();S.mode='file';setSourceUI('file',f.name);
   const info=$('fileInfo'),mb=(f.size/1048576).toFixed(0);let stage='선택됨';
   const setInfo=st=>{stage=st;info.hidden=false;info.textContent=`파일 ${f.name} · ${mb}MB · ${st}`};setInfo('불러오는 중');
   vid.preload='auto';vid.playsInline=true;vid.setAttribute('playsinline','');vid.muted=true;vid.setAttribute('muted','');vid.loop=false;
@@ -846,8 +847,19 @@ ov.addEventListener('pointermove',e=>{
   G.last=p;
 });
 
+function setSourceUI(kind,name){
+  // 입력은 카메라·마이크 또는 녹화 파일 중 하나만 켠다. 화면 표시도 그쪽으로만 보이게 한다.
+  const live=kind==='live',file=kind==='file';
+  $('chCamT').textContent=file?'영상 파일':'카메라';$('chMicT').textContent=file?'파일 소리':'마이크';
+  chip('chCam');chip('chMic');chip('chFps');$('fpsTxt').textContent='— fps';
+  $('btnLive').classList.toggle('primary',live);$('lblFile').classList.toggle('primary',file);
+  if(!live){$('devRow').hidden=true;$('camInfo').hidden=true;$('camAdv').hidden=true}
+  if(!file){$('fileInfo').hidden=true}
+  $('srcTxt').textContent=live?'현재 입력: 카메라·마이크 (녹화 파일은 쓰지 않습니다)':file?`현재 입력: 녹화 파일${name?' · '+name:''} (카메라·마이크는 꺼져 있습니다)`:'현재 입력: 없음';
+}
 function stopAll(){
   if(S.stream){S.stream.getTracks().forEach(t=>t.stop());S.stream=null}
+  try{vid.pause();vid.srcObject=null}catch(_){}
   S.camTrack=null;$('camAdv').hidden=true;resetView();
   if(S.actx){try{S.actx.close()}catch(_){}S.actx=null}
   S.running=false;
