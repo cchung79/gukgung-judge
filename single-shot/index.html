@@ -134,7 +134,7 @@ ol.muted{padding-left:20px;margin:8px 0}
 <body>
 <div class="wrap">
 <header>
-  <h1>single-shot <span class="ver" id="h1ver">v2</span></h1>
+  <h1>single-shot <span class="ver" id="h1ver">v2.1</span></h1>
   <p class="sub">폰 한 대로 내 시수를 기록합니다. 내 뒷모습의 발시(동작+현소리)를 세고, 과녁 램프나 뻐꾸기 소리로 관중·불을 가립니다. 시험판이라 결과는 시지와 대조하세요.</p>
   <div class="chips">
     <span class="chip" id="chCam"><span class="dot"></span>카메라</span>
@@ -1046,22 +1046,27 @@ function onRelease(t,src,info){
   log('rel',`발시 ${a.sun}순 ${a.s+1}시`+(src==='sound'?` (현소리 ${info.rr}배${info.motion!=null?' · 동작 확인':''})`:src==='motion'?' (동작만, 소리 미확인)':' (수동)'),t);
   render();
 }
+function flightMed(){const f=S.arrows.filter(a=>a.res==='hit'&&a.tRel!=null&&a.tFlash!=null).map(a=>a.tFlash-a.tRel);return f.length>=3?median(f):2.8}
 function onFlash(tf,kind,info){
   const c=cfg();
   // 같은 관중을 램프와 뻐꾸기가 함께 잡으면 새 발을 만들지 않고 근거만 더한다
   const dup=S.arrows.find(a=>a.tFlash!=null&&Math.abs(tf-a.tFlash)<2.5);
   if(dup){const s=kind==='tone'?'뻐꾸기':'램프';if(kind!=='weak'&&!dup.srcs.includes(s)){dup.srcs.push(s);log('note',`${dup.sun}순 ${dup.s+1}시 · ${s}로도 확인`,tf)}return}
-  const cands=S.arrows.filter(a=>a.tRel!=null&&(a.res==='pending'||(a.res==='miss'&&(a.src==='sound'||a.src==='motion')&&!a.tFlash))&&tf-a.tRel>=c.wa-0.3&&tf-a.tRel<=c.wb+0.3);
+  const lo=c.wa-0.3,hi=c.wb+0.3,inWin=t=>tf-t>=lo&&tf-t<=hi;
+  const cands=S.arrows.filter(a=>a.tRel!=null&&(a.res==='pending'||(a.res==='miss'&&(a.src==='sound'||a.src==='motion')&&!a.tFlash))&&inWin(a.tRel));
   if(kind==='weak'){if(cands.length){const a=cands[cands.length-1];if(!a.flags.includes('점멸 의심'))a.flags.push('점멸 의심');log('note',`${a.sun}순 ${a.s+1}시 · 불규칙한 깜박임 ${info.n}회, 판정은 그대로 · 확인 필요`,tf);render()}return}
   const why=kind==='tone'?'뻐꾸기':'램프';
-  if(cands.length){const a=cands[cands.length-1];a.res='hit';a.tFlash=tf;a.srcs.push(why);
-    log('hit',`관중 ${a.sun}순 ${a.s+1}시 · 발시 후 ${(tf-a.tRel).toFixed(2)}초 (${why})`,tf);
-    setTimeout(()=>captureEv(a),1800)}
-  else{
-    const a={id:++S.aid,sun:0,s:0,tRel:null,tFlash:tf,res:'hit',src:'missing',info:{},flags:['발시 놓침'],srcs:[why],ev:null};
-    S.arrows.push(a);renumber();if(S.sid==null)S.sid=Date.now();
-    log('hit',`관중 ${a.sun}순 ${a.s+1}시 · 발시 기록 없이 ${why}만 (확인 필요)`,tf);setTimeout(()=>captureEv(a),1800);
-  }
+  // 램프·뻐꾸기는 같은 관 사람들이 함께 쓴다. 내 발시와 옆 사람 발시(동작 없이 들린 현소리) 중,
+  // 날아간 시간이 이 관의 보통 비행시간(기록에서 2.6~3.2초)에 가장 가까운 쪽의 관중 신호로 본다.
+  const fm=flightMed();
+  const pool=cands.map(a=>({a,t:a.tRel,own:true})).concat(S.snd.filter(e=>!e.used&&!e.cancel&&!e.flash&&inWin(e.t)).map(e=>({e,t:e.t,own:false})));
+  if(!pool.length){log('note',`관중 신호(${why}) · 내 발시와 맞지 않아 제외 (옆 사람의 신호)`,tf);return}
+  pool.sort((x,y)=>Math.abs(tf-x.t-fm)-Math.abs(tf-y.t-fm));
+  const pick=pool[0],amb=pool.length>1&&pool[1].own!==pick.own&&Math.abs(tf-pool[1].t-fm)-Math.abs(tf-pick.t-fm)<0.25;
+  if(!pick.own){pick.e.flash=tf;log('note',`관중 신호(${why}) · 옆 사람의 발시(${(tf-pick.t).toFixed(2)}초 전)에 더 가까워 제외`,tf);return}
+  const a=pick.a;a.res='hit';a.tFlash=tf;a.srcs.push(why);if(amb&&!a.flags.includes('신호 겹침'))a.flags.push('신호 겹침');
+  log('hit',`관중 ${a.sun}순 ${a.s+1}시 · 발시 후 ${(tf-a.tRel).toFixed(2)}초 (${why})`+(amb?' · 옆 사람 신호와 겹쳐 확인 필요':''),tf);
+  setTimeout(()=>captureEv(a),1800);
   if(kind==='blink')log('fl',`점멸 ${info.n}회 이상`,tf);
   render();
 }
@@ -1083,7 +1088,7 @@ function undo(){const a=S.arrows.pop();if(!a)return;renumber();log('note',`취�
 /* ---------- render ---------- */
 function modeTxt(){const e=$('modeTxt');if(!e)return;
   e.textContent=shotOnly()?'현재: 발시만 세기 (칸에 ● 표시). 램프를 지정하거나 뻐꾸기를 켜면 관중·불까지 판정해 시수표(中·/)를 만듭니다.'
-    :'현재: 관중·불 판정 · '+(S.roi?'램프':'')+(S.roi&&$('tone').checked?' + ':'')+($('tone').checked?'뻐꾸기(A형)':'')+' 으로 확인합니다.'}
+    :'현재: 관중·불 판정 · '+(S.roi?'램프':'')+(S.roi&&$('tone').checked?' 또는 ':'')+($('tone').checked?'뻐꾸기(A형)':'')+(S.roi&&$('tone').checked?' 중 하나만 잡혀도 관중으로 인정합니다 (둘 다 잡히면 근거에 함께 표시).':' 으로 확인합니다.')}
 function th(txt,cls){const e=document.createElement('th');e.textContent=txt;if(cls)e.className=cls;return e}
 function render(){
   const c=cfg();modeTxt();renumber();
@@ -1258,7 +1263,7 @@ $('btnRefClear').onclick=()=>{S.ref=null;S.back=null;refUI();st('옷색 정보�
 $('follow').addEventListener('change',()=>pref('follow',$('follow').checked?'1':'0'));
 if(pref('follow'))$('follow').checked=pref('follow')==='1';
 refUI();
-window.__ss={sigOf,simTo,pose,pickByColor,S,cfg,render,log,clock,onRelease,onFlash,calibrate,hLoad,setMe,initModel,classify};
+window.__ss={onSoundRel,tick,finalizeAll,sigOf,simTo,pose,pickByColor,S,cfg,render,log,clock,onRelease,onFlash,calibrate,hLoad,setMe,initModel,classify};
 renderHist();render();
 })();
 </script>
