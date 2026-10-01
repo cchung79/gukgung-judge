@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>링크 테스트 (마스터·슬레이브)</title>
+<style>
+:root{--bg:#10151c;--card:#1a222d;--line:#2b3644;--tx:#e8edf3;--dim:#93a1b3;--ok:#3ecf8e;--warn:#f5b84b;--bad:#ff6b6b;--ac:#4aa3ff}
+*{box-sizing:border-box}
+body{margin:0;padding:12px 14px calc(24px + env(safe-area-inset-bottom));background:var(--bg);color:var(--tx);
+  font:14px/1.5 "Nanum Gothic","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;max-width:640px;margin:0 auto}
+h1{font-size:18px;margin:6px 0 10px}h1 .ver{font-size:12px;color:var(--dim);font-weight:400}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}
+.card h2{font-size:14px;margin:0 0 8px;color:var(--dim);font-weight:700}
+button{font:inherit;font-weight:700;color:#fff;background:var(--ac);border:0;border-radius:10px;min-height:48px;padding:0 16px;width:100%;margin:6px 0}
+button.sub{background:#344256}button:disabled{opacity:.4}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
+input,select{font:inherit;color:var(--tx);background:#0d1218;border:1px solid var(--line);border-radius:10px;min-height:44px;padding:0 10px;width:100%}
+.code{font-size:34px;letter-spacing:6px;text-align:center;font-weight:800}
+table{width:100%;border-collapse:collapse}td{padding:5px 4px;border-top:1px solid var(--line);vertical-align:top}
+td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:10px}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.dim{color:var(--dim)}
+img.shot,video.pv{width:100%;border-radius:8px;background:#000;display:block}
+pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,monospace;color:var(--dim);margin:0;max-height:220px;overflow:auto}
+.big{font-size:16px;font-weight:700}
+</style>
+</head>
+<body>
+<h1>링크 테스트 <span class="ver">v0.1 · 마스터(아이폰) ↔ 슬레이브(노트 10)</span></h1>
+
+<div id="roleBox" class="card">
+  <h2>1. 이 폰의 역할을 고르세요</h2>
+  <div class="dim" style="margin-bottom:6px">두 폰을 같은 Wi-Fi(또는 아이폰 핫스팟)에 붙인 뒤, 두 폰에서 이 페이지를 엽니다.</div>
+  <button id="bM">마스터 — 아이폰 12 mini (심판대 옆)</button>
+  <button id="bS" class="sub">슬레이브 — 노트 10 (사대 뒤)</button>
+</div>
+
+<!-- 마스터 -->
+<div id="mBox" hidden>
+  <div class="card">
+    <h2>마스터 · 연결 코드</h2>
+    <div class="row"><input id="mCode" class="code" inputmode="numeric" maxlength="4"><button id="mStart" style="margin:0">대기 시작</button></div>
+    <div class="dim" style="margin-top:6px">‘대기 시작’ 후 노트 10(슬레이브)에서 같은 4자리 코드를 입력하세요. 마이크 권한 허용이 필요합니다(실제 사용에서도 필요).</div>
+  </div>
+  <div class="card">
+    <h2>상태</h2>
+    <table>
+      <tr><td>연결</td><td id="mSt" class="dim">시작 전</td></tr>
+      <tr><td>연결 경로</td><td id="mPath" class="dim">-</td></tr>
+      <tr><td>지연(RTT)</td><td id="mRtt" class="dim">-</td></tr>
+      <tr><td>시계 차</td><td id="mOff" class="dim">-</td></tr>
+      <tr><td>슬레이브 카메라</td><td id="mCam" class="dim">-</td></tr>
+      <tr><td>마이크/화면</td><td id="mMic" class="dim">-</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h2>시험 ① 사진 요청 → 수신</h2>
+    <div class="row"><select id="mSize"><option value="1920">큰 사진(최대 1920px)</option><option value="1280">중간(1280px)</option><option value="640">작게(640px)</option></select></div>
+    <button id="mSnap" disabled>시작 — 노트 10에 사진 요청</button>
+    <div id="mPhotoInfo" class="dim">-</div>
+    <img id="mImg" class="shot" alt="" hidden>
+  </div>
+  <div class="card">
+    <h2>시험 ② 모의 발시 이벤트(5회)</h2>
+    <button id="mEv" class="sub" disabled>슬레이브에 이벤트 5회 요청</button>
+    <table id="mEvT"></table>
+    <button id="mPing" class="sub" disabled>지연·시계 차 다시 측정</button>
+  </div>
+  <button id="mCopy" class="sub">결과 복사 (붙여넣어 전달용)</button>
+</div>
+
+<!-- 슬레이브 -->
+<div id="sBox" hidden>
+  <div class="card">
+    <h2>슬레이브 · 연결</h2>
+    <div class="row"><input id="sCode" class="code" inputmode="numeric" maxlength="4" placeholder="코드"><button id="sStart" style="margin:0">연결</button></div>
+    <div class="dim" style="margin-top:6px">마스터 화면의 4자리 코드를 입력하고 ‘연결’을 누르세요. 카메라 권한 허용이 필요합니다.</div>
+  </div>
+  <div class="card">
+    <h2>상태</h2>
+    <table>
+      <tr><td>연결</td><td id="sSt" class="dim">시작 전</td></tr>
+      <tr><td>연결 경로</td><td id="sPath" class="dim">-</td></tr>
+      <tr><td>카메라</td><td id="sCam" class="dim">-</td></tr>
+      <tr><td>화면 유지</td><td id="sWake" class="dim">-</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h2>카메라 미리보기</h2>
+    <video id="sVid" class="pv" playsinline muted autoplay></video>
+    <div class="row" style="margin-top:8px"><select id="sSel"></select></div>
+    <div id="sLast" class="dim" style="margin-top:6px"></div>
+  </div>
+</div>
+
+<div class="card"><h2>로그</h2><pre id="log"></pre></div>
+
+<script src="peerjs.min.js"></script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const qs=new URLSearchParams(location.search);
+const T0=(performance.timeOrigin||(Date.now()-performance.now()));
+const nowE=()=>T0+performance.now();           // 장치 시계(에포크 ms, 소수 포함)
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const lsG=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const lsS=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const L=[];
+function log(s){const t=new Date().toTimeString().slice(0,8);L.push(t+' '+s);if(L.length>80)L.shift();$('log').textContent=L.slice().reverse().join('\n');}
+function setT(id,txt,cls){const e=$(id);e.textContent=txt;e.className=cls||'';}
+const f1=x=>(Math.round(x*10)/10).toFixed(1);
+const PREFIX='gkj-';
+
+function mkPeer(id){
+  const o={debug:0};
+  const ps=qs.get('ps');                      // 시험용: ?ps=host:port (자체 시그널링 서버)
+  if(ps){const a=ps.split(':');o.host=a[0];o.port=+a[1]||9000;o.path='/';o.secure=false;o.config={iceServers:[]};}
+  return new Peer(id,o);
+}
+let wl=null;
+async function keepAwake(setter){
+  try{
+    if(!('wakeLock' in navigator)){setter('미지원(자동잠금을 끄세요)','warn');return;}
+    wl=await navigator.wakeLock.request('screen');setter('켜짐','ok');
+    wl.addEventListener('release',()=>setter('해제됨(자동잠금을 끄세요)','warn'));
+    document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'&&(!wl||wl.released)){try{wl=await navigator.wakeLock.request('screen');setter('켜짐','ok')}catch(e){}}});
+  }catch(e){setter('실패: '+e.name+' (자동잠금을 끄세요)','warn');}
+}
+async function pathInfo(conn){
+  try{
+    const pc=conn.peerConnection;const st=await pc.getStats();const by={};let pair=null;
+    st.forEach(r=>{by[r.id]=r});
+    st.forEach(r=>{if(r.type==='transport'&&r.selectedCandidatePairId)pair=by[r.selectedCandidatePairId]});
+    if(!pair)st.forEach(r=>{if(r.type==='candidate-pair'&&(r.nominated||r.selected)&&r.state==='succeeded')pair=r});
+    if(!pair)return null;
+    const l=by[pair.localCandidateId],r=by[pair.remoteCandidateId];if(!l||!r)return null;
+    const ad=c=>(c.address||c.ip||'?')+':'+c.port;
+    return {lt:l.candidateType,rt:r.candidateType,la:ad(l),ra:ad(r),proto:l.protocol};
+  }catch(e){return null;}
+}
+function pathText(p){
+  if(!p)return ['확인 불가(브라우저가 통계를 주지 않음)','warn'];
+  const s=`${p.lt}↔${p.rt} · ${p.la} ↔ ${p.ra} (${p.proto})`;
+  if(p.lt==='relay'||p.rt==='relay')return ['⚠ 릴레이 경유 — 인터넷 서버를 거침. 현장 LAN 직결 아님\n'+s,'warn'];
+  if(p.lt==='host'&&p.rt==='host')return ['✅ LAN 직결 (host↔host)\n'+s,'ok'];
+  return ['직접 연결(공인망 주소 경유)\n'+s,'ok'];
+}
+
+/* ---------- 역할 선택 ---------- */
+function pickRole(r){
+  $('roleBox').hidden=true;
+  if(r==='m'){$('mBox').hidden=false;initMaster();}else{$('sBox').hidden=false;initSlave();}
+}
+$('bM').onclick=()=>pickRole('m');$('bS').onclick=()=>pickRole('s');
+
+/* ================= 마스터 ================= */
+const M={peer:null,conn:null,pr:[],off:null,offErr:null,rtt:null,snap:null,rx:null,cam:null,photo:null,ev:[],path:null,mic:null};
+function initMaster(){
+  $('mCode').value=qs.get('code')||String(1000+Math.floor(Math.random()*9000));
+  $('mStart').onclick=startMaster;
+  $('mSnap').onclick=doSnap;$('mEv').onclick=()=>{M.ev=[];renderEv();M.conn.send({t:'evreq',n:5});log('이벤트 5회 요청');};
+  $('mPing').onclick=()=>runPings(20);
+  $('mCopy').onclick=()=>copyText(summary());
+  if(qs.get('auto'))startMaster();
+}
+async function startMaster(){
+  const code=$('mCode').value.trim();if(!/^\d{4}$/.test(code)){setT('mSt','코드는 숫자 4자리','bad');return;}
+  $('mStart').disabled=true;$('mCode').disabled=true;setT('mSt','마이크 권한 요청…','dim');
+  try{M.mic=await navigator.mediaDevices.getUserMedia({audio:true});setT('mMic','마이크 켜짐','ok');}
+  catch(e){setT('mMic','마이크 실패: '+e.name+' — 허용하지 않으면 LAN 주소가 가려질 수 있음','warn');}
+  keepAwake((t,c)=>{const e=$('mMic');e.textContent=e.textContent.split(' · 화면')[0]+' · 화면 '+t;});
+  setT('mSt','시그널링 서버 연결 중…','dim');
+  const peer=M.peer=mkPeer(PREFIX+code);
+  peer.on('open',()=>{setT('mSt','대기 중 — 노트 10에서 코드 '+code+' 입력','warn');log('마스터 대기 시작 '+code);});
+  peer.on('connection',c=>{
+    if(M.conn){try{M.conn.close()}catch(e){}}
+    M.conn=c;log('슬레이브 접속 시도');
+    c.on('open',()=>onMOpen(c));
+    c.on('data',d=>onMData(c,d));
+    c.on('close',()=>{if(M.conn===c){setT('mSt','연결 끊김 — 슬레이브 재접속 대기','bad');['mSnap','mEv','mPing'].forEach(i=>$(i).disabled=true);log('연결 끊김');}});
+    c.on('error',e=>log('conn 오류 '+e));
+  });
+  peer.on('disconnected',()=>{log('시그널링 끊김 → 재연결');try{peer.reconnect()}catch(e){}});
+  peer.on('error',e=>{
+    log('peer 오류 '+e.type);
+    if(e.type==='unavailable-id'){setT('mSt','이 코드는 이미 사용 중 — 다른 코드로','bad');$('mStart').disabled=false;$('mCode').disabled=false;try{peer.destroy()}catch(x){}}
+    else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed')setT('mSt','시그널링 서버에 못 닿음 — 인터넷(핫스팟 데이터) 확인','bad');
+    else setT('mSt','오류: '+e.type,'bad');
+  });
+}
+async function onMOpen(c){
+  setT('mSt','✅ 연결됨','ok');['mSnap','mEv','mPing'].forEach(i=>$(i).disabled=false);log('데이터 채널 열림');
+  runPings(20);
+  await sleep(600);M.path=await pathInfo(c);const p=pathText(M.path);setT('mPath',p[0],p[1]);log('경로 '+(M.path?M.path.lt+'↔'+M.path.rt:'?'));
+}
+function runPings(n){
+  if(!M.conn||!M.conn.open)return;M.pr=[];setT('mRtt','측정 중…','dim');
+  let i=0;const step=()=>{if(i>=n||!M.conn||!M.conn.open){setTimeout(finishPings,700);return;}
+    M.conn.send({t:'ping',i,m0:nowE()});i++;setTimeout(step,120);};step();
+}
+function finishPings(){
+  const a=M.pr.slice();if(!a.length){setT('mRtt','응답 없음','bad');return;}
+  const r=a.map(x=>x.rtt).sort((x,y)=>x-y);const med=r[r.length>>1],mn=r[0],mx=r[r.length-1],p90=r[Math.floor(r.length*0.9)];
+  const best=a.slice().sort((x,y)=>x.rtt-y.rtt).slice(0,Math.max(3,Math.ceil(a.length/4)));
+  const offs=best.map(x=>x.off).sort((x,y)=>x-y);M.off=offs[offs.length>>1];M.offErr=best[0].rtt/2;M.rtt={med,mn,mx,p90,n:a.length};
+  const good=p90<150;
+  setT('mRtt',`중앙 ${f1(med)} · 최소 ${f1(mn)} · 90% ${f1(p90)} · 최대 ${f1(mx)} ms (${a.length}회)`,good?'ok':'warn');
+  const sg=M.off>=0?'빠름':'느림';
+  setT('mOff',`슬레이브 시계가 마스터보다 ${f1(Math.abs(M.off))} ms ${sg} (±${f1(M.offErr)} ms)`,Math.abs(M.off)<300?'ok':'warn');
+  log(`RTT 중앙 ${f1(med)} / 시계차 ${f1(M.off)}ms`);
+}
+function doSnap(){
+  if(!M.conn||!M.conn.open)return;
+  const id=Date.now();M.snap={id,t0:nowE()};M.rx=null;
+  M.conn.send({t:'snap',id,maxW:+$('mSize').value,q:0.85});
+  setT('mPhotoInfo','사진 요청함… 기다리는 중','dim');$('mSnap').disabled=true;log('사진 요청');
+  setTimeout(()=>{if(M.snap&&M.snap.id===id&&!M.snap.done){setT('mPhotoInfo','⚠ 15초 내 수신 못함','bad');$('mSnap').disabled=false;}},15000);
+}
+function onMData(c,d){
+  if(!d||!d.t)return;
+  if(d.t==='pong'){const m1=nowE();M.pr.push({rtt:m1-d.m0,off:d.s-(d.m0+m1)/2});}
+  else if(d.t==='hello'){M.cam=d.cam;setT('mCam',camText(d.cam),'ok');log('슬레이브 카메라 '+d.cam.w+'x'+d.cam.h);}
+  else if(d.t==='ph'){M.rx={meta:d,parts:new Array(d.n),got:0};}
+  else if(d.t==='pc'&&M.rx&&M.rx.meta.id===d.id){
+    if(!M.rx.parts[d.i]){M.rx.parts[d.i]=d.d;M.rx.got++;}
+    if(M.rx.got===M.rx.meta.n)finishPhoto();
+  }
+  else if(d.t==='ev'){
+    const rt=nowE();const lat=(M.off==null)?null:rt-(d.s-M.off);
+    M.ev.push({k:d.k,lat});renderEv();log(`이벤트 #${d.k} 지연 ${lat==null?'?':f1(lat)}ms`);
+  }
+}
+function finishPhoto(){
+  const m=M.rx.meta;const blob=new Blob(M.rx.parts,{type:'image/jpeg'});const tEnd=nowE();
+  const url=URL.createObjectURL(blob);const im=$('mImg');im.src=url;im.hidden=false;
+  const total=tEnd-M.snap.t0;const ship=(M.off==null)?null:tEnd-(m.tShot-M.off);
+  M.snap.done=true;$('mSnap').disabled=false;
+  M.photo={kb:Math.round(blob.size/1024),w:m.w,h:m.h,total,ship};
+  setT('mPhotoInfo',`✅ 수신: ${m.w}×${m.h}, ${M.photo.kb} KB · 요청→표시 ${f1(total)} ms`+(ship!=null?` · 촬영→수신 ${f1(ship)} ms`:''),'ok');
+  log('사진 수신 '+M.photo.kb+'KB '+f1(total)+'ms');
+}
+function renderEv(){
+  const t=$('mEvT');t.innerHTML='';
+  M.ev.forEach(e=>{const tr=document.createElement('tr');tr.innerHTML=`<td>#${e.k}</td><td>${e.lat==null?'시계차 미측정':'도착 지연 '+f1(e.lat)+' ms'}</td>`;t.appendChild(tr);});
+}
+function camText(c){return `${c.label||'카메라'} · ${c.w}×${c.h}${c.fps?' @'+Math.round(c.fps)+'fps':''}${c.zoom?' · 줌 '+c.zoom[0]+'~'+c.zoom[1]:''}`;}
+function summary(){
+  const o={role:'master',ua:navigator.userAgent,path:M.path,rtt:M.rtt,offsetMs:M.off,offsetErrMs:M.offErr,cam:M.cam,photo:M.photo,events:M.ev.map(e=>e.lat==null?null:Math.round(e.lat*10)/10)};
+  return JSON.stringify(o,null,1);
+}
+
+/* ================= 슬레이브 ================= */
+const S={peer:null,conn:null,stream:null,code:'',retry:null,vid:null};
+function initSlave(){
+  $('sCode').value=qs.get('code')||lsG('gkj_code')||'';
+  $('sStart').onclick=startSlave;S.vid=$('sVid');
+  $('sSel').onchange=async()=>{await openCam($('sSel').value);sendHello();};
+  if(qs.get('auto'))startSlave();
+}
+async function openCam(devId){
+  if(S.stream)S.stream.getTracks().forEach(t=>t.stop());
+  const base={width:{ideal:1920},height:{ideal:1080}};
+  const v=devId?Object.assign({deviceId:{exact:devId}},base):Object.assign({facingMode:{ideal:'environment'}},base);
+  S.stream=await navigator.mediaDevices.getUserMedia({video:v,audio:false});
+  S.vid.srcObject=S.stream;try{await S.vid.play()}catch(e){}
+  await new Promise(r=>{if(S.vid.videoWidth)r();else S.vid.onloadedmetadata=()=>r();});
+  const tr=S.stream.getVideoTracks()[0];const st=tr.getSettings();let z=null;
+  try{const cp=tr.getCapabilities();if(cp&&cp.zoom)z=[cp.zoom.min,cp.zoom.max];}catch(e){}
+  S.cam={label:tr.label,w:S.vid.videoWidth,h:S.vid.videoHeight,fps:st.frameRate||null,zoom:z,facing:st.facingMode||null};
+  setT('sCam',camText(S.cam),'ok');
+  try{
+    const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+    const sel=$('sSel');sel.innerHTML='';
+    ds.forEach((d,i)=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||('카메라 '+(i+1));if(st.deviceId===d.deviceId)o.selected=true;sel.appendChild(o);});
+  }catch(e){}
+}
+function sendHello(){if(S.conn&&S.conn.open&&S.cam)S.conn.send({t:'hello',cam:S.cam});}
+async function startSlave(){
+  const code=$('sCode').value.trim();if(!/^\d{4}$/.test(code)){setT('sSt','코드는 숫자 4자리','bad');return;}
+  S.code=code;lsS('gkj_code',code);$('sStart').disabled=true;$('sCode').disabled=true;setT('sSt','카메라 권한 요청…','dim');
+  try{await openCam(null);}catch(e){setT('sSt','카메라 실패: '+e.name,'bad');setT('sCam','실패 '+e.name,'bad');$('sStart').disabled=false;$('sCode').disabled=false;return;}
+  keepAwake((t,c)=>setT('sWake',t,c));
+  setT('sSt','시그널링 서버 연결 중…','dim');
+  const peer=S.peer=mkPeer(PREFIX+code+'-s-'+Math.random().toString(36).slice(2,7));
+  peer.on('open',()=>tryConnect());
+  peer.on('disconnected',()=>{log('시그널링 끊김 → 재연결');try{peer.reconnect()}catch(e){}});
+  peer.on('error',e=>{
+    log('peer 오류 '+e.type);
+    if(e.type==='peer-unavailable'){setT('sSt','마스터를 찾는 중… (마스터에서 ‘대기 시작’ 확인)','warn');scheduleRetry();}
+    else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed')setT('sSt','시그널링 서버에 못 닿음 — 인터넷 확인','bad');
+    else setT('sSt','오류: '+e.type,'bad');
+  });
+}
+function scheduleRetry(){clearTimeout(S.retry);S.retry=setTimeout(tryConnect,2000);}
+function tryConnect(){
+  if(S.conn&&S.conn.open)return;
+  if(S.conn){try{S.conn.close()}catch(e){}}
+  setT('sSt','마스터에 접속 중…','dim');
+  const c=S.conn=S.peer.connect(PREFIX+S.code,{reliable:true});
+  c.on('open',async()=>{
+    setT('sSt','✅ 연결됨 — 마스터에서 시험을 진행하세요','ok');log('연결됨');sendHello();
+    await sleep(600);const p=pathText(await pathInfo(c));setT('sPath',p[0],p[1]);
+  });
+  c.on('data',d=>onSData(c,d));
+  c.on('close',()=>{if(S.conn===c){setT('sSt','연결 끊김 — 재접속 중','bad');log('연결 끊김');scheduleRetry();}});
+  c.on('error',e=>log('conn 오류 '+e));
+}
+function onSData(c,d){
+  if(!d||!d.t)return;
+  if(d.t==='ping')c.send({t:'pong',i:d.i,m0:d.m0,s:nowE()});
+  else if(d.t==='snap')sendPhoto(c,d);
+  else if(d.t==='evreq'){let k=1;const n=d.n||5;const go=()=>{c.send({t:'ev',k,s:nowE()});log('이벤트 송신 #'+k);if(++k<=n)setTimeout(go,1000);};go();}
+}
+async function sendPhoto(c,d){
+  try{
+    const v=S.vid;const sc=Math.min(1,(d.maxW||1920)/v.videoWidth);
+    const w=Math.round(v.videoWidth*sc),h=Math.round(v.videoHeight*sc);
+    const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(v,0,0,w,h);
+    const tShot=nowE();
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',d.q||0.85));
+    const buf=await blob.arrayBuffer();const CH=16000;const n=Math.ceil(buf.byteLength/CH);
+    c.send({t:'ph',id:d.id,n,w,h,bytes:buf.byteLength,tShot});
+    for(let i=0;i<n;i++){
+      while(c.dataChannel&&c.dataChannel.bufferedAmount>1500000)await sleep(20);
+      c.send({t:'pc',id:d.id,i,d:buf.slice(i*CH,(i+1)*CH)});
+    }
+    setT('sLast',`사진 전송: ${w}×${h}, ${Math.round(buf.byteLength/1024)} KB`,'ok');log('사진 전송 '+Math.round(buf.byteLength/1024)+'KB');
+  }catch(e){log('사진 실패 '+e.message);setT('sLast','사진 전송 실패: '+e.message,'bad');}
+}
+
+/* ---------- 공용 ---------- */
+async function copyText(t){
+  try{await navigator.clipboard.writeText(t);log('복사됨');}
+  catch(e){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');log('복사됨')}catch(x){log('복사 실패')}ta.remove();}
+}
+if(qs.get('role'))pickRole(qs.get('role'));
+</script>
+</body>
+</html>
