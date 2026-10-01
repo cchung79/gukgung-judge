@@ -20,6 +20,8 @@ input,select{font:inherit;color:var(--tx);background:#0d1218;border:1px solid va
 table{width:100%;border-collapse:collapse}td{padding:5px 4px;border-top:1px solid var(--line);vertical-align:top}
 td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:10px}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.dim{color:var(--dim)}
+#blk{position:fixed;inset:0;background:#000;z-index:9999;display:none;align-items:center;justify-content:center;color:#000;font-size:15px;text-align:center;padding:20px}
+#blk.peek{color:#3a3a3a}
 img.shot,video.pv{width:100%;border-radius:8px;background:#000;display:block}
 pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,monospace;color:var(--dim);margin:0;max-height:220px;overflow:auto}
 .big{font-size:16px;font-weight:700}
@@ -28,6 +30,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 <body>
 <h1>링크 테스트 <span class="ver" id="verT"></span></h1>
 
+<div id="blk"></div>
 <div id="roleBox" class="card">
   <h2>1. 이 폰의 역할을 고르세요</h2>
   <div class="dim" style="margin-bottom:6px">두 폰을 같은 Wi-Fi(또는 아이폰 핫스팟)에 붙인 뒤, 두 폰에서 이 페이지를 엽니다.</div>
@@ -56,6 +59,16 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
       <tr><td>슬레이브 버전</td><td id="mSVer" class="dim">-</td></tr>
     </table>
     <button id="mReload" class="sub" disabled>슬레이브 새로고침 (최신 버전으로)</button>
+  </div>
+  <div class="card">
+    <h2>시험 ⓪ 슬레이브 전원 모드 (절전)</h2>
+    <button id="mModeAct" disabled>▶ 발시 카운트 시작 (슬레이브 활성화)</button>
+    <button id="mModeStb" class="sub" disabled>⏸ 대기 (슬레이브 절전)</button>
+    <div id="mModeSt" class="big dim">모드: 활성</div>
+    <div id="mBat" class="dim">슬레이브 배터리: -</div>
+    <div id="mHb" class="dim">슬레이브 신호: -</div>
+    <div class="dim">대기 = 슬레이브가 카메라·마이크·자세 인식을 모두 끄고 화면을 완전한 검정으로 덮습니다(AMOLED는 검은 화면이 거의 전력을 쓰지 않음). 연결과 화면 켜짐 유지만 남겨서 마스터 명령을 받습니다. ‘발시 카운트 시작’을 누르면 카메라·마이크를 다시 켭니다(몇 초 소요).<br>
+    <b>화면 꺼짐 실험</b>: 슬레이브의 전원 버튼을 눌러 화면을 끄고 30초 뒤 켜 보세요. 그 동안 신호가 끊기는지 위 ‘슬레이브 신호’에 기록됩니다.</div>
   </div>
   <div class="card">
     <h2>시험 ① 사진 요청 → 수신</h2>
@@ -151,7 +164,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'0.10';
+const VER=qs.get('fakever')||'0.11';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('gkj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('gkj_rl',v)}catch(e){}};
@@ -238,6 +251,7 @@ function initMaster(){
   $('mMon').onclick=()=>setMon(!M.mon);
   $('mFit').onclick=()=>{M.conn.send({t:'fitreq',id:Date.now()});$('mFit').disabled=true;setT('mFitHead','요청함…','dim');$('mFitMsgs').textContent='';log('자동 화면 맞추기 요청');};
   $('mBench').onclick=()=>{M.conn.send({t:'benchreq'});$('mBench').disabled=true;setT('mBenchInfo','측정 요청함…','dim');log('속도 측정 요청');};
+  $('mModeAct').onclick=()=>setMode('active');$('mModeStb').onclick=()=>setMode('standby');
   $('mReload').onclick=()=>{M.conn.send({t:'reload'});log('슬레이브 새로고침 요청');setT('mSVer','새로고침 요청함…','dim');};
   $('mSnd').onclick=()=>{M.sndOn=!M.sndOn;if(M.sndOn){M.conn.send({t:'sndcfg',thr:+$('mThr').value});M.conn.send({t:'sndstart'});}else M.conn.send({t:'sndstop'});
     $('mSnd').textContent=M.sndOn?'소리 감지 중지':'소리 감지 시작';if(M.sndOn){M.snd=[];renderSnd();}log(M.sndOn?'소리 감지 시작':'소리 감지 중지');};
@@ -270,7 +284,7 @@ async function startMaster(){
   });
 }
 async function onMOpen(c){
-  setT('mSt','✅ 연결됨','ok');['mSnap','mEv','mPing','mBench','mFit','mCamScan','mMon','mSnd','mReload'].forEach(i=>$(i).disabled=false);$('mMon').textContent='② 인원 자동 갱신 꺼짐 (누르면 켬)';log('데이터 채널 열림');c.send({t:'ver',v:VER});
+  setT('mSt','✅ 연결됨','ok');['mSnap','mEv','mPing','mBench','mFit','mCamScan','mMon','mSnd','mReload'].forEach(i=>$(i).disabled=false);M.mode=M.mode||'active';applyModeUI();$('mMon').textContent='② 인원 자동 갱신 꺼짐 (누르면 켬)';log('데이터 채널 열림');c.send({t:'ver',v:VER});
   runPings(20);
   await sleep(600);M.path=await pathInfo(c);const p=pathText(M.path);setT('mPath',p[0],p[1]);log('경로 '+(M.path?M.path.lt+'↔'+M.path.rt:'?'));
 }
@@ -337,8 +351,18 @@ function onMData(c,d){
     M.smic=d.mic;if(d.mic){const m=d.mic;setT('mSMic',!m.on?(m.err?'⛔ 실패: '+m.err:'꺼짐'):(m.state==='running'?`🎤 켜짐 · ${m.sr} Hz · 지연 ${m.lat!=null?Math.round(m.lat*1000):'?'} ms`:`⚠ 일시정지(${m.state}) — 슬레이브 화면을 한 번 터치`),m.on&&m.state==='running'?'ok':'warn');}
     if(d.ver){M.sver=d.ver;const c=cmpVer(d.ver,VER);setT('mSVer','v'+d.ver+(c===0?' · 같은 버전':(c<0?' · 구버전 → 갱신 요청함':' · 이 폰이 구버전')),c===0?'ok':'warn');
       if(c<0)M.conn.send({t:'ver',v:VER});else if(c>0)tryUpdate(d.ver,'m',(x,k)=>setT('mSt',x,k));}
-    if(M.mon)M.conn.send({t:'monstart'});
-    if(M.sndOn){M.conn.send({t:'sndcfg',thr:+$('mThr').value});M.conn.send({t:'sndstart'});}
+    if(d.mode&&M.mode&&d.mode!==M.mode){M.conn.send({t:'mode',m:M.mode});}
+    else{if(M.mon)M.conn.send({t:'monstart'});
+    if(M.sndOn){M.conn.send({t:'sndcfg',thr:+$('mThr').value});M.conn.send({t:'sndstart'});}}
+  }
+  else if(d.t==='bat'){onBat(d);}
+  else if(d.t==='mode'){
+    M.modeConfirmed=true;M.smode=d.m;
+    applyModeUI();
+    if(d.m==='active'&&d.ready){setT('mModeSt','모드: ▶ 활성 (카메라 준비 '+Math.round(d.ms)+' ms)','big ok');log('슬레이브 활성 — 카메라 준비 '+Math.round(d.ms)+'ms');
+      if(M.mon)M.conn.send({t:'monstart'});if(M.sndOn){M.conn.send({t:'sndcfg',thr:+$('mThr').value});M.conn.send({t:'sndstart'});}}
+    else if(d.m==='standby'){setT('mModeSt','모드: ⏸ 대기 (절전 중)','big warn');log('슬레이브 대기 진입');}
+    else if(d.m==='active'&&d.ready===false){setT('mModeSt','⛔ 활성화 실패: '+d.err,'big bad');}
   }
   else if(d.t==='lvl'){const up=d.db-d.fl;$('mLvlB').style.width=Math.max(0,Math.min(100,up/40*100))+'%';$('mLvlB').style.background=up>=+$('mThr').value?'var(--warn)':'var(--ok)';setT('mLvlT',`현재 ${f1(d.db)} dB · 바닥 ${f1(d.fl)} dB · 차이 ${f1(up)} dB`,'dim');}
   else if(d.t==='snd'){addSnd(d);}
@@ -382,6 +406,26 @@ async function checkLatest(){
     const m=t.match(new RegExp('const V'+"ER=qs.get\\('fakever'\\)\\|\\|'([^']+)'"));
     if(m&&cmpVer(m[1],VER)>0)tryUpdate(m[1],'m',(x,k)=>setT('mSt',x,k));}catch(e){}
 }
+const CAMBTN=['mSnap','mBench','mFit','mCamScan','mMon','mSnd'];
+function applyModeUI(){
+  const stb=M.mode==='standby',up=!!(M.conn&&M.conn.open);
+  CAMBTN.forEach(i=>$(i).disabled=!up||stb);
+  $('mModeAct').disabled=!up;$('mModeStb').disabled=!up||stb;
+  setT('mModeSt',stb?'모드: ⏸ 대기 (절전)':'모드: ▶ 활성','big '+(stb?'warn':'ok'));
+}
+function setMode(m){
+  if(!M.conn||!M.conn.open)return;
+  M.mode=m;M.modeConfirmed=false;M.modeT0=Date.now();M.modeLvl=M.bat?M.bat.lvl:null;
+  M.conn.send({t:'mode',m});applyModeUI();setT('mModeSt',m==='standby'?'대기로 전환 중…':'활성화 중… (카메라 켜는 중)','big dim');log('슬레이브 모드 요청: '+m);
+}
+function onBat(d){
+  M.bat=d;M.batH=M.batH||[];M.batH.push({t:Math.round(d.ts-(M.off||0)),lvl:d.lvl,chg:d.chg,vis:d.vis,mode:d.mode,cs:d.cs});if(M.batH.length>400)M.batH.shift();
+  const now=Date.now();if(M.lastBatAt&&now-M.lastBatAt>15000){M.gaps=M.gaps||[];M.gaps.push({at:fmtT(M.lastBatAt),sec:Math.round((now-M.lastBatAt)/1000)});}
+  M.lastBatAt=now;
+  let rate='';if(M.modeT0&&M.modeLvl!=null&&d.lvl!=null){const min=(now-M.modeT0)/60000,dl=M.modeLvl-d.lvl;if(min>=3)rate=` · 이 모드 ${f1(min)}분 동안 ${dl>0?'-':'+'}${Math.abs(Math.round(dl*100*10)/10)}%p`+(dl>0&&min>=5?` (≈ ${f1(dl*100/(min/60))}%p/시간)`:'');}
+  setT('mBat',`슬레이브 배터리: ${d.lvl==null?'-':Math.round(d.lvl*100)+'%'} ${d.chg?'⚡충전 중':'방전 중'} · 화면 ${d.vis==='visible'?'켜짐':'⚠ 숨김'}${rate}`,d.chg?'warn':'dim');
+  setT('mHb',`슬레이브 신호: 마지막 ${new Date().toTimeString().slice(0,8)} · 카메라 ${d.cs||'-'}`+(M.gaps&&M.gaps.length?` · 끊김 ${M.gaps.length}회(최근 ${M.gaps[M.gaps.length-1].sec}초 @${M.gaps[M.gaps.length-1].at})`:' · 끊김 없음'),M.gaps&&M.gaps.length?'warn':'dim');
+}
 function setMon(on){
   if(!M.conn||!M.conn.open)return;M.mon=on;M.conn.send({t:on?'monstart':'monstop'});
   $('mMon').textContent=on?'② 인원 자동 갱신 켜짐 (누르면 끔)':'② 인원 자동 갱신 꺼짐 (누르면 켬)';
@@ -418,12 +462,12 @@ function setupZoom(c){
 }
 function camText(c){return `${c.label||'카메라'} · ${c.w}×${c.h}${c.fps?' @'+Math.round(c.fps)+'fps':''}${c.zoom?' · 줌 '+c.zoom[0]+'~'+c.zoom[1]:''}`;}
 function summary(){
-  const o={role:'master',ua:navigator.userAgent,path:M.path,rtt:M.rtt,offsetMs:M.off,offsetErrMs:M.offErr,cam:M.cam,photo:M.photo,bench:M.bench,cams:M.camList,fit:M.fit,snd:(M.snd||[]).map(d=>({t:Math.round(d.mt),up:d.up,dur:d.dur,cen:d.cen,dom:d.dom,tn:d.tn,b:d.b,guess:d.guess})),smic:M.smic,sver:M.sver,ver:VER,events:M.ev.map(e=>e.lat==null?null:Math.round(e.lat*10)/10)};
+  const o={role:'master',ua:navigator.userAgent,path:M.path,rtt:M.rtt,offsetMs:M.off,offsetErrMs:M.offErr,cam:M.cam,photo:M.photo,bench:M.bench,cams:M.camList,fit:M.fit,bat:(M.batH||[]).filter((x,i,a)=>i%3===0||i===a.length-1),gaps:M.gaps,snd:(M.snd||[]).map(d=>({t:Math.round(d.mt),up:d.up,dur:d.dur,cen:d.cen,dom:d.dom,tn:d.tn,b:d.b,guess:d.guess})),smic:M.smic,sver:M.sver,ver:VER,events:M.ev.map(e=>e.lat==null?null:Math.round(e.lat*10)/10)};
   return JSON.stringify(o,null,1);
 }
 
 /* ================= 슬레이브 ================= */
-const S={peer:null,conn:null,stream:null,code:'',retry:null,vid:null};
+const S={peer:null,conn:null,stream:null,code:'',retry:null,vid:null,mode:'active'};
 function initSlave(){
   $('sCode').value=qs.get('code')||lsG('gkj_code')||'';
   $('sStart').onclick=startSlave;S.vid=$('sVid');
@@ -450,7 +494,36 @@ async function openCam(devId){
     ds.forEach((d,i)=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||('카메라 '+(i+1));if(st.deviceId===d.deviceId)o.selected=true;sel.appendChild(o);});
   }catch(e){}
 }
-function sendHello(){if(S.conn&&S.conn.open)S.conn.send({t:'hello',cam:S.cam,ver:VER,mic:micInfo()});}
+function sendHello(){if(S.conn&&S.conn.open)S.conn.send({t:'hello',cam:S.cam,ver:VER,mic:micInfo(),mode:S.mode});}
+/* ----- 전원 모드: 대기(절전) ↔ 활성 ----- */
+async function sendBat(){
+  const c=S.conn;if(!c||!c.open)return;
+  let lvl=null,chg=null;try{if(navigator.getBattery){const b=S.bat||(S.bat=await navigator.getBattery());lvl=b.level;chg=b.charging;}}catch(e){}
+  const tr=S.stream&&S.stream.getVideoTracks()[0];
+  try{c.send({t:'bat',lvl,chg,vis:document.visibilityState,mode:S.mode,cs:tr?(tr.readyState+(tr.muted?'·muted':'')):'꺼짐',ts:nowE()});}catch(e){}
+}
+setInterval(sendBat,10000);
+document.addEventListener('visibilitychange',()=>{log('화면 '+document.visibilityState);sendBat();});
+function blkShow(on,msg){const b=$('blk');b.style.display=on?'flex':'none';b.textContent=msg||'';b.classList.remove('peek');}
+$('blk').addEventListener('pointerdown',()=>{const b=$('blk');b.textContent='대기 중 — 마스터의 ‘발시 카운트 시작’ 명령을 기다립니다';b.classList.add('peek');clearTimeout(S.peekT);S.peekT=setTimeout(()=>{b.classList.remove('peek');},3000);});
+async function setSMode(c,m){
+  if(m===S.mode&&!(m==='active'&&!S.stream)){c.send({t:'mode',m,ready:m==='active',ms:0});sendBat();return;}
+  const t0=performance.now();
+  if(m==='standby'){
+    S.mode='standby';monStop();SND.on=false;sndOff();
+    try{if(S.stream)S.stream.getTracks().forEach(t=>t.stop());}catch(e){}S.stream=null;try{S.vid.srcObject=null}catch(e){}
+    setT('sCam','꺼짐 (대기 모드)','dim');blkShow(true,'');
+    c.send({t:'mode',m:'standby'});log('대기 모드 진입');
+  }else{
+    S.mode='active';blkShow(false);
+    try{await openCam(S.devId);
+      if(S.zoomV!=null){try{await S.stream.getVideoTracks()[0].applyConstraints({advanced:[{zoom:S.zoomV}]});}catch(e){}}
+      await sndInit();
+      c.send({t:'mode',m:'active',ready:true,ms:performance.now()-t0});log('활성 모드 — 카메라 준비 '+Math.round(performance.now()-t0)+'ms');sendHello();
+    }catch(e){c.send({t:'mode',m:'active',ready:false,err:e.name||String(e)});setT('sCam','카메라 재시작 실패: '+(e.name||e),'bad');}
+  }
+  sendBat();
+}
 /* ----- 소리 감지: AudioWorklet(오디오 스레드)에서 돌려 화면 처리에 방해받지 않음 ----- */
 const WK=`class D extends AudioWorkletProcessor{
 constructor(){super();this.N=1024;this.buf=new Float32Array(1024);this.w=0;this.n=0;this.acc=0;this.fl=null;this.thr=15;this.ev=null;this.lastEnd=-9;this.k=0;this.warm=0;
@@ -548,7 +621,7 @@ function tryConnect(){
   setT('sSt','마스터에 접속 중…','dim');
   const c=S.conn=S.peer.connect(PREFIX+S.code,{reliable:true});
   c.on('open',async()=>{
-    setT('sSt','✅ 연결됨 — 마스터에서 시험을 진행하세요','ok');log('연결됨');sendHello();
+    setT('sSt','✅ 연결됨 — 마스터에서 시험을 진행하세요','ok');log('연결됨');sendHello();sendBat();
     await sleep(600);const p=pathText(await pathInfo(c));setT('sPath',p[0],p[1]);
   });
   c.on('data',d=>onSData(c,d));
@@ -557,6 +630,7 @@ function tryConnect(){
 }
 function onSData(c,d){
   if(!d||!d.t)return;
+  if(S.mode==='standby'&&['snap','zoom','benchreq','camscan','fitreq','monstart','sndstart'].includes(d.t))return;   // 대기 중에는 카메라·마이크 명령 무시
   if(d.t==='ping')c.send({t:'pong',i:d.i,m0:d.m0,s:nowE()});
   else if(d.t==='snap')sendPhoto(c,d);
   else if(d.t==='zoom')applyZoom(c,d.v);
@@ -565,6 +639,7 @@ function onSData(c,d){
   else if(d.t==='fitreq')autoFit(c,d);
   else if(d.t==='monstart')monStart(c);
   else if(d.t==='monstop')monStop();
+  else if(d.t==='mode')setSMode(c,d.m);
   else if(d.t==='ver'){
     const c=cmpVer(d.v,VER);
     if(c>0)tryUpdate(d.v,'s',(x,k)=>setT('sSt',x,k));
@@ -753,7 +828,7 @@ async function camScanInner(c,d){
 }
 async function applyZoom(c,v){
   try{
-    const tr=S.stream.getVideoTracks()[0];await tr.applyConstraints({advanced:[{zoom:v}]});
+    const tr=S.stream.getVideoTracks()[0];await tr.applyConstraints({advanced:[{zoom:v}]});S.zoomV=v;
     const z=tr.getSettings().zoom;if(S.cam&&S.cam.zoom)S.cam.zoom[3]=z;
     c.send({t:'zoomed',ok:true,req:v,v:(z==null?v:z)});setT('sCam',camText(S.cam)+' · 현재 '+f1(z==null?v:z)+'배','ok');
   }catch(e){c.send({t:'zoomed',ok:false,req:v,err:e.name+' '+e.message});log('줌 실패 '+e.name);}
