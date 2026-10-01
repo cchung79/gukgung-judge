@@ -23,6 +23,7 @@ img,canvas{width:100%;border-radius:10px;background:#000;display:block;margin-to
   <input id="u" inputmode="url" placeholder="http://127.0.0.1:8080/video" autocapitalize="off" autocomplete="off">
   <div class="row"><button id="b1">1. 화면 표시 시험</button><button id="b2">2. 화소 읽기 시험</button></div>
   <button id="b3" class="sub">3. fetch 시험 (헤더 확인)</button>
+  <button id="b4" class="sub">4. 영상 경로 자동 찾기 (주소는 127.0.0.1:포트만 넣어도 됨)</button>
   <div class="res" id="res"></div>
   <img id="im" alt="" hidden><canvas id="cv" hidden></canvas>
 </div>
@@ -57,4 +58,17 @@ $('b3').onclick=async()=>{save();reset();if(!url()){say('주소를 넣으세요'
   try{const ac=new AbortController();setTimeout(()=>ac.abort(),6000);const r=await fetch(url(),{signal:ac.signal});
     say('응답 '+r.status+' · 형식 '+(r.headers.get('content-type')||'?'),'ok');say('✅ fetch로 읽기가 허용됨 (CORS 허용 확인)','ok');ac.abort();}
   catch(e){say('⛔ fetch 실패: '+(e.name==='AbortError'?'응답 없음/중단':e.message)+' — (CORS 허용이 없으면 이 시험은 실패하는 것이 정상)','warn');}};
+
+$('b4').onclick=async()=>{save();reset();let u=url();if(!u){say('주소를 넣으세요 (예: http://127.0.0.1:8081)','warn');return;}
+  const base=u.replace(/^(https?:\/\/[^\/]+).*$/,'$1');say('기본 주소 '+base+' 에서 흔한 영상 경로를 차례로 시험합니다 (경로당 4초)…','dim');
+  const paths=['/video','/video.mjpg','/mjpeg','/mjpg/video.mjpg','/stream','/stream.mjpg','/live','/cam.mjpg','/snapshot','/snapshot.jpg','/shot.jpg','/image.jpg','/jpeg','/capture','/frame.jpg'];
+  let found=[];
+  for(const p of paths){
+    const tryLoad=cors=>{const im=new Image();if(cors)im.crossOrigin='anonymous';return new Promise(res=>{let d=false;const f=v=>{if(!d){d=true;res(v?im:null)}};im.onload=()=>f(true);im.onerror=()=>f(false);setTimeout(()=>f(false),4000);im.src=base+p+'?_='+Date.now();});};
+    let im=await tryLoad(true);if(!im)im=await tryLoad(false);const r=im?im.naturalWidth+'×'+im.naturalHeight:null;
+    if(r){let rd='읽기 막힘';try{const c=document.createElement('canvas');c.width=8;c.height=8;c.getContext('2d').drawImage(im,0,0,8,8);c.getContext('2d').getImageData(0,0,1,1);rd='화소 읽기 가능';}catch(e){}
+      say('✅ '+p+' → 영상 있음 ('+r+') · '+rd,rd==='화소 읽기 가능'?'ok':'warn');found.push(p);}
+    else say('· '+p+' — 없음','dim');}
+  if(!found.length)say('⛔ 흔한 경로에는 영상이 없습니다. 앱 웹 페이지의 영상을 길게 눌러 ‘이미지 주소 복사’로 주소를 알려 주세요.','bad');
+  else say('끝. 영상이 있는 경로를 위 주소 칸에 넣고 2번 시험을 해 보세요.','dim');};
 </script></body></html>
