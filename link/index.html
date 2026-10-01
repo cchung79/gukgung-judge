@@ -26,7 +26,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 </style>
 </head>
 <body>
-<h1>링크 테스트 <span class="ver">v0.1 · 마스터(아이폰) ↔ 슬레이브(노트 10)</span></h1>
+<h1>링크 테스트 <span class="ver">v0.2 · 마스터(아이폰) ↔ 슬레이브(노트 10)</span></h1>
 
 <div id="roleBox" class="card">
   <h2>1. 이 폰의 역할을 고르세요</h2>
@@ -61,7 +61,14 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
     <img id="mImg" class="shot" alt="" hidden>
   </div>
   <div class="card">
-    <h2>시험 ② 모의 발시 이벤트(5회)</h2>
+    <h2>시험 ② 노트 10 줌 원격 조작</h2>
+    <div id="mZInfo" class="dim">슬레이브 연결 후 표시</div>
+    <input id="mZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0">
+    <div class="row" id="mZBtn"></div>
+    <div class="dim">줌을 바꾼 뒤 위의 ‘사진 요청’을 눌러 화면이 실제로 바뀌었는지 확인하세요.</div>
+  </div>
+  <div class="card">
+    <h2>시험 ③ 모의 발시 이벤트(5회)</h2>
     <button id="mEv" class="sub" disabled>슬레이브에 이벤트 5회 요청</button>
     <table id="mEvT"></table>
     <button id="mPing" class="sub" disabled>지연·시계 차 다시 측정</button>
@@ -219,7 +226,8 @@ function doSnap(){
 function onMData(c,d){
   if(!d||!d.t)return;
   if(d.t==='pong'){const m1=nowE();M.pr.push({rtt:m1-d.m0,off:d.s-(d.m0+m1)/2});}
-  else if(d.t==='hello'){M.cam=d.cam;setT('mCam',camText(d.cam),'ok');log('슬레이브 카메라 '+d.cam.w+'x'+d.cam.h);}
+  else if(d.t==='zoomed'){setT('mZInfo',d.ok?`✅ 적용됨: ${f1(d.v)}배 (요청 ${f1(d.req)}배)`:`⚠ 적용 실패: ${d.err}`,d.ok?'ok':'bad');log('줌 '+(d.ok?f1(d.v)+'배':'실패 '+d.err));}
+  else if(d.t==='hello'){M.cam=d.cam;setT('mCam',camText(d.cam),'ok');setupZoom(d.cam);log('슬레이브 카메라 '+d.cam.w+'x'+d.cam.h);}
   else if(d.t==='ph'){M.rx={meta:d,parts:new Array(d.n),got:0};}
   else if(d.t==='pc'&&M.rx&&M.rx.meta.id===d.id){
     if(!M.rx.parts[d.i]){M.rx.parts[d.i]=d.d;M.rx.got++;}
@@ -243,6 +251,15 @@ function renderEv(){
   const t=$('mEvT');t.innerHTML='';
   M.ev.forEach(e=>{const tr=document.createElement('tr');tr.innerHTML=`<td>#${e.k}</td><td>${e.lat==null?'시계차 미측정':'도착 지연 '+f1(e.lat)+' ms'}</td>`;t.appendChild(tr);});
 }
+function setupZoom(c){
+  const sl=$('mZ'),bt=$('mZBtn');bt.innerHTML='';
+  if(!c.zoom){sl.disabled=true;setT('mZInfo','이 카메라는 브라우저에서 줌 제어를 열어주지 않음(미지원)','warn');return;}
+  const [mn,mx,st,cur]=c.zoom;sl.min=mn;sl.max=mx;sl.step=st||0.1;sl.value=cur;sl.disabled=false;
+  setT('mZInfo',`줌 범위 ${f1(mn)}~${f1(mx)}배 · 현재 ${f1(cur)}배`,'ok');
+  const send=v=>{if(M.conn&&M.conn.open)M.conn.send({t:'zoom',v:+v});};
+  sl.oninput=null;let tm=null;sl.oninput=()=>{setT('mZInfo','요청 '+f1(+sl.value)+'배…','dim');clearTimeout(tm);tm=setTimeout(()=>send(sl.value),150);};
+  [1,2,3,5].filter(v=>v>=mn&&v<=mx).forEach(v=>{const b=document.createElement('button');b.className='sub';b.textContent=v+'×';b.onclick=()=>{sl.value=v;send(v);};bt.appendChild(b);});
+}
 function camText(c){return `${c.label||'카메라'} · ${c.w}×${c.h}${c.fps?' @'+Math.round(c.fps)+'fps':''}${c.zoom?' · 줌 '+c.zoom[0]+'~'+c.zoom[1]:''}`;}
 function summary(){
   const o={role:'master',ua:navigator.userAgent,path:M.path,rtt:M.rtt,offsetMs:M.off,offsetErrMs:M.offErr,cam:M.cam,photo:M.photo,events:M.ev.map(e=>e.lat==null?null:Math.round(e.lat*10)/10)};
@@ -261,11 +278,12 @@ async function openCam(devId){
   if(S.stream)S.stream.getTracks().forEach(t=>t.stop());
   const base={width:{ideal:1920},height:{ideal:1080}};
   const v=devId?Object.assign({deviceId:{exact:devId}},base):Object.assign({facingMode:{ideal:'environment'}},base);
-  S.stream=await navigator.mediaDevices.getUserMedia({video:v,audio:false});
+  try{S.stream=await navigator.mediaDevices.getUserMedia({video:Object.assign({zoom:true},v),audio:false});}   // zoom:true → 줌 제어 권한 요청(Chrome)
+  catch(e){log('zoom 포함 요청 실패('+e.name+') → 일반 요청');S.stream=await navigator.mediaDevices.getUserMedia({video:v,audio:false});}
   S.vid.srcObject=S.stream;try{await S.vid.play()}catch(e){}
   await new Promise(r=>{if(S.vid.videoWidth)r();else S.vid.onloadedmetadata=()=>r();});
   const tr=S.stream.getVideoTracks()[0];const st=tr.getSettings();let z=null;
-  try{const cp=tr.getCapabilities();if(cp&&cp.zoom)z=[cp.zoom.min,cp.zoom.max];}catch(e){}
+  try{const cp=tr.getCapabilities();if(cp&&cp.zoom)z=[cp.zoom.min,cp.zoom.max,cp.zoom.step||0.1,st.zoom||cp.zoom.min];}catch(e){}
   S.cam={label:tr.label,w:S.vid.videoWidth,h:S.vid.videoHeight,fps:st.frameRate||null,zoom:z,facing:st.facingMode||null};
   setT('sCam',camText(S.cam),'ok');
   try{
@@ -309,7 +327,15 @@ function onSData(c,d){
   if(!d||!d.t)return;
   if(d.t==='ping')c.send({t:'pong',i:d.i,m0:d.m0,s:nowE()});
   else if(d.t==='snap')sendPhoto(c,d);
+  else if(d.t==='zoom')applyZoom(c,d.v);
   else if(d.t==='evreq'){let k=1;const n=d.n||5;const go=()=>{c.send({t:'ev',k,s:nowE()});log('이벤트 송신 #'+k);if(++k<=n)setTimeout(go,1000);};go();}
+}
+async function applyZoom(c,v){
+  try{
+    const tr=S.stream.getVideoTracks()[0];await tr.applyConstraints({advanced:[{zoom:v}]});
+    const z=tr.getSettings().zoom;if(S.cam&&S.cam.zoom)S.cam.zoom[3]=z;
+    c.send({t:'zoomed',ok:true,req:v,v:(z==null?v:z)});setT('sCam',camText(S.cam)+' · 현재 '+f1(z==null?v:z)+'배','ok');
+  }catch(e){c.send({t:'zoomed',ok:false,req:v,err:e.name+' '+e.message});log('줌 실패 '+e.name);}
 }
 async function sendPhoto(c,d){
   try{
