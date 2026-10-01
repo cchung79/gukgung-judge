@@ -123,7 +123,8 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div id="tgInfo" class="big dim">지정 없음 — 모든 선수 판정</div>
   <div class="tgchips" id="tgChips"></div>
   <div id="selWrap" hidden><img id="selImg" class="shot" alt=""><div id="selOv"></div></div>
-  <div id="selHint" class="dim" style="margin-top:6px">준비 모드에서 선수 사진이 오면 여기에 표시됩니다. 사진에서 선수를 누르거나 위의 번호 버튼으로 지정하세요.</div>
+  <div id="selHint" class="dim" style="margin-top:6px">선수 사진을 받는 중… 사진에서 선수를 직접 눌러 지정하세요. (사진이 없으면 위의 번호 버튼 사용)</div>
+  <button id="tgPh" class="sub">선수 사진 새로 받기</button>
   <button id="tgClear" class="sub" disabled>지정 해제 (모든 선수 판정)</button>
   <div class="dim" style="margin-bottom:8px">번호는 사진 속 번호(왼쪽부터)입니다. 여러 명을 지정할 수 있습니다(예: 2·4·5번). 지정한 선수만 모니터링하고 점수표에 나옵니다. 발시 카운트 중에는 바꿀 수 없고, 다음 카운트부터 적용됩니다.</div>
 </details>
@@ -180,7 +181,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.6';
+const VER=qs.get('fakever')||'1.6.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -270,7 +271,7 @@ function initControl(){
   const cf=jparse(lsG('dj_ccfg'),{});C.tg=jparse(lsG('dj_ctg'),[]);if(!Array.isArray(C.tg))C.tg=[];
   if(cf.kwan!=null)$('cKwan').value=cf.kwan;if(cf.wm)$('cWm').value=cf.wm;if(cf.sens)$('cSens').value=cf.sens;
   if(cf.rec===false)$('cRec').checked=false;if(cf.recq)$('cRecq').value=cf.recq;
-  ['cKwan','cWm','cSens','cRec','cRecq'].forEach(i=>$(i).onchange=sendCfg);$('tgClear').onclick=()=>setTg([]);renderTg(true);
+  ['cKwan','cWm','cSens','cRec','cRecq'].forEach(i=>$(i).onchange=sendCfg);$('tgClear').onclick=()=>setTg([]);$('tgPh').onclick=()=>reqPh(true);$('tgSet').addEventListener('toggle',()=>{if($('tgSet').open&&!C.bx)reqPh(false);});renderTg(true);
   $('mStart').onclick=startControl;
   $('bPrep').onclick=()=>cmd('active','준비 중… (노트 10 카메라 켜는 중)');
   $('bCount').onclick=()=>{const n=C.board?C.board.arrows.length:0;if(n>0){$('scN').textContent=n;$('startChoice').hidden=false;}else startCount(false);};
@@ -432,6 +433,7 @@ function onData(c,d){
   else if(d.t==='camdone'){$('mCamScan').disabled=C.mode!=='active';setT('mCamInfo',`✅ 카메라 ${d.n}개 확인 완료 — 외장(USB) 카메라가 목록에 있는지 보세요`,'ok');log('카메라 비교 완료 '+d.n+'개');}
   else if(d.t==='fitmsg'){setT('mFitHead',d.msg,'dim');}
   else if(d.t==='fit'){onFit(d);}
+  else if(d.t==='phnone'){setT('selHint','보낼 선수 사진이 아직 없습니다. 슬레이브를 ‘준비 모드’로 놓으면 사진이 옵니다. 그때까지는 위의 번호 버튼으로 지정할 수 있습니다.','warn');$('selHint').hidden=false;}
   else if(d.t==='benchmsg'){setT('mBenchInfo',d.msg,'dim');}
   else if(d.t==='bench'){
     $('mBench').disabled=C.mode!=='active';
@@ -539,6 +541,10 @@ function exportCSV(){return ['순,선수,시,결과,발시근거,관중근거,�
 function exportJSON(){return JSON.stringify({ver:VER,at:new Date().toISOString(),cfg:getCfg(),board:C.board,snd:C.snd,batt:C.batH.filter((x,i,a)=>i%3===0||i===a.length-1),gaps:C.gaps,log:C.lg.slice(-200)},null,1);}
 
 /* ---------- 설치·점검 도구 (link 테스트에서 검증된 부분) ---------- */
+function reqPh(manual){
+  if(!C.conn||!send({t:'phreq'})){setT('selHint','슬레이브와 연결되어 있지 않아 사진을 받을 수 없습니다.','warn');$('selHint').hidden=false;return;}
+  C.phWait=Date.now();setT('selHint','선수 사진 요청함…','dim');$('selHint').hidden=false;
+}
 function onFit(d){
   $('mFit').disabled=C.mode!=='active';C.fit=d;
   if(d.err){setT('mFitHead','⚠ 실패: '+d.err,'bad');return;}

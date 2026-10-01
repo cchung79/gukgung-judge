@@ -62,7 +62,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.6';
+const VER=qs.get('fakever')||'1.6.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -459,6 +459,7 @@ function onSData(c,d){
   else if(d.t==='reload'){if(S.mode==='count')return;rlClr();setT('sSt','컨트롤 요청으로 새로고침 중…','warn');setTimeout(goReload,300);}
   else if(d.t==='lvlon'){S.lvlOn=!!d.on;}
   else if(d.t==='recsave'){rcSaveAll();}
+  else if(d.t==='phreq'){resendAnno(c).catch(()=>{});}
   else if(d.t==='sync'){sendHello();sendBat();sendBoard();sendSt(true);}
 }
 let modeChain=Promise.resolve();
@@ -566,9 +567,22 @@ async function sendAnno(c,id,o){
     let blob=null;for(let k=0;k<3&&!blob;k++){blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',o.q||0.8));if(!blob)await sleep(200);}
     if(!blob)throw new Error('사진 인코딩 실패 (캔버스 '+W+'×'+H+')');
     const buf=await blob.arrayBuffer(),CH=16000,n=Math.ceil(buf.byteLength/CH),r4=x=>Math.round(x*10000)/10000;
-    c.send({t:'ph',id,n,w:W,h:H,bytes:buf.byteLength,tShot:nowE(),kind:'fit',bx:(o.final||[]).map(p=>[r4(p.x1),r4(p.y1),r4(p.x2),r4(p.y2)])});
+    const bx=(o.final||[]).map(p=>[r4(p.x1),r4(p.y1),r4(p.x2),r4(p.y2)]);
+    S.lastAnno={buf,w:W,h:H,bx,tShot:nowE()};
+    c.send({t:'ph',id,n,w:W,h:H,bytes:buf.byteLength,tShot:S.lastAnno.tShot,kind:'fit',bx});
     for(let i=0;i<n;i++){while(c.dataChannel&&c.dataChannel.bufferedAmount>1500000)await sleep(20);c.send({t:'pc',id,i,d:buf.slice(i*CH,(i+1)*CH)});}
   });
+}
+/* v1.6.1: 컨트롤이 선수 설정을 열었을 때 사진이 없으면 — 마지막으로 보낸 선수 사진을 다시 보내거나(대기 모드 포함), 준비 모드면 새로 찍어 보낸다 */
+async function resendAnno(c){
+  const L=S.lastAnno;
+  if(S.mode==='active'&&S.stream&&!S.busy){
+    try{const ps=await detect(S.roi||FULL);await sendAnno(c,Date.now(),{final:ps,ex:ps.ex||[],used:S.roi,maxW:800,q:0.65});return;}catch(e){log('선수 사진 새로 보내기 실패 '+((e&&e.message)||e));}
+  }
+  if(!L){c.send({t:'phnone',mode:S.mode});return;}
+  const id=Date.now(),CH=16000,n=Math.ceil(L.buf.byteLength/CH);
+  c.send({t:'ph',id,n,w:L.w,h:L.h,bytes:L.buf.byteLength,tShot:L.tShot,kind:'fit',bx:L.bx});
+  for(let i=0;i<n;i++){while(c.dataChannel&&c.dataChannel.bufferedAmount>1500000)await sleep(20);c.send({t:'pc',id,i,d:L.buf.slice(i*CH,(i+1)*CH)});}
 }
 
 /* ---------- 준비 모드: 인원 지속 감시 (사진은 준비 모드에서만) ---------- */
