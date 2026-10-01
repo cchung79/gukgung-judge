@@ -26,7 +26,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 </style>
 </head>
 <body>
-<h1>링크 테스트 <span class="ver">v0.3 · 마스터(아이폰) ↔ 슬레이브(노트 10)</span></h1>
+<h1>링크 테스트 <span class="ver">v0.4 · 마스터(아이폰) ↔ 슬레이브(노트 10)</span></h1>
 
 <div id="roleBox" class="card">
   <h2>1. 이 폰의 역할을 고르세요</h2>
@@ -73,7 +73,16 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
     <div id="mBenchInfo" class="dim">처음엔 모델(13MB)을 내려받아 1분쯤 걸릴 수 있음. 기준: 중앙값 500 ms 이하면 사용 가능, 300 ms 이하면 여유.</div>
   </div>
   <div class="card">
-    <h2>시험 ④ 모의 발시 이벤트(5회)</h2>
+    <h2>시험 ④ 자동 화면 맞추기 (슬레이브가 스스로 확인)</h2>
+    <div class="row"><label class="dim" style="flex:0 0 auto">예상 인원</label><input id="mN" type="number" min="0" max="7" value="7" style="flex:0 0 80px"><span class="dim">0이면 인원 비교 생략</span></div>
+    <button id="mFit" disabled>자동 화면 맞추기 시작</button>
+    <div id="mFitHead" class="big dim">-</div>
+    <div id="mFitMsgs" style="white-space:pre-line;margin:4px 0"></div>
+    <img id="mFitImg" class="shot" alt="" hidden>
+    <div class="dim">전체 화면에서 선수를 찾아 잘림·인원·키 크기를 검사하고, 모두 들어오는 확대 영역(청록 사각형)을 계산합니다.</div>
+  </div>
+  <div class="card">
+    <h2>시험 ⑤ 모의 발시 이벤트(5회)</h2>
     <button id="mEv" class="sub" disabled>슬레이브에 이벤트 5회 요청</button>
     <table id="mEvT"></table>
     <button id="mPing" class="sub" disabled>지연·시계 차 다시 측정</button>
@@ -172,6 +181,7 @@ function initMaster(){
   $('mStart').onclick=startMaster;
   $('mSnap').onclick=doSnap;$('mEv').onclick=()=>{M.ev=[];renderEv();M.conn.send({t:'evreq',n:5});log('이벤트 5회 요청');};
   $('mPing').onclick=()=>runPings(20);
+  $('mFit').onclick=()=>{M.conn.send({t:'fitreq',id:Date.now(),expectN:+$('mN').value||0});$('mFit').disabled=true;setT('mFitHead','요청함…','dim');$('mFitMsgs').textContent='';log('자동 화면 맞추기 요청');};
   $('mBench').onclick=()=>{M.conn.send({t:'benchreq'});$('mBench').disabled=true;setT('mBenchInfo','측정 요청함…','dim');log('속도 측정 요청');};
   $('mCopy').onclick=()=>copyText(summary());
   if(qs.get('auto'))startMaster();
@@ -190,7 +200,7 @@ async function startMaster(){
     M.conn=c;log('슬레이브 접속 시도');
     c.on('open',()=>onMOpen(c));
     c.on('data',d=>onMData(c,d));
-    c.on('close',()=>{if(M.conn===c){setT('mSt','연결 끊김 — 슬레이브 재접속 대기','bad');['mSnap','mEv','mPing','mBench'].forEach(i=>$(i).disabled=true);log('연결 끊김');}});
+    c.on('close',()=>{if(M.conn===c){setT('mSt','연결 끊김 — 슬레이브 재접속 대기','bad');['mSnap','mEv','mPing','mBench','mFit'].forEach(i=>$(i).disabled=true);log('연결 끊김');}});
     c.on('error',e=>log('conn 오류 '+e));
   });
   peer.on('disconnected',()=>{log('시그널링 끊김 → 재연결');try{peer.reconnect()}catch(e){}});
@@ -202,7 +212,7 @@ async function startMaster(){
   });
 }
 async function onMOpen(c){
-  setT('mSt','✅ 연결됨','ok');['mSnap','mEv','mPing','mBench'].forEach(i=>$(i).disabled=false);log('데이터 채널 열림');
+  setT('mSt','✅ 연결됨','ok');['mSnap','mEv','mPing','mBench','mFit'].forEach(i=>$(i).disabled=false);log('데이터 채널 열림');
   runPings(20);
   await sleep(600);M.path=await pathInfo(c);const p=pathText(M.path);setT('mPath',p[0],p[1]);log('경로 '+(M.path?M.path.lt+'↔'+M.path.rt:'?'));
 }
@@ -232,6 +242,16 @@ function doSnap(){
 function onMData(c,d){
   if(!d||!d.t)return;
   if(d.t==='pong'){const m1=nowE();M.pr.push({rtt:m1-d.m0,off:d.s-(d.m0+m1)/2});}
+  else if(d.t==='fitmsg'){setT('mFitHead',d.msg,'dim');}
+  else if(d.t==='fit'){
+    $('mFit').disabled=false;M.fit=d;
+    if(d.err){setT('mFitHead','⚠ 실패: '+d.err,'bad');return;}
+    const cl=d.status==='ok'?'ok':(d.status==='warn'?'warn':'bad'),ic=d.status==='ok'?'✅':(d.status==='warn'?'⚠':'⛔');
+    setT('mFitHead',`${ic} ${d.n}명 인식 · 확대 ${f1(d.z)}배 · 선수 키(모델 입력) ${d.hBefore}→${d.hAfter} px · ${Math.round(d.ms)} ms`,cl);
+    const box=$('mFitMsgs');box.innerHTML='';
+    d.msgs.forEach(m=>{const e=document.createElement('div');e.className=m.lv==='ok'?'ok':(m.lv==='warn'?'warn':'bad');e.textContent=(m.lv==='ok'?'✅ ':(m.lv==='warn'?'⚠ ':'⛔ '))+m.t;box.appendChild(e);});
+    log('화면 맞추기 '+d.status+' '+d.n+'명');
+  }
   else if(d.t==='benchmsg'){setT('mBenchInfo',d.msg,'dim');}
   else if(d.t==='bench'){
     $('mBench').disabled=false;M.bench=d;
@@ -254,7 +274,9 @@ function onMData(c,d){
 }
 function finishPhoto(){
   const m=M.rx.meta;const blob=new Blob(M.rx.parts,{type:'image/jpeg'});const tEnd=nowE();
-  const url=URL.createObjectURL(blob);const im=$('mImg');im.src=url;im.hidden=false;
+  const url=URL.createObjectURL(blob);
+  if(m.kind==='fit'){const fi=$('mFitImg');fi.src=url;fi.hidden=false;return;}
+  const im=$('mImg');im.src=url;im.hidden=false;
   const total=tEnd-M.snap.t0;const ship=(M.off==null)?null:tEnd-(m.tShot-M.off);
   M.snap.done=true;$('mSnap').disabled=false;
   M.photo={kb:Math.round(blob.size/1024),w:m.w,h:m.h,total,ship};
@@ -276,7 +298,7 @@ function setupZoom(c){
 }
 function camText(c){return `${c.label||'카메라'} · ${c.w}×${c.h}${c.fps?' @'+Math.round(c.fps)+'fps':''}${c.zoom?' · 줌 '+c.zoom[0]+'~'+c.zoom[1]:''}`;}
 function summary(){
-  const o={role:'master',ua:navigator.userAgent,path:M.path,rtt:M.rtt,offsetMs:M.off,offsetErrMs:M.offErr,cam:M.cam,photo:M.photo,bench:M.bench,events:M.ev.map(e=>e.lat==null?null:Math.round(e.lat*10)/10)};
+  const o={role:'master',ua:navigator.userAgent,path:M.path,rtt:M.rtt,offsetMs:M.off,offsetErrMs:M.offErr,cam:M.cam,photo:M.photo,bench:M.bench,fit:M.fit,events:M.ev.map(e=>e.lat==null?null:Math.round(e.lat*10)/10)};
   return JSON.stringify(o,null,1);
 }
 
@@ -343,23 +365,107 @@ function onSData(c,d){
   else if(d.t==='snap')sendPhoto(c,d);
   else if(d.t==='zoom')applyZoom(c,d.v);
   else if(d.t==='benchreq')runBench(c);
+  else if(d.t==='fitreq')autoFit(c,d);
   else if(d.t==='evreq'){let k=1;const n=d.n||5;const go=()=>{c.send({t:'ev',k,s:nowE()});log('이벤트 송신 #'+k);if(++k<=n)setTimeout(go,1000);};go();}
 }
 const ORT=new URL(qs.get('ort')||'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/',location.href).href;
 const MODEL=new URL(qs.get('model')||'../gwan-motion/models/yolov8n-pose_352x640.onnx',location.href).href;
 let BS=null;
 function loadScript(u){return new Promise((ok,ng)=>{const e=document.createElement('script');e.src=u;e.onload=ok;e.onerror=()=>ng(new Error('스크립트 로드 실패 '+u));document.head.appendChild(e);});}
+async function ensureModel(say){
+  if(BS)return BS;
+  say&&say('ORT 불러오는 중…');await loadScript(ORT+'ort.wasm.min.js');
+  ort.env.wasm.wasmPaths=ORT;ort.env.wasm.proxy=true;
+  ort.env.wasm.numThreads=self.crossOriginIsolated?Math.min(4,navigator.hardwareConcurrency||2):1;
+  say&&say('모델 내려받는 중… (13MB)');
+  BS=await ort.InferenceSession.create(MODEL,{executionProviders:['wasm']});
+  return BS;
+}
+/* ----- 자동 화면 맞추기 ----- */
+const PW=640,PH=352;let LC=null;
+function iouB(a,b){const x1=Math.max(a[0],b[0]),y1=Math.max(a[1],b[1]),x2=Math.min(a[2],b[2]),y2=Math.min(a[3],b[3]);const i=Math.max(0,x2-x1)*Math.max(0,y2-y1);return i/((a[2]-a[0])*(a[3]-a[1])+(b[2]-b[0])*(b[3]-b[1])-i);}
+// roi: 전체 프레임 기준 정규화 영역. 반환 좌표도 전체 프레임 기준 정규화. hIn = 모델 입력 안에서의 키(px)
+async function detect(roi){
+  await ensureModel();
+  const v=S.vid,vw=v.videoWidth,vh=v.videoHeight;
+  const sx=roi.x*vw,sy=roi.y*vh,sw=roi.w*vw,sh=roi.h*vh;
+  if(!LC){LC=document.createElement('canvas');LC.width=PW;LC.height=PH;}
+  const g=LC.getContext('2d',{willReadFrequently:true});
+  const sc=Math.min(PW/sw,PH/sh),nw=Math.round(sw*sc),nh=Math.round(sh*sc),dw=(PW-nw)/2,dh=(PH-nh)/2;
+  g.fillStyle='#727272';g.fillRect(0,0,PW,PH);g.drawImage(v,sx,sy,sw,sh,Math.round(dw),Math.round(dh),nw,nh);
+  const id=g.getImageData(0,0,PW,PH).data,N=PW*PH,f=new Float32Array(3*N);
+  for(let i=0,p=0;i<N;i++,p+=4){f[i]=id[p]/255;f[N+i]=id[p+1]/255;f[2*N+i]=id[p+2]/255}
+  const out=await BS.run({[BS.inputNames[0]]:new ort.Tensor('float32',f,[1,3,PH,PW])});
+  const o=out[BS.outputNames[0]],A=o.data,n=o.dims[2],c=[];
+  for(let i=0;i<n;i++){const sc2=A[4*n+i];if(sc2>0.4){const cx=A[i],cy=A[n+i],w=A[2*n+i],h=A[3*n+i];c.push({s:sc2,i,b:[cx-w/2,cy-h/2,cx+w/2,cy+h/2]})}}
+  c.sort((a,b)=>b.s-a.s);const keep=[];for(const d of c)if(keep.every(k=>iouB(k.b,d.b)<0.5))keep.push(d);
+  const X=x=>(roi.x*vw+(x-dw)/sc)/vw,Y=y=>(roi.y*vh+(y-dh)/sc)/vh;
+  let ps=keep.map(d=>{const kp=[];for(let k=0;k<17;k++)kp.push([X(A[(5+3*k)*n+d.i]),Y(A[(6+3*k)*n+d.i]),A[(7+3*k)*n+d.i]]);
+    return{s:d.s,x1:X(d.b[0]),y1:Y(d.b[1]),x2:X(d.b[2]),y2:Y(d.b[3]),kp,hIn:d.b[3]-d.b[1]};});
+  if(ps.length){const hm=Math.max(...ps.map(p=>p.y2-p.y1));ps=ps.filter(p=>(p.y2-p.y1)>=0.45*hm);}   // 배경의 작은 사람 제외
+  ps.sort((a,b)=>(a.x1+a.x2)-(b.x1+b.x2));return ps;
+}
+async function detectStable(roi,k){let best=null;for(let i=0;i<k;i++){const r=await detect(roi);if(!best||r.length>=best.length)best=r;if(i<k-1)await sleep(200);}return best;}
+const med=a=>{const b=a.slice().sort((x,y)=>x-y);return b.length?b[b.length>>1]:0;};
+async function autoFit(c,d){
+  const say=m=>{try{c.send({t:'fitmsg',msg:m})}catch(e){}setT('sLast',m,'dim');};
+  const t0=performance.now();
+  try{
+    const v=S.vid,vw=v.videoWidth,vh=v.videoHeight,full={x:0,y:0,w:1,h:1},msgs=[];
+    say('모델 준비 및 전체 화면 검사 중…');
+    const P0=await detectStable(full,3);
+    if(!P0.length){c.send({t:'fit',status:'bad',n:0,z:1,hBefore:0,hAfter:0,ms:performance.now()-t0,roi:full,msgs:[{lv:'bad',t:'선수를 한 명도 찾지 못함 — 사대 쪽을 향하고 있는지, 선수가 서 있는지 확인'}]});return;}
+    const hBefore=Math.round(med(P0.map(p=>p.hIn)));
+    // 1) 잘림 검사 (확대로는 해결 불가 → 위치 조정 경고)
+    const L=P0[0],R=P0[P0.length-1];
+    if(L.x1<0.012)msgs.push({lv:'bad',t:'맨 왼쪽 선수가 화면 왼쪽 끝에서 잘림 — 폰을 뒤로 물리거나 왼쪽으로 옮기세요'});
+    else if(L.x1<0.04)msgs.push({lv:'warn',t:'왼쪽 여유가 거의 없음 — 더 왼쪽 선수가 화면 밖일 수 있음'});
+    if(R.x2>0.988)msgs.push({lv:'bad',t:'맨 오른쪽 선수가 화면 오른쪽 끝에서 잘림 — 폰을 뒤로 물리거나 오른쪽으로 옮기세요'});
+    else if(R.x2>0.96)msgs.push({lv:'warn',t:'오른쪽 여유가 거의 없음 — 더 오른쪽 선수가 화면 밖일 수 있음'});
+    if(P0.some(p=>p.y1<0.01))msgs.push({lv:'bad',t:'선수 머리가 화면 위쪽에서 잘림 — 폰을 아래로 기울이거나 뒤로 물리세요'});
+    if(P0.some(p=>p.y2>0.995))msgs.push({lv:'warn',t:'선수 발이 화면 아래쪽에서 잘림 (상체 인식에는 지장 없음)'});
+    // 2) 확대 영역(ROI) 계산: 선수 전체 + 여백, 모델 입력 비율(640:352)로 맞춤
+    const U={x1:Math.min(...P0.map(p=>p.x1)),y1:Math.min(...P0.map(p=>p.y1)),x2:Math.max(...P0.map(p=>p.x2)),y2:Math.max(...P0.map(p=>p.y2))};
+    const uw=U.x2-U.x1,uh=U.y2-U.y1,asp=PW/PH,k=vw/vh/asp;      // h = w*k
+    let rw=Math.min(1,uw*1.12),rh=Math.min(1,uh*1.12);
+    if(rw*k>=rh){rh=rw*k;}else{rw=Math.min(1,rh/k);rh=rw*k;}
+    if(rh>1){rh=1;rw=1/k>1?1:1/k;}
+    let rx=(U.x1+U.x2)/2-rw/2,ry=(U.y1+U.y2)/2-rh/2;rx=Math.max(0,Math.min(1-rw,rx));ry=Math.max(0,Math.min(1-rh,ry));
+    let roi={x:rx,y:ry,w:rw,h:rh};
+    say('확대 영역에서 다시 확인 중…');
+    let P1=await detectStable(roi,3),final=P1,used=roi;
+    if(P1.length<P0.length){msgs.push({lv:'warn',t:`확대하면 인식이 줄어(${P0.length}→${P1.length}명) 전체 화면을 그대로 사용`});final=P0;used=full;}
+    const z=1/used.w,hAfter=Math.round(med(final.map(p=>p.hIn)));
+    // 3) 크기·상체 가시성
+    const hMin=Math.round(Math.min(...final.map(p=>p.hIn)));
+    if(hMin<90)msgs.push({lv:'bad',t:`선수 키가 모델 입력에서 최소 ${hMin}px — 너무 작음. 폰을 사대에 더 가깝게 하거나 구역 나눠 인식 필요`});
+    else if(hMin<130)msgs.push({lv:'warn',t:`선수 키가 모델 입력에서 최소 ${hMin}px — 다소 작음(임시 기준 130px). 손목 판정이 불안정할 수 있음`});
+    const bad=[];final.forEach((p,i)=>{const ok=[5,6,11,12].filter(j=>p.kp[j][2]>=0.4).length;if(ok<3)bad.push(i+1);});
+    if(bad.length)msgs.push({lv:'warn',t:`${bad.join(', ')}번(왼쪽부터) 선수의 어깨·골반이 불명확 — 가려졌거나 너무 작음`});
+    // 4) 인원 비교
+    const N=d.expectN|0;
+    if(N>0&&final.length<N)msgs.push({lv:'warn',t:`예상 ${N}명 중 ${final.length}명만 인식 — 아직 서지 않았거나 가려졌을 수 있음`});
+    if(N>0&&final.length>N)msgs.push({lv:'warn',t:`예상 ${N}명보다 많은 ${final.length}명 인식 — 배경의 사람일 수 있음`});
+    if(!msgs.length||!msgs.some(m=>m.lv!=='ok'))msgs.push({lv:'ok',t:`선수 ${final.length}명 전원 포착 — 확대 ${f1(z)}배, 키 ${hAfter}px(모델 입력)`});
+    const status=msgs.some(m=>m.lv==='bad')?'bad':(msgs.some(m=>m.lv==='warn')?'warn':'ok');
+    S.roi=used;
+    // 주석 사진: 전체 프레임 + 선수 박스(번호) + 확대 영역
+    const sc=Math.min(1,1280/vw),W=Math.round(vw*sc),H=Math.round(vh*sc),cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
+    g.drawImage(v,0,0,W,H);g.lineWidth=3;g.font='bold 22px sans-serif';
+    final.forEach((p,i)=>{g.strokeStyle='#3ecf8e';g.strokeRect(p.x1*W,p.y1*H,(p.x2-p.x1)*W,(p.y2-p.y1)*H);g.fillStyle='#3ecf8e';g.fillText(String(i+1),p.x1*W+4,p.y1*H+22);});
+    g.strokeStyle='#00e5ff';g.setLineDash([10,6]);g.strokeRect(used.x*W,used.y*H,used.w*W,used.h*H);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.8));const buf=await blob.arrayBuffer();const CH=16000,n=Math.ceil(buf.byteLength/CH);
+    c.send({t:'ph',id:d.id,n,w:W,h:H,bytes:buf.byteLength,tShot:nowE(),kind:'fit'});
+    for(let i=0;i<n;i++){while(c.dataChannel&&c.dataChannel.bufferedAmount>1500000)await sleep(20);c.send({t:'pc',id:d.id,i,d:buf.slice(i*CH,(i+1)*CH)});}
+    c.send({t:'fit',status,n:final.length,z,hBefore,hAfter,ms:performance.now()-t0,roi:used,msgs,persons:final.map((p,i)=>({i:i+1,u:(p.x1+p.x2)/2,hIn:Math.round(p.hIn)}))});
+    setT('sLast',`화면 맞추기: ${status}, ${final.length}명, 확대 ${f1(z)}배`,status==='ok'?'ok':'warn');
+  }catch(e){c.send({t:'fit',err:(e&&e.message)||String(e)});setT('sLast','화면 맞추기 실패: '+((e&&e.message)||e),'bad');}
+}
 async function runBench(c){
   const say=m=>{try{c.send({t:'benchmsg',msg:m})}catch(e){}setT('sLast',m,'dim');};
   try{
     const t0=performance.now();
-    if(!BS){
-      say('ORT 불러오는 중…');await loadScript(ORT+'ort.wasm.min.js');
-      ort.env.wasm.wasmPaths=ORT;ort.env.wasm.proxy=true;
-      ort.env.wasm.numThreads=self.crossOriginIsolated?Math.min(4,navigator.hardwareConcurrency||2):1;
-      say('모델 내려받는 중… (13MB)');
-      BS=await ort.InferenceSession.create(MODEL,{executionProviders:['wasm']});
-    }
+    await ensureModel(say);
     const loadMs=performance.now()-t0;
     const MW=640,MH=352,cv=document.createElement('canvas');cv.width=MW;cv.height=MH;const g=cv.getContext('2d');
     const v=S.vid,sc=Math.min(MW/v.videoWidth,MH/v.videoHeight),nw=Math.round(v.videoWidth*sc),nh=Math.round(v.videoHeight*sc);
