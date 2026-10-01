@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chrome으로 열기</title>
+<style>
+:root{--bg:#10151c;--card:#1a222d;--tx:#e8edf3;--dim:#8fa0b3;--ac:#3b8cf0;--ok:#3ecf8e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 'Nanum Gothic',system-ui,sans-serif;padding:12px 16px 40px}
+h1{font-size:19px;margin:6px 0 10px}.card{background:var(--card);border-radius:14px;padding:14px;margin:12px 0}
+a.btn,button{display:block;text-align:center;text-decoration:none;font:inherit;font-weight:700;color:#fff;background:var(--ac);border:0;border-radius:10px;min-height:52px;line-height:52px;width:100%;margin:8px 0;padding:0 12px}
+button{line-height:normal}button.sub,a.sub{background:#344256}
+.dim{color:var(--dim);font-size:14px}.url{word-break:break-all;background:#0e131a;border-radius:10px;padding:10px 12px;font-size:14px;margin:8px 0}
+.ok{color:var(--ok)}h2{font-size:15px;margin:0 0 6px;color:var(--dim)}
+</style></head><body>
+<h1>Chrome으로 열기</h1>
+<div class="card" id="one" hidden>
+  <h2>열려는 페이지</h2>
+  <div class="url" id="tu"></div>
+  <a class="btn" id="go">Chrome으로 열기</a>
+  <button class="sub" id="cp">주소 복사 (Chrome 주소창에 붙여넣기)</button>
+  <a class="btn sub" id="here">이 창에서 그냥 열기</a>
+  <div class="dim" id="msg">안드로이드에서는 ‘Chrome으로 열기’를 누르면 바로 Chrome으로 넘어갑니다. 넘어가지 않으면 ‘주소 복사’를 눌러 Chrome 주소창에 붙여넣으세요.</div>
+</div>
+<div class="card" id="menu">
+  <h2>바로가기 (각 줄의 ‘Chrome’ 버튼)</h2>
+  <div id="list"></div>
+</div>
+<script>
+const B='https://cchung79.github.io/gukgung-judge/';
+const PAGES=[['디지털 저지 (노트 10 슬레이브)','digital-judge/'],['디지털 저지 컨트롤 (아이폰)','digital-judge-control/'],['외장 카메라 시험 페이지','digital-judge/camtest.html?v=5']];
+const $=id=>document.getElementById(id);
+const intentOf=u=>{const x=new URL(u);return 'intent://'+x.host+x.pathname+x.search+'#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='+encodeURIComponent(u)+';end';};
+const q=new URLSearchParams(location.search);let to=q.get('to');
+function setTarget(path){const u=B+path.replace(/^[/]+/,'');$('one').hidden=false;$('menu').hidden=true;$('tu').textContent=u;$('go').href=intentOf(u);$('here').href=u;
+  $('cp').onclick=async()=>{try{await navigator.clipboard.writeText(u);$('cp').textContent='✅ 복사됨 — Chrome 주소창에 붙여넣으세요';}catch(e){$('cp').textContent='복사 실패 — 위 주소를 길게 눌러 복사하세요';}};
+  return u;}
+const PL=document.getElementById('list');
+PAGES.forEach(([n,p])=>{const u=B+p;const d=document.createElement('div');d.innerHTML='<div class="dim"></div>';d.firstChild.textContent=n;const a=document.createElement('a');a.className='btn';a.textContent='Chrome으로 열기';a.href=intentOf(u);d.appendChild(a);const c=document.createElement('a');c.className='btn sub';c.textContent='이 창에서 열기';c.href=u;d.appendChild(c);PL.appendChild(d);});
+if(to){setTarget(to);}
+</script></body></html>
