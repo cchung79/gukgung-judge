@@ -71,6 +71,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div id="mPlayers" class="huge dim">선수 수: -</div>
   <div id="mNext" class="big dim"></div>
   <div id="mJm" class="dim"></div>
+  <div id="mRec" class="dim"></div>
   <div class="chips" id="chips"></div>
   <img id="nowImg" class="shot" alt="" hidden>
   <div id="nowImgT" class="dim" hidden>↑ 준비 모드에서만 오는 확인 사진입니다 (발시 카운트 중에는 사진·영상을 보내지 않고 번호·결과만 받습니다)</div>
@@ -109,6 +110,8 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div class="row"><span class="dim">관중 판정 시간창(발시 후 초)</span><input id="cWa" type="number" step="0.1" value="2.0"><input id="cWb" type="number" step="0.1" value="4.5"></div>
   <div class="row"><span class="dim">뻐꾸기 판정</span><select id="cTone"><option value="A">A형(우리 관)만 관중</option><option value="A?">A형 + 불명도 관중</option><option value="any">종류 불문 모두 관중</option><option value="off">관중 판정 끔 (발시만 셈)</option></select></div>
   <div class="row"><span class="dim">현소리 감도</span><select id="cSens"><option value="n">보통</option><option value="h">민감</option><option value="l">둔감</option></select></div>
+  <div class="row"><label class="dim"><input id="cRec" type="checkbox" checked>원본 영상+소리 녹화 (발시 카운트 중 노트 10에 저장)</label></div>
+  <div class="row"><span class="dim">녹화 화질</span><select id="cRecq"><option value="m">중 (분당 약 19MB)</option><option value="h">상 (분당 약 30MB)</option><option value="l">하 (분당 약 9MB)</option></select></div>
   <div class="row"><label class="dim"><input id="cManual" type="checkbox">선수 수 직접 지정</label><input id="cN" type="number" min="0" max="12" value="4"></div>
   <div class="dim">설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다. ‘직접 지정’은 사람 인식이 안 될 때용 — 선수 수를 지정하고 자세 인식 수와 다르면 소리만으로 발시를 셉니다. 카운트 시작 전에 정하세요.</div>
 </details>
@@ -152,8 +155,10 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
     <tr><td>슬레이브 신호</td><td id="mHb" class="dim">-</td></tr>
     <tr><td>슬레이브 버전</td><td id="mSVer" class="dim">-</td></tr>
     <tr><td>슬레이브 전송량</td><td id="mTx" class="dim" style="white-space:pre-line">-</td></tr>
+    <tr><td>노트 10 녹화 보관</td><td id="mRp" class="dim">-</td></tr>
     <tr><td>화면 유지(이 폰)</td><td id="mWake" class="dim">-</td></tr>
   </table>
+  <button id="mRecSave" class="sub" disabled>노트 10에 보관된 녹화 저장 시도</button>
   <button id="mReload" class="sub" disabled>슬레이브 새로고침 (최신 버전으로)</button>
   <div class="row"><button id="mCopyJ" class="sub">기록 복사 (JSON)</button><button id="mCopyC" class="sub">기록 복사 (CSV)</button></div>
 </details>
@@ -165,7 +170,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.1';
+const VER=qs.get('fakever')||'1.2';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -255,7 +260,8 @@ function initControl(){
   const cf=jparse(lsG('dj_ccfg'),{});
   if(cf.A)$('cA').value=cf.A;if(cf.wa)$('cWa').value=cf.wa;if(cf.wb)$('cWb').value=cf.wb;if(cf.toneMode)$('cTone').value=cf.toneMode;if(cf.sens)$('cSens').value=cf.sens;
   if(cf.manualN!=null){$('cManual').checked=true;$('cN').value=cf.manualN;}
-  ['cA','cWa','cWb','cTone','cSens','cManual','cN'].forEach(i=>$(i).onchange=sendCfg);
+  if(cf.rec===false)$('cRec').checked=false;if(cf.recq)$('cRecq').value=cf.recq;
+  ['cA','cWa','cWb','cTone','cSens','cManual','cN','cRec','cRecq'].forEach(i=>$(i).onchange=sendCfg);
   $('mStart').onclick=startControl;
   $('bPrep').onclick=()=>cmd('active','준비 중… (노트 10 카메라 켜는 중)');
   $('bCount').onclick=()=>{const n=C.board?C.board.arrows.length:0;if(n>0){$('scN').textContent=n;$('startChoice').hidden=false;}else startCount(false);};
@@ -270,6 +276,7 @@ function initControl(){
   $('bd').onclick=e=>{const td=e.target.closest('td[data-id]');if(!td||!C.board)return;const id=+td.dataset.id,a=C.board.arrows.find(x=>x.id===id);if(!a)return;
     edit({op:'res',id,r:a.r==='hit'?'miss':(a.r==='miss'?'pending':'hit')});};
   $('mSnd').onclick=()=>{C.lvlOn=!C.lvlOn;send({t:'lvlon',on:C.lvlOn});$('mSnd').textContent=C.lvlOn?'소리 모니터 끄기':'소리 모니터 켜기';if(!C.lvlOn)setT('mLvlT','-','dim');};
+  $('mRecSave').onclick=()=>{send({t:'recsave'});log('녹화 저장 요청 (노트 10에서 다운로드 허용 창이 뜨면 허용)');};
   $('mReload').onclick=()=>{send({t:'reload'});log('슬레이브 새로고침 요청');setT('mSVer','새로고침 요청함…','dim');};
   $('mSnap').onclick=doSnap;
   $('mFit').onclick=()=>{send({t:'fitreq',id:Date.now()});$('mFit').disabled=true;setT('mFitHead','요청함…','dim');$('mFitMsgs').textContent='';log('자동 화면 맞추기 요청');};
@@ -283,7 +290,7 @@ function initControl(){
   if(qs.get('auto')||saved)startControl();
 }
 const send=d=>{if(C.conn&&C.conn.open){try{C.conn.send(d);return true}catch(e){}}return false;};
-function getCfg(){return{A:Math.max(1,Math.min(10,+$('cA').value||5)),wa:+$('cWa').value||2,wb:+$('cWb').value||4.5,toneMode:$('cTone').value,sens:$('cSens').value,manualN:$('cManual').checked?Math.max(0,Math.min(12,+$('cN').value||0)):null};}
+function getCfg(){return{A:Math.max(1,Math.min(10,+$('cA').value||5)),wa:+$('cWa').value||2,wb:+$('cWb').value||4.5,toneMode:$('cTone').value,sens:$('cSens').value,manualN:$('cManual').checked?Math.max(0,Math.min(12,+$('cN').value||0)):null,rec:$('cRec').checked,recq:$('cRecq').value};}
 function sendCfg(){const c=getCfg();lsS('dj_ccfg',JSON.stringify(c));send(Object.assign({t:'cfg'},c));renderBoard();}
 function setBanner(k,msg){if(msg)C.bn[k]=msg;else delete C.bn[k];$('banner').innerHTML=Object.keys(C.bn).map(x=>'<div class="banner"></div>').join('');Object.keys(C.bn).forEach((x,i)=>{$('banner').children[i].textContent=C.bn[x];});}
 async function startControl(){
@@ -349,7 +356,7 @@ function applyModeUI(){
   const up=!!(C.conn&&C.conn.open),m=C.mode,tr=!!C.trans;
   $('bPrep').disabled=!up||tr||m==='active';$('bCount').disabled=!up||tr||m==='count';$('bEnd').disabled=!up||tr||m!=='count';$('bStb').disabled=!up||tr||m==='standby';
   ['mFit','mSnap','mBench','mCamScan'].forEach(i=>$(i).disabled=!up||m!=='active'||tr);
-  $('mSnd').disabled=!up||m==='standby';$('mReload').disabled=!up||m==='count';
+  $('mSnd').disabled=!up||m==='standby';$('mRecSave').disabled=!up;$('mReload').disabled=!up||m==='count';
   ['eUndo','eAdd','eNext','pSet','eClear'].forEach(i=>$(i).disabled=!up);
   if(!up){return;}
   if(!tr)setT('mModeSt',MODETXT[m][0],'huge '+MODETXT[m][1]);
@@ -363,6 +370,9 @@ function renderNow(){
   else setT('mPlayers','선수 수: -','huge dim');
   const u=st?st.u:(b?b.sun:1),p=st?st.p:(b?b.ptr.p:0),s=st?st.s:(b?b.ptr.s:0),n=b?b.arrows.length:0;
   setT('mNext',(m==='count'||n>0)?`${u}순 · 다음 차례 ${p+1}번 선수 ${s+1}시 · 지금까지 발시 ${n}발`:'','big dim');
+  { const st2=C.st,rc=st2&&st2.rc,rp=st2&&st2.rp;
+    setT('mRec',rc&&rc.on?`🔴 원본 영상 녹화 중 · 구간 ${rc.seg} · ${rc.mb} MB (노트 10에 저장)`:(m==='count'&&!getCfg().rec?'녹화 꺼짐 (설정)':''),rc&&rc.on?'bad':'dim');
+    setT('mRp',rp&&rp.n?`${rp.n}개 · ${rp.mb} MB — 노트 10 화면을 두 번 빠르게 터치하면 목록에서 저장·삭제`:'없음',rp&&rp.n?'warn':'dim'); }
   setT('mJm',C.jm&&m==='count'?('판정 방식: '+(C.jm==='motion'?'자세(만작→발시) + 현소리':'현소리만 (자세로 선수를 찾지 못함)')+' · 관중: '+({A:'뻐꾸기 A형','A?':'뻐꾸기 A형+불명',any:'뻐꾸기 모두',off:'판정 안 함(발시만 셈)'}[getCfg().toneMode])):'','dim');
   // 선수별 상태 칩
   const N=m==='count'||m==='active'?(st&&st.sl&&st.sl.length?st.sl.length:(C.players||0)):0,box=$('chips');

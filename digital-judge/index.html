@@ -54,6 +54,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
   <video id="sVid" class="pv" playsinline muted autoplay></video>
   <div class="row" style="margin-top:8px"><select id="sSel"></select></div>
 </div>
+<div class="card"><h2>저장된 녹화 (원본 영상 + 소리, 인식 결과 없음)</h2><div id="rcInfo" class="dim">-</div><div id="rcList"></div></div>
 <div class="card"><h2>로그</h2><pre id="log"></pre></div>
 
 <script src="peerjs.min.js"></script>
@@ -61,7 +62,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.1';
+const VER=qs.get('fakever')||'1.2';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -338,14 +339,14 @@ const HOLD_MIN=1.5,GAP_TOL=0.3,WIN=2.2,FRAC=0.35,DIFF_MIN=10,POSE_DT=0.25,LOCK=6
 const J={N:0,A:5,wa:2.0,wb:4.5,toneMode:'A',sens:'n',manualN:null,
   slots:[],spacing:0.2,mode:'sound',arrows:[],aid:0,sun:1,ptr:{p:0,s:0},rev:0,
   running:false,winding:false,snd:[],pend:[],tones:[],ring:[],ringRate:16000,
-  prev:null,inferMs:[],lastTone:-1e9,cand:null,abuf:{rms:[],hf:[]},med:{rms:1e-4,hf:1e-4},aCount:0,lastSt:'',lastRelAny:-1e9,blkTxt:'',wdTok:0,rosterMsg:null,tk:0};
+  prev:null,inferMs:[],lastTone:-1e9,cand:null,abuf:{rms:[],hf:[]},med:{rms:1e-4,hf:1e-4},aCount:0,lastSt:'',rec:true,recBps:2500000,lastRelAny:-1e9,blkTxt:'',wdTok:0,rosterMsg:null,tk:0};
 const median=a=>{const b=a.slice().sort((x,y)=>x-y);return b.length?b[b.length>>1]:0;};
 const r1=x=>Math.round(x*10)/10;
 $('verT').textContent='v'+VER+' · 슬레이브(노트 10)';
 
 /* ---------- 설정·기록 보관 ---------- */
 (function(){const c=jparse(lsG('dj_cfg'),{});
-  if(c.A)J.A=c.A;if(c.wa)J.wa=c.wa;if(c.wb)J.wb=c.wb;if(c.toneMode)J.toneMode=c.toneMode;if(c.sens&&SENS[c.sens])J.sens=c.sens;if(c.manualN!=null)J.manualN=c.manualN;
+  if(c.A)J.A=c.A;if(c.wa)J.wa=c.wa;if(c.wb)J.wb=c.wb;if(c.toneMode)J.toneMode=c.toneMode;if(c.sens&&SENS[c.sens])J.sens=c.sens;if(c.manualN!=null)J.manualN=c.manualN;if(c.rec!=null)J.rec=!!c.rec;if(c.recBps)J.recBps=c.recBps;
   const b=jparse(lsG('dj_board'),null);
   if(b&&Array.isArray(b.arrows)){J.arrows=b.arrows.map(a=>Object.assign({},a,{tRel:null,tFlash:null,manual:a.res==='pending'?true:!!a.manual}));J.aid=b.aid||b.arrows.length;J.sun=b.sun||1;J.ptr=b.ptr||{p:0,s:0};J.N=b.N||0;}
 })();
@@ -355,7 +356,8 @@ function applyCfg(d){
   if(d.wa!=null)J.wa=+d.wa;if(d.wb!=null)J.wb=+d.wb;
   if(d.toneMode)J.toneMode=d.toneMode;if(d.sens&&SENS[d.sens])J.sens=d.sens;
   if('manualN' in d)J.manualN=(d.manualN==null||d.manualN==='')?null:Math.max(0,Math.min(12,+d.manualN|0));
-  lsS('dj_cfg',JSON.stringify({A:J.A,wa:J.wa,wb:J.wb,toneMode:J.toneMode,sens:J.sens,manualN:J.manualN}));
+  if('rec' in d)J.rec=!!d.rec;if(d.recq)J.recBps={h:4000000,m:2500000,l:1200000}[d.recq]||2500000;
+  lsS('dj_cfg',JSON.stringify({A:J.A,wa:J.wa,wb:J.wb,toneMode:J.toneMode,sens:J.sens,manualN:J.manualN,rec:J.rec,recBps:J.recBps}));
   if(!J.running&&J.manualN!=null&&S.mode!=='count')J.N=J.N||0;
   sendBoard();
 }
@@ -420,8 +422,11 @@ async function sendBat(){
 }
 setInterval(sendBat,10000);
 document.addEventListener('visibilitychange',()=>{log('화면 '+document.visibilityState);sendBat();});
-$('blk').addEventListener('pointerdown',()=>{const b=$('blk');b.classList.add('peek');clearTimeout(S.peekT);S.peekT=setTimeout(()=>{b.classList.remove('peek');},3000);});
-function setBlk(txt){if(S.mode==='active')return;const b=$('blk');b.style.display='flex';if(txt!==J.blkTxt){J.blkTxt=txt;b.textContent=txt;}}
+$('blk').addEventListener('pointerdown',()=>{const b=$('blk'),now=Date.now();
+  if(now-(S.lastTap||0)<450){S.blkOff=now+180000;b.style.display='none';S.lastTap=0;return;}   // 두 번 빠르게 터치: 3분간 화면 켜기(저장된 녹화 목록 등)
+  S.lastTap=now;b.classList.add('peek');b.textContent=(S.mode==='count'?J.blkTxt+'\n':'')+'보관 중인 녹화 '+RC.pend.n+'개 ('+RC.pend.mb+' MB) · 두 번 빠르게 터치하면 화면이 켜집니다';
+  clearTimeout(S.peekT);S.peekT=setTimeout(()=>{b.classList.remove('peek');b.textContent=J.blkTxt;},3000);});
+function setBlk(txt){if(S.mode==='active'||Date.now()<(S.blkOff||0))return;const b=$('blk');b.style.display='flex';if(txt!==J.blkTxt){J.blkTxt=txt;b.textContent=txt;}}
 
 /* ---------- 컨트롤 → 슬레이브 명령 ---------- */
 function onSData(c,d){
@@ -449,6 +454,7 @@ function onSData(c,d){
   }
   else if(d.t==='reload'){if(S.mode==='count')return;rlClr();setT('sSt','컨트롤 요청으로 새로고침 중…','warn');setTimeout(goReload,300);}
   else if(d.t==='lvlon'){S.lvlOn=!!d.on;}
+  else if(d.t==='recsave'){rcSaveAll();}
 }
 let modeChain=Promise.resolve();
 
@@ -456,7 +462,7 @@ let modeChain=Promise.resolve();
 function setModeTxt(){const t={standby:'⏸ 대기 (절전)',active:'▶ 준비',count:'🏹 발시 카운트'+(J.winding?' (마무리 중)':'')}[S.mode];setT('sMode',t,S.mode==='count'?'ok':(S.mode==='standby'?'warn':'ok'));}
 function enterStandby(initial){
   S.mode='standby';S.locked=false;monStop();J.running=false;J.winding=false;
-  sndOff();
+  rcStop();sndOff();
   try{if(S.stream)S.stream.getTracks().forEach(t=>t.stop());}catch(e){}S.stream=null;try{S.vid.srcObject=null}catch(e){}
   setT('sCam','꺼짐 (대기 모드)','dim');J.blkTxt='';const b=$('blk');b.style.display='flex';b.textContent='';setModeTxt();
 }
@@ -473,6 +479,7 @@ async function windDown(){            // 마지막 발시의 뻐꾸기를 기다
   if(tok!==J.wdTok)return;                      // 그 사이 새 카운트가 시작되었으면 건드리지 않는다
   if(J.toneMode!=='off')for(const a of J.arrows)if(a.res==='pending'&&!a.manual){a.res='miss';jlog('note',`불 ${a.p+1}번 선수 · ${a.sun}순 ${a.s+1}시 (종료 시 확정)`);}
   J.running=false;J.winding=false;J.pend=[];sendBoard();setModeTxt();
+  if(S.mode!=='count')await rcStop();
 }
 async function doMode(c,m,d){
   const t0=performance.now();d=d||{};
@@ -503,6 +510,7 @@ async function doMode(c,m,d){
       J.rosterMsg={t:'roster',n,votes:ps.votes,ex:(ps.ex||[]).length,xs:ps.map(p=>Math.round((p.x1+p.x2)*500)/1000),jm:J.mode,man:J.manualN!=null};c.send(J.rosterMsg);
       setT('sLast','🔒 인원 확정 '+n+'명 ('+(J.mode==='motion'?'자세+소리':'소리만')+')','ok');
       jlog('note',`발시 카운트 시작 — 선수 ${n}명 확정 · ${J.mode==='motion'?'자세+소리로 발시 판정':'소리만으로 발시 판정(자세로 선수를 못 찾음)'} · 현재 ${J.sun}순 ${J.ptr.p+1}번 ${J.ptr.s+1}시`);
+      if(RC.on)await rcStop();rcStart();
       sendBoard();sendSt(true);
     }catch(e){
       S.locked=false;J.running=false;if(S.mode==='count')S.mode='active';
@@ -825,9 +833,9 @@ setInterval(jtick,100);
 function sendSt(force){
   const c=S.conn;if(!c||!c.open)return;
   const sl=J.slots.map(s=>s.state==='만작'||s.state==='준비'?s.state+' '+(Math.round(s.holdDur*2)/2).toFixed(1):s.state);
-  const sig=[S.mode,J.N,S.locked,J.sun,J.ptr.p,J.ptr.s,J.winding,J.mode,sl.join('|')].join(',');
+  const sig=[S.mode,J.N,S.locked,J.sun,J.ptr.p,J.ptr.s,J.winding,J.mode,sl.join('|'),RC.on,RC.seg,Math.round(RC.bytes/5242880),RC.pend.n].join(',');
   if(!force&&sig===J.lastSt)return;J.lastSt=sig;
-  c.send({t:'st',m:S.mode,n:J.N,lk:S.locked,u:J.sun,p:J.ptr.p,s:J.ptr.s,wd:J.winding,sl,jm:J.mode});
+  c.send({t:'st',m:S.mode,n:J.N,lk:S.locked,u:J.sun,p:J.ptr.p,s:J.ptr.s,wd:J.winding,sl,jm:J.mode,rc:{on:RC.on,seg:RC.seg,mb:Math.round(RC.bytes/1048576)},rp:RC.pend});
 }
 setInterval(()=>sendSt(false),500);
 
@@ -841,6 +849,79 @@ function editOp(d){
   else if(d.op==='clear'){J.arrows=[];J.aid=0;J.sun=1;J.ptr={p:0,s:0};J.pend=[];for(const s of J.slots)s.lastRelT=null;jlog('note','기록을 모두 지웠습니다');}
   sendBoard();sendSt(true);
 }
+
+/* ---------- 원본 영상(+소리) 녹화: 인식 결과 없이 카메라 영상과 마이크 소리만 파일로 ---------- */
+const RC={on:false,rec:null,chunks:[],seg:0,t0:0,segT:null,mime:'',stream:null,sess:'',bytes:0,ending:false,pend:{n:0,mb:0},list:[],stopP:null};
+const RC_SEG_MS=(+qs.get('segms'))||180000;
+function rcMime(){const c=['video/mp4;codecs=avc1.42E01E,mp4a.40.2','video/webm;codecs=h264,opus','video/webm;codecs=vp8,opus','video/webm;codecs=vp9,opus','video/webm'];for(const m of c){try{if(MediaRecorder.isTypeSupported(m))return m}catch(e){}}return '';}
+let _idb=null;
+function idb(){return _idb?Promise.resolve(_idb):new Promise((ok,ng)=>{const r=indexedDB.open('dj_rec',1);r.onupgradeneeded=()=>r.result.createObjectStore('seg',{keyPath:'name'});r.onsuccess=()=>{_idb=r.result;ok(r.result)};r.onerror=()=>ng(r.error)});}
+async function idbPut(o){const d=await idb();return new Promise((ok,ng)=>{const tx=d.transaction('seg','readwrite');tx.objectStore('seg').put(o);tx.oncomplete=ok;tx.onerror=()=>ng(tx.error)});}
+async function idbAll(){const d=await idb();return new Promise((ok,ng)=>{const r=d.transaction('seg').objectStore('seg').getAll();r.onsuccess=()=>ok(r.result);r.onerror=()=>ng(r.error)});}
+async function idbDel(name){const d=await idb();return new Promise((ok,ng)=>{const tx=d.transaction('seg','readwrite');tx.objectStore('seg').delete(name);tx.oncomplete=ok;tx.onerror=()=>ng(tx.error)});}
+const p2=n=>String(n).padStart(2,'0');
+const stampName=d=>{const x=new Date(d);return `${x.getFullYear()}${p2(x.getMonth()+1)}${p2(x.getDate())}_${p2(x.getHours())}${p2(x.getMinutes())}${p2(x.getSeconds())}`;};
+function rcStart(){
+  if(!J.rec||RC.on)return;
+  if(typeof MediaRecorder==='undefined'){jlog('note','이 브라우저는 영상 녹화를 지원하지 않습니다');return;}
+  const vt=S.stream&&S.stream.getVideoTracks()[0];if(!vt)return;
+  const tr=[vt];if(AU.st){const at=AU.st.getAudioTracks()[0];if(at)tr.push(at);}
+  RC.stream=new MediaStream(tr);RC.mime=rcMime();RC.on=true;RC.ending=false;RC.seg=0;RC.sess=stampName(Date.now());RC.bytes=0;
+  rcNewSeg();jlog('note','원본 영상 녹화 시작 ('+(RC.mime||'기본 형식')+')');
+}
+function rcNewSeg(){
+  const opt={videoBitsPerSecond:J.recBps||2500000,audioBitsPerSecond:128000};if(RC.mime)opt.mimeType=RC.mime;
+  let r;try{r=new MediaRecorder(RC.stream,opt);}catch(e){jlog('note','녹화 시작 실패: '+((e&&e.message)||e));RC.on=false;return;}
+  RC.rec=r;RC.chunks=[];RC.seg++;RC.t0=Date.now();const segNo=RC.seg,t0=RC.t0,mime=RC.mime;
+  r.ondataavailable=e=>{if(e.data&&e.data.size){RC.chunks.push(e.data);RC.bytes+=e.data.size;}};
+  r.onstop=async()=>{clearTimeout(RC.segT);const chunks=RC.chunks;RC.chunks=[];
+    if(RC.on&&!RC.ending)rcNewSeg();                     // 다음 구간을 바로 이어서 시작
+    await rcFinish(chunks,segNo,t0,mime);
+    if(RC.ending&&RC.stopP){RC.on=false;RC.stopP();RC.stopP=null;}};
+  r.onerror=e=>jlog('note','녹화 오류: '+((e&&e.error&&e.error.message)||'알 수 없음'));
+  r.start(2000);
+  RC.segT=setTimeout(()=>{if(RC.on&&r.state==='recording')r.stop();},RC_SEG_MS);
+}
+async function rcFinish(chunks,seg,t0,mime){
+  if(!chunks.length)return;
+  const ext=/mp4/.test(mime)?'mp4':'webm';
+  const blob=new Blob(chunks,{type:(mime||'video/webm').split(';')[0]});
+  const name=`dj_${stampName(t0)}_seg${p2(seg)}.${ext}`;
+  try{await idbPut({name,blob,size:blob.size,ts:t0,dur:Math.round((Date.now()-t0)/1000)});}
+  catch(e){jlog('note','녹화 구간 보관 실패(저장 공간 부족?): '+((e&&e.message)||e));}
+  await rcRefresh();
+  rcDownload(name,true);
+}
+function rcStop(){
+  if(!RC.on)return Promise.resolve();
+  RC.ending=true;
+  return new Promise(res=>{RC.stopP=res;try{if(RC.rec&&RC.rec.state!=='inactive')RC.rec.stop();else{RC.on=false;res();}}catch(e){RC.on=false;res();}
+    setTimeout(()=>{if(RC.stopP){RC.on=false;RC.stopP=null;res();}},8000);});
+}
+async function rcDownload(name,auto){
+  try{const all=await idbAll();const o=all.find(x=>x.name===name);if(!o)return;
+    const a=document.createElement('a');a.href=URL.createObjectURL(o.blob);a.download=name;a.style.display='none';document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},60000);
+    if(!auto)log('저장 요청: '+name);
+  }catch(e){log('저장 실패 '+((e&&e.message)||e));}
+}
+async function rcRefresh(){
+  try{const all=await idbAll();all.sort((a,b)=>a.ts-b.ts);RC.list=all.map(o=>({name:o.name,size:o.size,ts:o.ts,dur:o.dur}));
+    RC.pend={n:all.length,mb:Math.round(all.reduce((s,o)=>s+o.size,0)/1048576)};}
+  catch(e){RC.list=[];}
+  rcRender();sendSt(true);
+}
+function rcRender(){
+  const box=$('rcList');if(!box)return;box.innerHTML='';
+  setT('rcInfo',RC.list.length?`보관 중 ${RC.pend.n}개 · ${RC.pend.mb} MB — ‘저장’을 누르면 이 폰의 다운로드 폴더로 저장됩니다. 확인한 뒤 ‘삭제’로 지우세요.`:'보관 중인 녹화 없음 (발시 카운트 중에 자동으로 녹화됩니다)','dim');
+  RC.list.forEach(o=>{const row=document.createElement('div');row.className='row';row.style.margin='4px 0';
+    const t=document.createElement('div');t.style.cssText='flex:2;font-size:12px;word-break:break-all';t.textContent=`${o.name} · ${Math.round(o.size/1048576*10)/10} MB · ${o.dur}초`;
+    const b1=document.createElement('button');b1.className='sub';b1.style.cssText='min-height:36px;margin:0';b1.textContent='저장';b1.onclick=()=>rcDownload(o.name,false);
+    const b2=document.createElement('button');b2.className='sub';b2.style.cssText='min-height:36px;margin:0';b2.textContent='삭제';b2.onclick=async()=>{if(b2.dataset.s!=='1'){b2.dataset.s='1';b2.textContent='확인';setTimeout(()=>{b2.dataset.s='';b2.textContent='삭제'},3000);return;}await idbDel(o.name);rcRefresh();};
+    row.appendChild(t);row.appendChild(b1);row.appendChild(b2);box.appendChild(row);});
+}
+async function rcSaveAll(){const all=await idbAll();for(const o of all){await rcDownload(o.name,false);await sleep(600);}}
+rcRefresh();
 initSlave();
 
 </script>
