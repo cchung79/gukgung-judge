@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>디지털 저지 컨트롤</title>
+<style>
+:root{--bg:#10151c;--card:#1a222d;--line:#2b3644;--tx:#e8edf3;--dim:#93a1b3;--ok:#3ecf8e;--warn:#f5b84b;--bad:#ff6b6b;--ac:#4aa3ff}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;padding:12px 14px calc(24px + env(safe-area-inset-bottom));background:var(--bg);color:var(--tx);
+  font:14px/1.5 "Nanum Gothic","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;max-width:640px;margin:0 auto}
+h1{font-size:18px;margin:6px 0 10px}h1 .ver{font-size:12px;color:var(--dim);font-weight:400}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}
+.card h2{font-size:14px;margin:0 0 8px;color:var(--dim);font-weight:700}
+button{font:inherit;font-weight:700;color:#fff;background:var(--ac);border:0;border-radius:10px;min-height:48px;padding:0 16px;width:100%;margin:6px 0}
+button.sub{background:#344256}button.go{background:#1e9e66}button.stop{background:#c0504d}button:disabled{opacity:.4}
+button.sm{min-height:38px;font-size:13px;padding:0 10px}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
+input,select{font:inherit;color:var(--tx);background:#0d1218;border:1px solid var(--line);border-radius:10px;min-height:44px;padding:0 10px;width:100%}
+input[type=checkbox]{width:auto;min-height:0;margin-right:6px}
+.code{font-size:34px;letter-spacing:6px;text-align:center;font-weight:800}
+table{width:100%;border-collapse:collapse}td,th{padding:5px 4px;border-top:1px solid var(--line);vertical-align:top}
+.kv td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:10px}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.dim{color:var(--dim)}
+.big{font-size:16px;font-weight:700}.huge{font-size:22px;font-weight:800}
+img.shot{width:100%;border-radius:8px;background:#000;display:block;margin-top:6px}
+pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,monospace;color:var(--dim);margin:0;max-height:220px;overflow:auto}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{flex:1 1 70px;min-width:70px;border:2px solid var(--line);border-radius:10px;padding:5px 6px;text-align:center;background:#0d1218;font-size:12px}
+.chip b{display:block;font-size:15px}.chip.cur{border-color:var(--ac)}
+.chip.s-준비{background:#3a3a14}.chip.s-만작{background:#4a3a10}.chip.s-발시{background:#4a1c1c}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.tabs button{width:auto;min-height:34px;font-size:13px;padding:0 12px;margin:0;background:#2a3544}.tabs button.on{background:var(--ac)}
+.bd th{color:var(--dim);font-weight:400;font-size:12px}.bd td,.bd th{text-align:center;border:1px solid var(--line);padding:6px 2px}
+.bd td.c{font-size:18px;font-weight:800;min-width:36px}.bd td.cur{outline:2px solid var(--ac);outline-offset:-2px}
+.bd .h{color:var(--ok)}.bd .m{color:var(--bad)}.bd .p{color:var(--dim)}
+.bd sup{font-size:10px;color:var(--warn)}
+.log div{padding:2px 0;border-top:1px solid var(--line);font-size:13px}
+.log .hit{color:var(--ok)}.log .rel{color:var(--tx)}.log .note{color:var(--dim)}
+details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;padding:8px 0}
+.banner{background:#4a1c1c;border:1px solid var(--bad);border-radius:10px;padding:8px 10px;margin:8px 0}
+</style>
+</head>
+<body>
+<h1>디지털 저지 컨트롤 <span class="ver" id="verT"></span></h1>
+
+<div class="card" id="startBox">
+  <h2>연결 코드 (노트 10의 ‘디지털 저지’와 같은 4자리)</h2>
+  <div class="row"><input id="mCode" class="code" inputmode="numeric" maxlength="4"><button id="mStart" style="margin:0">시작</button></div>
+  <div class="dim" style="margin-top:6px">‘시작’ 후 노트 10(디지털 저지)에서 같은 코드를 입력하세요. 코드는 기억되고, 이 페이지를 새로고침하면 노트 10도 자동으로 최신 버전으로 따라옵니다.</div>
+</div>
+
+<div id="banner"></div>
+
+<div class="card">
+  <h2>디지털 저지 명령</h2>
+  <div id="mModeSt" class="huge dim">연결 전</div>
+  <div class="row"><button id="bPrep" class="sub" disabled>▶ 준비<br><span style="font-weight:400;font-size:12px">카메라 켜고 선수 수 감시</span></button>
+    <button id="bCount" class="go" disabled>🏹 발시 카운트 시작<br><span style="font-weight:400;font-size:12px">인원 확정 후 판정</span></button></div>
+  <div class="row"><button id="bEnd" class="stop" disabled>⏹ 카운트 종료</button>
+    <button id="bStb" class="sub" disabled>⏸ 대기 (절전)</button></div>
+  <div id="startChoice" hidden class="card" style="margin:6px 0;background:#222d3b">
+    <div class="big">이전 기록이 남아 있습니다 (<span id="scN"></span>발)</div>
+    <div class="row"><button id="scCont" class="go">이어서 계속</button><button id="scNew" class="stop">기록 지우고 새로 시작</button></div>
+    <button id="scCancel" class="sub">취소</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>현재 상황</h2>
+  <div id="mPlayers" class="huge dim">선수 수: -</div>
+  <div id="mNext" class="big dim"></div>
+  <div id="mJm" class="dim"></div>
+  <div class="chips" id="chips"></div>
+  <img id="nowImg" class="shot" alt="" hidden>
+  <div id="nowImgT" class="dim" hidden>↑ 준비 모드에서만 오는 확인 사진입니다 (발시 카운트 중에는 사진·영상을 보내지 않고 번호·결과만 받습니다)</div>
+</div>
+
+<div class="card">
+  <h2>순별 발시·관중 기록</h2>
+  <div class="tabs" id="tabs"></div>
+  <div style="overflow-x:auto"><table class="bd" id="bd"></table></div>
+  <div class="dim" id="bdNote" style="margin-top:4px">中 = 관중, ／ = 불, … = 판정 중, ● = 발시만 셈(관중 판정 꺼짐). 칸을 누르면 관중→불→판정 전 순으로 수정합니다. ⚠ = 확인 필요.</div>
+  <table class="kv" id="sumT" style="margin-top:8px"></table>
+  <div class="row">
+    <button id="eUndo" class="sub sm">↩ 마지막 발시 취소</button>
+    <button id="eAdd" class="sub sm">＋ 발시 직접 추가</button>
+    <button id="eNext" class="sub sm">다음 순으로</button>
+  </div>
+  <details><summary>차례(순·선수·시) 직접 고치기 / 기록 지우기</summary>
+    <div class="row"><input id="pU" type="number" min="1" placeholder="순"><input id="pP" type="number" min="1" placeholder="선수"><input id="pS" type="number" min="1" placeholder="시"><button id="pSet" class="sub sm" style="margin:0">적용</button></div>
+    <button id="eClear" class="stop sm">기록 모두 지우기</button>
+  </details>
+</div>
+
+<div class="card">
+  <h2>소리 감지 확인 (노트 10 마이크)</h2>
+  <button id="mSnd" class="sub sm" disabled>소리 모니터 켜기</button>
+  <div style="height:14px;background:#0c1118;border-radius:7px;overflow:hidden;margin-top:6px"><div id="mLvlB" style="height:100%;width:0;background:var(--ok)"></div></div>
+  <div id="mLvlT" class="dim" style="margin-top:4px">-</div>
+  <table class="kv" id="mSndT"></table>
+  <div class="dim">현소리 후보·뻐꾸기(A/B/불명)가 들릴 때마다 한 줄씩 표시됩니다. 현장에서 A가 안 나오고 ‘불명’이 나오면 설정의 ‘뻐꾸기 판정’을 바꿔 보세요.</div>
+</div>
+
+<div class="card log"><h2>이벤트</h2><div id="evLog"></div></div>
+
+<details class="card"><summary>설정</summary>
+  <div class="row"><span class="dim">1순 당 시수(한 선수)</span><input id="cA" type="number" min="1" max="10" value="5"></div>
+  <div class="row"><span class="dim">관중 판정 시간창(발시 후 초)</span><input id="cWa" type="number" step="0.1" value="2.0"><input id="cWb" type="number" step="0.1" value="4.5"></div>
+  <div class="row"><span class="dim">뻐꾸기 판정</span><select id="cTone"><option value="A">A형(우리 관)만 관중</option><option value="A?">A형 + 불명도 관중</option><option value="any">종류 불문 모두 관중</option><option value="off">관중 판정 끔 (발시만 셈)</option></select></div>
+  <div class="row"><span class="dim">현소리 감도</span><select id="cSens"><option value="n">보통</option><option value="h">민감</option><option value="l">둔감</option></select></div>
+  <div class="row"><label class="dim"><input id="cManual" type="checkbox">선수 수 직접 지정</label><input id="cN" type="number" min="0" max="12" value="4"></div>
+  <div class="dim">설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다. ‘직접 지정’은 사람 인식이 안 될 때용 — 선수 수를 지정하고 자세 인식 수와 다르면 소리만으로 발시를 셉니다. 카운트 시작 전에 정하세요.</div>
+</details>
+
+<details class="card"><summary>설치·점검 도구 (화면 맞추기 · 사진 · 줌 · 카메라 비교 · 속도)</summary>
+  <h2>① 화면 맞추기 (준비 모드)</h2>
+  <button id="mFit" disabled>화면 맞추기 (1회 정밀 검사)</button>
+  <div id="mFitHead" class="big dim">-</div>
+  <div id="mFitMsgs" style="white-space:pre-line;margin:4px 0"></div>
+  <img id="mFitImg" class="shot" alt="" hidden>
+  <div class="dim">슬레이브가 전체 화면에서 선수를 찾아 잘림·키 크기를 검사하고 모두 들어오는 확대 영역(청록 점선)을 정합니다. 설치 때 한 번 누르면 됩니다.</div>
+  <label style="display:block;margin:6px 0"><input type="checkbox" id="mPhoto">준비 중 확인 사진 받기</label>
+  <h2 style="margin-top:14px">② 사진 요청 · 줌 원격 조작</h2>
+  <div class="row"><select id="mSize"><option value="1920">큰 사진(1920px)</option><option value="1280">중간(1280px)</option><option value="640">작게(640px)</option></select></div>
+  <button id="mSnap" class="sub" disabled>노트 10에 사진 요청</button>
+  <div id="mPhotoInfo" class="dim">-</div>
+  <img id="mImg" class="shot" alt="" hidden>
+  <div id="mZInfo" class="dim" style="margin-top:8px">슬레이브 연결 후 표시</div>
+  <input id="mZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0">
+  <div class="row" id="mZBtn"></div>
+  <label class="dim" style="display:block;margin:6px 0"><input id="mAuto" type="checkbox" checked>줌을 바꾸고 1.2초 가만히 있으면 사진 자동 요청</label>
+  <h2 style="margin-top:14px">③ 카메라 전체 비교 (ELP 줌 카메라 확인용)</h2>
+  <button id="mCamScan" class="sub" disabled>슬레이브의 모든 카메라로 촬영해 비교</button>
+  <div id="mCamInfo" class="dim">브라우저가 열어 주는 카메라가 전부 나타납니다. 외장(USB) 카메라가 보이는지 확인하세요.</div>
+  <div id="mCamList"></div>
+  <h2 style="margin-top:14px">④ 자세 인식 속도</h2>
+  <button id="mBench" class="sub" disabled>슬레이브에서 자세 모델 속도 측정</button>
+  <div id="mBenchInfo" class="dim">기준: 중앙값 500 ms 이하 사용 가능, 300 ms 이하 여유.</div>
+</details>
+
+<details class="card"><summary>연결 정보 · 기록 내보내기</summary>
+  <table class="kv">
+    <tr><td>연결</td><td id="mSt" class="dim">시작 전</td></tr>
+    <tr><td>연결 경로</td><td id="mPath" class="dim">-</td></tr>
+    <tr><td>지연(RTT)</td><td id="mRtt" class="dim">-</td></tr>
+    <tr><td>시계 차</td><td id="mOff" class="dim">-</td></tr>
+    <tr><td>발시 알림 지연</td><td id="mEvLat" class="dim">-</td></tr>
+    <tr><td>슬레이브 카메라</td><td id="mCam" class="dim">-</td></tr>
+    <tr><td>슬레이브 마이크</td><td id="mSMic" class="dim">-</td></tr>
+    <tr><td>슬레이브 배터리</td><td id="mBat" class="dim">-</td></tr>
+    <tr><td>슬레이브 신호</td><td id="mHb" class="dim">-</td></tr>
+    <tr><td>슬레이브 버전</td><td id="mSVer" class="dim">-</td></tr>
+    <tr><td>슬레이브 전송량</td><td id="mTx" class="dim" style="white-space:pre-line">-</td></tr>
+    <tr><td>화면 유지(이 폰)</td><td id="mWake" class="dim">-</td></tr>
+  </table>
+  <button id="mReload" class="sub" disabled>슬레이브 새로고침 (최신 버전으로)</button>
+  <div class="row"><button id="mCopyJ" class="sub">기록 복사 (JSON)</button><button id="mCopyC" class="sub">기록 복사 (CSV)</button></div>
+</details>
+
+<div class="card"><h2>로그</h2><pre id="log"></pre></div>
+
+<script src="peerjs.min.js"></script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const qs=new URLSearchParams(location.search);
+const VER=qs.get('fakever')||'1.0';
+const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
+const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
+const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
+const rlClr=()=>{try{sessionStorage.removeItem('dj_rl')}catch(e){}};
+const T0=(performance.timeOrigin||(Date.now()-performance.now()));
+const nowE=()=>T0+performance.now();           // 장치 시계(에포크 ms, 소수 포함)
+const nowS=()=>performance.now()/1000;         // 판정용 시계(초)
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const lsG=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const lsS=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const jparse=(s,d)=>{try{const v=JSON.parse(s);return v==null?d:v}catch(e){return d}};
+const L=[];
+function log(s){const t=new Date().toTimeString().slice(0,8);L.push(t+' '+s);if(L.length>120)L.shift();const e=$('log');if(e)e.textContent=L.slice().reverse().join('\n');}
+function setT(id,txt,cls){const e=$(id);if(!e)return;e.textContent=txt;e.className=cls||'';}
+const f1=x=>(Math.round(x*10)/10).toFixed(1);
+const PREFIX='dj-';
+const hms=ms=>new Date(ms).toTimeString().slice(0,8);
+/* 캐시를 피해 새 주소로 이동 — 코드·자동시작 유지 */
+function goReload(){
+  const u=new URL(location.href);u.searchParams.set('_',Date.now());u.searchParams.delete('fakever');u.searchParams.set('auto','1');
+  const code=CODE();if(/^\d{4}$/.test(code||''))u.searchParams.set('code',code);
+  location.replace(u.toString());
+}
+function tryUpdate(newV,say){
+  if(rlGet()===newV){say&&say(`⚠ ${newV} 로 갱신했는데도 이 폰은 ${VER} — 캐시 문제일 수 있음 (주소창에서 새로고침)`,'warn');return false;}
+  rlSet(newV);say&&say(`새 버전 ${newV} 로 갱신 중…`,'warn');setTimeout(goReload,400);return true;
+}
+async function checkLatest(say){
+  try{const r=await fetch(location.pathname+'?_='+Date.now(),{cache:'no-store'});const t=await r.text();
+    const m=t.match(new RegExp('const V'+"ER=qs.get\\('fakever'\\)\\|\\|'([^']+)'"));
+    if(m&&cmpVer(m[1],VER)>0)return tryUpdate(m[1],say);}catch(e){}
+  return false;
+}
+function mkPeer(id){
+  const o={debug:0};
+  const ps=qs.get('ps');                      // 시험용: ?ps=host:port (자체 시그널링 서버)
+  if(ps){const a=ps.split(':');o.host=a[0];o.port=+a[1]||9000;o.path='/';o.secure=false;o.config={iceServers:[]};}
+  return new Peer(id,o);
+}
+let wl=null;
+async function keepAwake(setter){
+  try{
+    if(!('wakeLock' in navigator)){setter('미지원(자동잠금을 끄세요)','warn');return;}
+    wl=await navigator.wakeLock.request('screen');setter('켜짐','ok');
+    wl.addEventListener('release',()=>setter('해제됨(자동잠금을 끄세요)','warn'));
+    document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'&&(!wl||wl.released)){try{wl=await navigator.wakeLock.request('screen');setter('켜짐','ok')}catch(e){}}});
+  }catch(e){setter('실패: '+e.name+' (자동잠금을 끄세요)','warn');}
+}
+async function pathInfo(conn){
+  try{
+    const pc=conn.peerConnection;const st=await pc.getStats();const by={};let pair=null;
+    st.forEach(r=>{by[r.id]=r});
+    st.forEach(r=>{if(r.type==='transport'&&r.selectedCandidatePairId)pair=by[r.selectedCandidatePairId]});
+    if(!pair)st.forEach(r=>{if(r.type==='candidate-pair'&&(r.nominated||r.selected)&&r.state==='succeeded')pair=r});
+    if(!pair)return null;
+    const l=by[pair.localCandidateId],r=by[pair.remoteCandidateId];if(!l||!r)return null;
+    const ad=c=>(c.address||c.ip||'?')+':'+c.port;
+    return {lt:l.candidateType,rt:r.candidateType,la:ad(l),ra:ad(r),proto:l.protocol};
+  }catch(e){return null;}
+}
+function pathText(p){
+  if(!p)return ['확인 불가(브라우저가 통계를 주지 않음)','warn'];
+  const s=`${p.lt}↔${p.rt} · ${p.la} ↔ ${p.ra} (${p.proto})`;
+  if(p.lt==='relay'||p.rt==='relay')return ['⚠ 릴레이 경유 — 인터넷 서버를 거침. 현장 LAN 직결 아님\n'+s,'warn'];
+  if(p.lt==='host'&&p.rt==='host')return ['✅ LAN 직결 (host↔host)\n'+s,'ok'];
+  return ['직접 연결(공인망 주소 경유)\n'+s,'ok'];
+}
+async function copyText(t){
+  try{await navigator.clipboard.writeText(t);log('복사됨');}
+  catch(e){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');log('복사됨')}catch(x){log('복사 실패')}ta.remove();}
+}
+const fmtB=b=>b<1024?b+' B':(b<1048576?Math.round(b/102.4)/10+' KB':Math.round(b/104857.6)/10+' MB');
+
+/* ================= 디지털 저지 컨트롤 (마스터, 아이폰) =================
+   마이크·카메라는 쓰지 않는다. 노트 10의 디지털 저지에 명령(준비·발시 카운트 시작·종료·대기)을 내리고,
+   선수 수·차례·발시·관중 결과 번호만 받아 보여 준다. */
+const CODE=()=>$('mCode').value.trim();
+const C={peer:null,conn:null,mode:'standby',want:null,trans:null,board:null,st:null,players:null,locked:false,off:null,offErr:null,rtt:null,pr:[],snap:null,rx:null,cam:null,
+  sel:null,selAuto:true,lg:[],snd:[],evN:0,gaps:[],lastBatAt:0,hello:null,jm:null,bn:{},lvlOn:false,lastTx:null,batH:[],startTries:0,fit:null};
+$('verT').textContent='v'+VER+' · 마스터(아이폰)';
+const RESN={hit:'中',miss:'／',pending:''};
+
+/* ---------- 시작 · 연결 ---------- */
+function initControl(){
+  const saved=lsG('dj_ccode');
+  $('mCode').value=qs.get('code')||saved||String(1000+Math.floor(Math.random()*9000));
+  const cf=jparse(lsG('dj_ccfg'),{});
+  if(cf.A)$('cA').value=cf.A;if(cf.wa)$('cWa').value=cf.wa;if(cf.wb)$('cWb').value=cf.wb;if(cf.toneMode)$('cTone').value=cf.toneMode;if(cf.sens)$('cSens').value=cf.sens;
+  if(cf.manualN!=null){$('cManual').checked=true;$('cN').value=cf.manualN;}
+  ['cA','cWa','cWb','cTone','cSens','cManual','cN'].forEach(i=>$(i).onchange=sendCfg);
+  $('mStart').onclick=startControl;
+  $('bPrep').onclick=()=>cmd('active','준비 중… (노트 10 카메라 켜는 중)');
+  $('bCount').onclick=()=>{const n=C.board?C.board.arrows.length:0;if(n>0){$('scN').textContent=n;$('startChoice').hidden=false;}else startCount(false);};
+  $('scCont').onclick=()=>{$('startChoice').hidden=true;startCount(false);};
+  $('scNew').onclick=()=>{$('startChoice').hidden=true;startCount(true);};
+  $('scCancel').onclick=()=>{$('startChoice').hidden=true;};
+  $('bEnd').onclick=()=>cmd('active','카운트 종료 중… (마지막 발시의 관중 소리를 기다리는 중)');
+  $('bStb').onclick=()=>cmd('standby','대기로 전환 중…');
+  $('eUndo').onclick=()=>edit({op:'undo'});$('eAdd').onclick=()=>edit({op:'add'});$('eNext').onclick=()=>edit({op:'nextsun'});
+  $('pSet').onclick=()=>edit({op:'ptr',u:+$('pU').value||null,p:$('pP').value?(+$('pP').value-1):null,s:$('pS').value?(+$('pS').value-1):null});
+  let clr=0;$('eClear').onclick=()=>{if(Date.now()-clr>4000){clr=Date.now();$('eClear').textContent='정말 지우려면 한 번 더 누르세요';setTimeout(()=>{$('eClear').textContent='기록 모두 지우기'},4000);return;}clr=0;$('eClear').textContent='기록 모두 지우기';edit({op:'clear'});};
+  $('bd').onclick=e=>{const td=e.target.closest('td[data-id]');if(!td||!C.board)return;const id=+td.dataset.id,a=C.board.arrows.find(x=>x.id===id);if(!a)return;
+    edit({op:'res',id,r:a.r==='hit'?'miss':(a.r==='miss'?'pending':'hit')});};
+  $('mSnd').onclick=()=>{C.lvlOn=!C.lvlOn;send({t:'lvlon',on:C.lvlOn});$('mSnd').textContent=C.lvlOn?'소리 모니터 끄기':'소리 모니터 켜기';if(!C.lvlOn)setT('mLvlT','-','dim');};
+  $('mReload').onclick=()=>{send({t:'reload'});log('슬레이브 새로고침 요청');setT('mSVer','새로고침 요청함…','dim');};
+  $('mSnap').onclick=doSnap;
+  $('mFit').onclick=()=>{send({t:'fitreq',id:Date.now()});$('mFit').disabled=true;setT('mFitHead','요청함…','dim');$('mFitMsgs').textContent='';log('자동 화면 맞추기 요청');};
+  $('mBench').onclick=()=>{send({t:'benchreq'});$('mBench').disabled=true;setT('mBenchInfo','측정 요청함…','dim');};
+  $('mCamScan').onclick=()=>{send({t:'camscan',id:Date.now()});$('mCamScan').disabled=true;$('mCamList').innerHTML='';setT('mCamInfo','카메라를 하나씩 열어 촬영 중…(수 초 걸림)','dim');};
+  $('mAuto').checked=lsG('dj_auto')!=='0';$('mAuto').onchange=()=>{lsS('dj_auto',$('mAuto').checked?'1':'0');if(!$('mAuto').checked)clearTimeout(C.autoT);};
+  $('mPhoto').checked=lsG('dj_photo')!=='0';$('mPhoto').onchange=()=>{lsS('dj_photo',$('mPhoto').checked?'1':'0');send({t:'photocfg',on:$('mPhoto').checked});};
+  $('mCopyJ').onclick=()=>copyText(exportJSON());$('mCopyC').onclick=()=>copyText(exportCSV());
+  const cb=jparse(lsG('dj_cbd'),null);if(cb&&cb.arrows){C.board=cb;}
+  renderAll();applyModeUI();
+  if(qs.get('auto')||saved)startControl();
+}
+const send=d=>{if(C.conn&&C.conn.open){try{C.conn.send(d);return true}catch(e){}}return false;};
+function getCfg(){return{A:Math.max(1,Math.min(10,+$('cA').value||5)),wa:+$('cWa').value||2,wb:+$('cWb').value||4.5,toneMode:$('cTone').value,sens:$('cSens').value,manualN:$('cManual').checked?Math.max(0,Math.min(12,+$('cN').value||0)):null};}
+function sendCfg(){const c=getCfg();lsS('dj_ccfg',JSON.stringify(c));send(Object.assign({t:'cfg'},c));renderBoard();}
+function setBanner(k,msg){if(msg)C.bn[k]=msg;else delete C.bn[k];$('banner').innerHTML=Object.keys(C.bn).map(x=>'<div class="banner"></div>').join('');Object.keys(C.bn).forEach((x,i)=>{$('banner').children[i].textContent=C.bn[x];});}
+async function startControl(){
+  const code=CODE();if(!/^\d{4}$/.test(code)){setT('mSt','코드는 숫자 4자리','bad');$('startBox').hidden=false;return;}
+  lsS('dj_ccode',code);$('mStart').disabled=true;$('mCode').disabled=true;$('startBox').hidden=true;
+  checkLatest((x,k)=>setT('mSt',x,k));setInterval(()=>{if(C.mode!=='count')checkLatest((x,k)=>setT('mSt',x,k))},600000);
+  keepAwake((t,c)=>setT('mWake',t,c));
+  setT('mSt','시그널링 서버 연결 중…','dim');setT('mModeSt','연결 중…','huge dim');
+  const peer=C.peer=mkPeer(PREFIX+code);
+  peer.on('open',()=>{C.startTries=0;setT('mSt','대기 중 — 노트 10의 디지털 저지에서 코드 '+code+' 입력','warn');setT('mModeSt','노트 10 연결 대기 (코드 '+code+')','huge warn');log('컨트롤 대기 시작 '+code);});
+  peer.on('connection',c=>{
+    if(C.conn){try{C.conn.close()}catch(e){}}
+    C.conn=c;log('슬레이브 접속 시도');
+    c.on('open',()=>onOpen(c));
+    c.on('data',d=>onData(c,d));
+    c.on('close',()=>{if(C.conn===c){setT('mSt','연결 끊김 — 슬레이브 재접속 대기','bad');setT('mModeSt','노트 10 연결 끊김 — 재접속 대기','huge bad');applyModeUI();log('연결 끊김');}});
+    c.on('error',e=>log('conn 오류 '+e));
+  });
+  peer.on('disconnected',()=>{log('시그널링 끊김 → 재연결');try{peer.reconnect()}catch(e){}});
+  peer.on('error',e=>{
+    log('peer 오류 '+e.type);
+    if(e.type==='unavailable-id'){                      // 새로고침 직후 옛 접속이 서버에 남아 있는 경우: 잠시 후 자동 재시도
+      try{peer.destroy()}catch(x){}
+      if(++C.startTries<=8){setT('mSt','이전 접속이 정리되길 기다리는 중… ('+C.startTries+'/8)','warn');setTimeout(()=>{$('mStart').disabled=false;$('mCode').disabled=false;startControl();},2500);}
+      else{setT('mSt','이 코드는 이미 사용 중 — 다른 코드로 바꾸세요','bad');$('mStart').disabled=false;$('mCode').disabled=false;$('startBox').hidden=false;}}
+    else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed')setT('mSt','시그널링 서버에 못 닿음 — 인터넷(핫스팟 데이터) 확인','bad');
+    else setT('mSt','오류: '+e.type,'bad');
+  });
+}
+async function onOpen(c){
+  setT('mSt','✅ 연결됨','ok');log('데이터 채널 열림');
+  c.send({t:'ver',v:VER});sendCfg();c.send({t:'photocfg',on:$('mPhoto').checked});if(C.lvlOn)c.send({t:'lvlon',on:true});
+  applyModeUI();runPings(20);
+  await sleep(600);const p=pathText(await pathInfo(c));setT('mPath',p[0],p[1]);
+}
+function runPings(n){
+  if(!C.conn||!C.conn.open)return;C.pr=[];setT('mRtt','측정 중…','dim');
+  let i=0;const step=()=>{if(i>=n||!C.conn||!C.conn.open){setTimeout(finishPings,700);return;}
+    C.conn.send({t:'ping',i,m0:nowE()});i++;setTimeout(step,120);};step();
+}
+function finishPings(){
+  const a=C.pr.slice();if(!a.length){setT('mRtt','응답 없음','bad');return;}
+  const r=a.map(x=>x.rtt).sort((x,y)=>x-y);const med=r[r.length>>1],mn=r[0],mx=r[r.length-1],p90=r[Math.floor(r.length*0.9)];
+  const best=a.slice().sort((x,y)=>x.rtt-y.rtt).slice(0,Math.max(3,Math.ceil(a.length/4)));
+  const offs=best.map(x=>x.off).sort((x,y)=>x-y);C.off=offs[offs.length>>1];C.offErr=best[0].rtt/2;C.rtt={med,mn,mx,p90,n:a.length};
+  setT('mRtt',`중앙 ${f1(med)} · 최소 ${f1(mn)} · 90% ${f1(p90)} · 최대 ${f1(mx)} ms (${a.length}회)`,p90<150?'ok':'warn');
+  setT('mOff',`슬레이브 시계가 ${f1(Math.abs(C.off))} ms ${C.off>=0?'빠름':'느림'} (±${f1(C.offErr)} ms)`,Math.abs(C.off)<300?'ok':'warn');
+}
+
+/* ---------- 명령 ---------- */
+function cmd(m,txt){
+  if(!send({t:'mode',m}))return;
+  C.want=m;C.trans=m;setT('mModeSt',txt,'huge dim');setBanner('mode',null);applyModeUI();log('명령: '+m);
+}
+function startCount(reset){
+  if(!send({t:'mode',m:'count',reset:!!reset}))return;
+  C.want='count';C.trans='count';setBanner('mode',null);
+  setT('mModeSt','인원 확정 중… (카메라를 켜고 사람 수를 세는 중, 수 초)','huge dim');applyModeUI();log('명령: 발시 카운트 시작'+(reset?' (새로 시작)':''));
+}
+function edit(o){send(Object.assign({t:'edit'},o));}
+const MODETXT={standby:['⏸ 대기 — 노트 10 절전 (검은 화면)','warn'],active:['▶ 준비 — 카메라 켜짐, 선수 수 실시간 감시','ok'],count:['🏹 발시 카운트 중 — 인원 확정·판정','ok']};
+function applyModeUI(){
+  const up=!!(C.conn&&C.conn.open),m=C.mode,tr=!!C.trans;
+  $('bPrep').disabled=!up||tr||m==='active';$('bCount').disabled=!up||tr||m==='count';$('bEnd').disabled=!up||tr||m!=='count';$('bStb').disabled=!up||tr||m==='standby';
+  ['mFit','mSnap','mBench','mCamScan'].forEach(i=>$(i).disabled=!up||m!=='active'||tr);
+  $('mSnd').disabled=!up||m==='standby';$('mReload').disabled=!up||m==='count';
+  ['eUndo','eAdd','eNext','pSet','eClear'].forEach(i=>$(i).disabled=!up);
+  if(!up){return;}
+  if(!tr)setT('mModeSt',MODETXT[m][0],'huge '+MODETXT[m][1]);
+  const show=m==='active';$('nowImg').hidden=!show||!C.hasNow;$('nowImgT').hidden=!show||!C.hasNow;
+  renderNow();
+}
+function renderNow(){
+  const m=C.mode,st=C.st,b=C.board;
+  if(m==='count')setT('mPlayers',`🔒 선수 ${C.players!=null?C.players:(st?st.n:'-')}명 확정`,'huge ok');
+  else if(C.players!=null)setT('mPlayers',`선수 ${C.players}명${m==='active'?' (실시간 인식)':' (마지막 값)'}`,'huge '+(C.players>0?'ok':'warn'));
+  else setT('mPlayers','선수 수: -','huge dim');
+  const u=st?st.u:(b?b.sun:1),p=st?st.p:(b?b.ptr.p:0),s=st?st.s:(b?b.ptr.s:0),n=b?b.arrows.length:0;
+  setT('mNext',(m==='count'||n>0)?`${u}순 · 다음 차례 ${p+1}번 선수 ${s+1}시 · 지금까지 발시 ${n}발`:'','big dim');
+  setT('mJm',C.jm&&m==='count'?('판정 방식: '+(C.jm==='motion'?'자세(만작→발시) + 현소리':'현소리만 (자세로 선수를 찾지 못함)')+' · 관중: '+({A:'뻐꾸기 A형','A?':'뻐꾸기 A형+불명',any:'뻐꾸기 모두',off:'판정 안 함(발시만 셈)'}[getCfg().toneMode])):'','dim');
+  // 선수별 상태 칩
+  const N=m==='count'||m==='active'?(st&&st.sl&&st.sl.length?st.sl.length:(C.players||0)):0,box=$('chips');
+  const cnt=m==='count'&&st?Math.max(st.n||0,st.sl?st.sl.length:0):N;
+  let h='';for(let i=0;i<cnt;i++){const sl=st&&st.sl&&st.sl[i]?st.sl[i]:'';const state=sl.split(' ')[0]||(st&&st.jm==='sound'?'':'대기');
+    h+=`<div class="chip s-${state}${m==='count'&&st&&st.p===i?' cur':''}"><b>${i+1}번</b>${sl||(m==='count'&&st&&st.jm==='sound'?'(소리만)':'대기')}</div>`;}
+  if(box.dataset.h!==h){box.innerHTML=h;box.dataset.h=h;}
+}
+
+/* ---------- 수신 ---------- */
+function onData(c,d){
+  if(!d||!d.t)return;
+  if(d.t==='pong'){const m1=nowE();C.pr.push({rtt:m1-d.m0,off:d.s-(d.m0+m1)/2});}
+  else if(d.t==='hello'){onHello(c,d);}
+  else if(d.t==='st'){C.st=d;if(!C.trans&&d.m!==C.mode){C.mode=d.m;applyModeUI();}if(d.m==='count'){C.locked=true;C.players=d.n;C.jm=d.jm;}renderNow();}
+  else if(d.t==='board'){C.board=d;lsS('dj_cbd',JSON.stringify(d));renderBoard();renderNow();}
+  else if(d.t==='lg'){addLg(d);}
+  else if(d.t==='ev'){C.evN++;if(C.off!=null){const lat=nowE()-(d.w-C.off);setT('mEvLat',`발시 ${d.p}번 선수(${d.u}순 ${d.s}시) → 컨트롤 도착 ${f1(lat/1000)}초 (판정 대기 약 1.2초 포함)`,'dim');}}
+  else if(d.t==='count'){if(C.mode==='active'&&!C.locked){C.players=d.n;renderNow();C.lastExq=d.exq;}}
+  else if(d.t==='roster'){C.locked=true;C.players=d.n;C.jm=d.jm;
+    log(`인원 확정 ${d.n}명 (득표 ${d.votes||'-'}) · ${d.jm==='motion'?'자세+소리':'소리만'}${d.man?' · 수동 지정':''}`);renderNow();}
+  else if(d.t==='mode'){onMode(c,d);}
+  else if(d.t==='bat'){onBat(d);}
+  else if(d.t==='lvl'){const up=d.db-d.fl;$('mLvlB').style.width=Math.max(0,Math.min(100,up/40*100))+'%';$('mLvlB').style.background=up>=12?'var(--warn)':'var(--ok)';setT('mLvlT',`현재 ${f1(d.db)} dB · 바닥 ${f1(d.fl)} dB · 차이 ${f1(up)} dB`,'dim');}
+  else if(d.t==='snd'){addSnd(d);}
+  else if(d.t==='ph'){C.rx={meta:d,parts:new Array(d.n),got:0};}
+  else if(d.t==='pc'&&C.rx&&C.rx.meta.id===d.id){if(!C.rx.parts[d.i]){C.rx.parts[d.i]=d.d;C.rx.got++;}if(C.rx.got===C.rx.meta.n)finishPhoto();}
+  else if(d.t==='camerr'){addCamItem(null,d);}
+  else if(d.t==='camdone'){$('mCamScan').disabled=C.mode!=='active';setT('mCamInfo',`✅ 카메라 ${d.n}개 확인 완료 — 외장(USB) 카메라가 목록에 있는지 보세요`,'ok');log('카메라 비교 완료 '+d.n+'개');}
+  else if(d.t==='fitmsg'){setT('mFitHead',d.msg,'dim');}
+  else if(d.t==='fit'){onFit(d);}
+  else if(d.t==='benchmsg'){setT('mBenchInfo',d.msg,'dim');}
+  else if(d.t==='bench'){
+    $('mBench').disabled=C.mode!=='active';
+    if(!d.ok){setT('mBenchInfo','⚠ 실패: '+d.err,'bad');return;}
+    const k=d.med<=300?'ok':(d.med<=500?'warn':'bad');
+    setT('mBenchInfo',`추론 1회 중앙 ${f1(d.med)} ms (최소 ${f1(d.min)} · 최대 ${f1(d.max)}, ${d.n}회)\n모델 준비 ${f1(d.loadMs/1000)}초 · SIMD ${d.simd?'지원':'미지원'} · 스레드 ${d.threads} · 코어 ${d.hc||'?'}${d.mem?' · 메모리 '+d.mem+'GB':''}`,k);
+  }
+  else if(d.t==='zoomed'){
+    const au=d.ok&&$('mAuto').checked;
+    setT('mZInfo',d.ok?`✅ 적용됨: ${f1(d.v)}배 (요청 ${f1(d.req)}배)`+(au?' · 잠시 후 사진 자동 요청':''):`⚠ 적용 실패: ${d.err}`,d.ok?'ok':'bad');
+    if(d.ok){C.lastZoom=d.v;scheduleAutoSnap();}
+  }
+}
+function onHello(c,d){
+  C.hello=d;
+  if(d.cam){C.cam=d.cam;setT('mCam',camText(d.cam),'ok');setupZoom(d.cam);}else setT('mCam','꺼짐 (대기 모드)','dim');
+  C.smic=d.mic;if(d.mic){const m=d.mic;setT('mSMic',!m.on?(m.err?'⛔ 실패: '+m.err:'꺼짐'):(m.state==='running'?`🎤 켜짐 · ${m.sr} Hz · 지연 ${m.lat!=null?Math.round(m.lat*1000):'?'} ms`:`⚠ 일시정지(${m.state}) — 노트 10 화면을 한 번 터치`),m.on&&m.state==='running'?'ok':'warn');
+    setBanner('mic',(d.mode!=='standby'&&m.on&&m.state!=='running')?'⚠ 노트 10의 마이크가 일시정지 상태입니다 — 노트 10 화면을 한 번 터치해 주세요 (소리 판정이 안 됩니다)':(d.mode!=='standby'&&!m.on&&m.err?'⛔ 노트 10 마이크 실패: '+m.err:null));}
+  if(d.ver){const k=cmpVer(d.ver,VER);setT('mSVer','v'+d.ver+(k===0?' · 같은 버전':(k<0?' · 구버전 → 갱신 요청함':' · 이 폰이 구버전')),k===0?'ok':'warn');
+    if(k<0)c.send({t:'ver',v:VER});else if(k>0)tryUpdate(d.ver,(x,kk)=>setT('mSt',x,kk));}
+  if(d.mode!==C.mode&&!C.trans){C.mode=d.mode;}
+  if(C.want&&d.mode!==C.want&&!C.trans){c.send({t:'mode',m:C.want});C.trans=C.want;log('슬레이브가 다시 시작됨 → 명령 재전송: '+C.want);}
+  if(d.nb===0&&C.board&&C.board.arrows.length){c.send({t:'restore',b:C.board});log('슬레이브 기록이 비어 있어 컨트롤의 기록 '+C.board.arrows.length+'발을 복원 요청');}
+  applyModeUI();
+}
+function onMode(c,d){
+  C.trans=null;if(d.tx)C.lastTx=d.tx;
+  if(d.ready===false){
+    C.mode=d.cur||C.mode;C.want=C.mode;setBanner('mode','⛔ 실패: '+d.err);log('명령 실패: '+d.err);applyModeUI();return;}
+  C.mode=d.m;if(d.m==='count'){C.locked=true;if(d.jm)C.jm=d.jm;log('발시 카운트 시작됨 ('+Math.round(d.ms||0)+' ms)'+(d.again?' — 이미 진행 중':''));}else{C.locked=false;if(d.m==='standby'){C.players=C.players;}}
+  if(d.mic&&d.m==='count')setBanner('mic',d.mic.state!=='running'?'⚠ 노트 10의 마이크가 일시정지 상태입니다 — 노트 10 화면을 한 번 터치해 주세요 (뻐꾸기 소리를 못 듣습니다)':null);
+  if(d.m==='standby')setBanner('mic',null);
+  applyModeUI();
+}
+function onBat(d){
+  if(d.tx){C.lastTx=d.tx;showTx(d);}C.batH.push({t:Math.round(d.ts-(C.off||0)),lvl:d.lvl,chg:d.chg,mode:d.mode});if(C.batH.length>400)C.batH.shift();
+  const now=Date.now();if(C.lastBatAt&&now-C.lastBatAt>15000){C.gaps.push({at:hms(C.lastBatAt),sec:Math.round((now-C.lastBatAt)/1000)});}C.lastBatAt=now;
+  setT('mBat',`${d.lvl==null?'-':Math.round(d.lvl*100)+'%'} ${d.chg?'⚡충전 중':'방전 중'} · 화면 ${d.vis==='visible'?'켜짐':'⚠ 숨김'}${d.ms?` · 자세 ${d.ms}ms/회`:''}`,d.chg?'warn':'dim');
+  setT('mHb',`마지막 ${hms(now)} · 카메라 ${d.cs||'-'}`+(C.gaps.length?` · 끊김 ${C.gaps.length}회(최근 ${C.gaps[C.gaps.length-1].sec}초 @${C.gaps[C.gaps.length-1].at})`:' · 끊김 없음'),C.gaps.length?'warn':'dim');
+  if(d.lvl!=null&&d.lvl<0.2&&!d.chg)setBanner('bat','🔋 노트 10 배터리 '+Math.round(d.lvl*100)+'% — 충전하세요');else setBanner('bat',null);
+}
+const TXG={'사진':['ph','pc'],'신호':['pong','bat','lvl','st'],'판정·기록':null};
+function showTx(d){
+  const o={'사진':[0,0],'신호':[0,0],'판정·기록':[0,0]};
+  Object.keys(d.tx||{}).forEach(k=>{const g=TXG['사진'].includes(k)?'사진':(TXG['신호'].includes(k)?'신호':'판정·기록');o[g][0]+=d.tx[k][0];o[g][1]+=d.tx[k][1];});
+  setT('mTx','접속 후 누적: '+Object.keys(o).map(g=>`${g} ${fmtB(o[g][1])}`).join(' · '),'dim');
+}
+function addLg(d){C.lg.push(d);if(C.lg.length>300)C.lg.shift();renderLg();}
+function renderLg(){
+  const box=$('evLog');const a=C.lg.slice(-40).reverse();
+  box.innerHTML='';a.forEach(d=>{const e=document.createElement('div');e.className=d.k;e.textContent=hms(d.w)+' '+d.x;box.appendChild(e);});
+}
+function addSnd(d){
+  let x='';
+  if(d.k==='rel')x=`현소리 후보 (크기 ${d.up}배)`;
+  else if(d.k==='tone0')x='뻐꾸기(과녁 소리) 감지 — 종류 판별 중…';
+  else if(d.k==='tone')x=`뻐꾸기 판별: ${d.cl==='A'?'A형(우리 관)':d.cl==='B'?'B형(옆 관)':'불명'} (A창 ${d.nA}·B창 ${d.nB}${d.why?' · '+d.why:''})${d.acc?' → 관중 신호':''}`;
+  else if(d.k==='excl')x=`제외: ${d.x} (${d.up}배)`;
+  C.snd.push({w:d.w,x,k:d.k,cl:d.cl,acc:d.acc});if(C.snd.length>30)C.snd.shift();
+  const t=$('mSndT');t.innerHTML='';C.snd.slice(-12).reverse().forEach(s=>{const tr=document.createElement('tr');
+    const td1=document.createElement('td'),td2=document.createElement('td');td1.textContent=hms(s.w);td2.textContent=s.x;
+    td2.className=s.k==='tone'?(s.cl==='A'?'ok':(s.cl==='B'?'dim':'warn')):(s.k==='excl'?'dim':'');tr.appendChild(td1);tr.appendChild(td2);t.appendChild(tr);});
+}
+
+/* ---------- 기록판 ---------- */
+const FLAGW=['발시 미확인','신호 겹침','소리 미확인','점멸 의심'];
+function renderAll(){renderBoard();renderLg();renderNow();}
+function renderBoard(){
+  const b=C.board,tabs=$('tabs'),tb=$('bd'),sm=$('sumT');
+  if(!b||(!b.arrows.length&&!b.N)){tabs.innerHTML='';tb.innerHTML='<tr><td class="dim">아직 기록이 없습니다. ‘🏹 발시 카운트 시작’을 누르면 시작됩니다.</td></tr>';sm.innerHTML='';return;}
+  const A=getCfg().A||b.A,uMax=Math.max(b.sun,...b.arrows.map(a=>a.u),1);
+  if(C.selAuto||C.sel==null||C.sel>uMax)C.sel=b.sun;
+  tabs.innerHTML='';for(let u=1;u<=uMax;u++){const bt=document.createElement('button');bt.textContent=u+'순';bt.className=u===C.sel?'on':'';bt.onclick=()=>{C.sel=u;C.selAuto=(u===b.sun);renderBoard();};tabs.appendChild(bt);}
+  const N=b.N||Math.max(0,...b.arrows.map(a=>a.p+1));
+  const sym=a=>{if(!a)return '';if(a.r==='hit')return '<span class="h">中</span>';if(a.r==='miss')return '<span class="m">／</span>';return '<span class="p">'+(b.shot?'●':'…')+'</span>';};
+  let h='<tr><th>선수</th>';for(let s=0;s<b.A;s++)h+=`<th>${s+1}시</th>`;h+='<th>中/발</th></tr>';
+  for(let p=0;p<N;p++){
+    h+=`<tr><th>${p+1}번</th>`;let hit=0,sh=0;
+    for(let s=0;s<b.A;s++){
+      const a=b.arrows.find(x=>x.u===C.sel&&x.p===p&&x.s===s);if(a){sh++;if(a.r==='hit')hit++;}
+      const cur=b.sun===C.sel&&b.ptr.p===p&&b.ptr.s===s&&C.mode==='count';
+      const warn=a&&a.fl&&a.fl.some(f=>FLAGW.includes(f));
+      h+=`<td class="c${cur?' cur':''}"${a?` data-id="${a.id}"`:''}>${sym(a)}${warn?'<sup>⚠</sup>':''}${cur&&!a?'<span class="dim" style="font-size:12px">▶</span>':''}</td>`;
+    }
+    h+=`<td>${hit}/${sh}</td></tr>`;
+  }
+  tb.innerHTML=h;
+  // 순별 · 선수별 합계
+  const bySun={};b.arrows.forEach(a=>{const o=bySun[a.u]||(bySun[a.u]={n:0,h:0,m:0,p:0});o.n++;if(a.r==='hit')o.h++;else if(a.r==='miss')o.m++;else o.p++;});
+  let r='';Object.keys(bySun).sort((x,y)=>x-y).forEach(u=>{const o=bySun[u];r+=`<tr><td>${u}순</td><td>발시 ${o.n} · 中 ${o.h} · 불 ${o.m}${o.p?` · 판정 전 ${o.p}`:''}</td></tr>`;});
+  const pl=[];for(let p=0;p<N;p++){const aa=b.arrows.filter(a=>a.p===p);pl.push(`${p+1}번 ${aa.filter(a=>a.r==='hit').length}/${aa.length}`);}
+  r+=`<tr><td>전체</td><td>발시 ${b.arrows.length} · 中 ${b.arrows.filter(a=>a.r==='hit').length}</td></tr>`;if(N)r+=`<tr><td>선수별 中</td><td>${pl.join(' · ')}</td></tr>`;
+  sm.innerHTML=r;
+}
+function csvRows(){
+  const b=C.board;if(!b)return [];
+  return b.arrows.map(a=>[a.u,a.p+1,a.s+1,a.r==='hit'?'中':(a.r==='miss'?'／':(b.shot?'●':'')),a.src,(a.sr||[]).join('+'),(a.fl||[]).join('+'),a.dt==null?'':a.dt,a.w?new Date(a.w).toISOString():'']);
+}
+function exportCSV(){return ['순,선수,시,결과,발시근거,관중근거,확인,비행시간(초),시각'].concat(csvRows().map(r=>r.join(','))).join('\n');}
+function exportJSON(){return JSON.stringify({ver:VER,at:new Date().toISOString(),cfg:getCfg(),board:C.board,snd:C.snd,batt:C.batH.filter((x,i,a)=>i%3===0||i===a.length-1),gaps:C.gaps,log:C.lg.slice(-200)},null,1);}
+
+/* ---------- 설치·점검 도구 (link 테스트에서 검증된 부분) ---------- */
+function onFit(d){
+  $('mFit').disabled=C.mode!=='active';C.fit=d;
+  if(d.err){setT('mFitHead','⚠ 실패: '+d.err,'bad');return;}
+  if(d.n!=null&&!C.locked){C.players=d.n;renderNow();}
+  const cl=d.status==='ok'?'ok':(d.status==='warn'?'warn':'bad'),ic=d.status==='ok'?'✅':(d.status==='warn'?'⚠':'⛔');
+  setT('mFitHead',`${hms(Date.now())} ${ic} ${d.n}명 인식 · 확대 ${f1(d.z)}배 · 선수 키(모델 입력) ${d.hBefore}→${d.hAfter} px · ${Math.round(d.ms)} ms`,cl);
+  const box=$('mFitMsgs');box.innerHTML='';
+  d.msgs.forEach(m=>{const e=document.createElement('div');e.className=m.lv==='ok'?'ok':(m.lv==='warn'?'warn':'bad');e.textContent=(m.lv==='ok'?'✅ ':(m.lv==='warn'?'⚠ ':'⛔ '))+m.t;box.appendChild(e);});
+  log('화면 맞추기 '+d.status+' '+d.n+'명');
+}
+function snapBusy(){return C.snap&&!C.snap.done&&nowE()-C.snap.t0<15000;}
+function autoSnap(){if(!C.conn||!C.conn.open)return;if(snapBusy()){C.snapQueued=true;return;}doSnap();}
+function scheduleAutoSnap(){clearTimeout(C.autoT);if(!$('mAuto').checked)return;C.autoT=setTimeout(autoSnap,1200);}
+function doSnap(){
+  if(!C.conn||!C.conn.open)return;
+  const id=Date.now();C.snap={id,t0:nowE()};C.rx=null;
+  C.conn.send({t:'snap',id,maxW:+$('mSize').value,q:0.85});
+  setT('mPhotoInfo','사진 요청함… 기다리는 중','dim');$('mSnap').disabled=true;
+  setTimeout(()=>{if(C.snap&&C.snap.id===id&&!C.snap.done){setT('mPhotoInfo','⚠ 15초 내 수신 못함','bad');$('mSnap').disabled=C.mode!=='active';}},15000);
+}
+function finishPhoto(){
+  const m=C.rx.meta;const blob=new Blob(C.rx.parts,{type:'image/jpeg'});const tEnd=nowE();
+  const url=URL.createObjectURL(blob);
+  if(m.kind==='cam'){addCamItem(url,m);return;}
+  if(m.kind==='fit'){const fi=$('mFitImg');fi.src=url;fi.hidden=false;const ni=$('nowImg');ni.src=url;C.hasNow=true;applyModeUI();return;}
+  const im=$('mImg');im.src=url;im.hidden=false;
+  const total=tEnd-C.snap.t0;
+  C.snap.done=true;$('mSnap').disabled=C.mode!=='active';
+  setT('mPhotoInfo',`✅ 수신: ${m.w}×${m.h}, ${Math.round(blob.size/1024)} KB · 요청→표시 ${f1(total)} ms${C.lastZoom!=null?' · 줌 '+f1(C.lastZoom)+'배':''}`,'ok');
+  if(C.snapQueued){C.snapQueued=false;setTimeout(autoSnap,50);}
+}
+function addCamItem(url,m){
+  const box=document.createElement('div');box.style.cssText='margin:10px 0;border-top:1px solid var(--line);padding-top:8px';
+  const cap=document.createElement('div');cap.style.cssText='white-space:pre-line';
+  const z=m.zoom?`줌 ${f1(m.zoom[0])}~${f1(m.zoom[1])}배`:'줌 제어 없음';
+  cap.textContent=`[${m.idx+1}] ${m.label||'카메라'}\n방향 ${m.facing||'?'} · 스트림 ${m.w}×${m.h} · ${z}`+(m.cap?` · 최대 ${m.cap[0]}×${m.cap[1]}`:'');
+  cap.className=url?'ok':'bad';if(!url)cap.textContent=`[${m.idx+1}] ${m.label||'카메라'} — 열기 실패: ${m.err}`;
+  box.appendChild(cap);
+  if(url){const im=document.createElement('img');im.className='shot';im.src=url;im.alt='';box.appendChild(im);}
+  $('mCamList').appendChild(box);
+}
+function setupZoom(c){
+  const sl=$('mZ'),bt=$('mZBtn');bt.innerHTML='';
+  if(!c.zoom){sl.disabled=true;setT('mZInfo','이 카메라는 브라우저에서 줌 제어를 열어주지 않음(미지원)','warn');return;}
+  const [mn,mx,st,cur]=c.zoom;sl.min=mn;sl.max=mx;sl.step=st||0.1;sl.value=cur;sl.disabled=false;
+  setT('mZInfo',`줌 범위 ${f1(mn)}~${f1(mx)}배 · 현재 ${f1(cur)}배`,'ok');
+  const sd=v=>{if(C.conn&&C.conn.open)C.conn.send({t:'zoom',v:+v});};
+  let tm=null;sl.oninput=()=>{clearTimeout(C.autoT);setT('mZInfo','요청 '+f1(+sl.value)+'배…','dim');clearTimeout(tm);tm=setTimeout(()=>sd(sl.value),150);};
+  [1,2,3,5].filter(v=>v>=mn&&v<=mx).forEach(v=>{const b=document.createElement('button');b.className='sub';b.textContent=v+'×';b.onclick=()=>{clearTimeout(C.autoT);sl.value=v;setT('mZInfo','요청 '+v+'배…','dim');sd(v);};bt.appendChild(b);});
+}
+function camText(c){return `${c.label||'카메라'} · ${c.w}×${c.h}${c.fps?' @'+Math.round(c.fps)+'fps':''}${c.zoom?' · 줌 '+c.zoom[0]+'~'+c.zoom[1]:''}`;}
+initControl();
+
+</script>
+</body>
+</html>
