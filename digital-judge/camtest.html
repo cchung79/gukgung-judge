@@ -13,7 +13,7 @@ button.sub{background:#344256}.row{display:flex;gap:8px}.row>*{flex:1}
 .res div{padding:6px 0;border-top:1px solid #2a3544}.res div:first-child{border-top:0}
 img,canvas{width:100%;border-radius:10px;background:#000;display:block;margin-top:8px}
 </style></head><body>
-<h1>외장(USB) 카메라 주소 시험 <span class="dim">v2</span></h1>
+<h1>외장(USB) 카메라 주소 시험 <span class="dim">v3</span></h1>
 <div class="card">
   <h2>순서</h2>
   <div class="dim">① 노트 10에 ‘USB Camera’ 앱(Shenyaocn)을 깔고 ELP를 연결 → 앱 설정에서 HTTP 서버를 켭니다. ② 앱이 알려 주는 주소(예: http://127.0.0.1:8080/ 또는 같은 와이파이의 http://192.168.x.x:포트/)를 아래에 넣고 시험합니다.</div>
@@ -25,6 +25,11 @@ img,canvas{width:100%;border-radius:10px;background:#000;display:block;margin-to
   <button id="b3" class="sub">3. fetch 시험 (헤더 확인)</button>
   <button id="b4" class="sub">4. 영상 경로 자동 찾기 (주소는 127.0.0.1:포트만 넣어도 됨)</button>
   <div class="res" id="res"></div>
+  <div class="card" style="background:#141b24">
+    <h2>카메라 두 개 동시에 열기 시험 (이 폰의 앞·뒷면 등)</h2>
+    <button id="b5">5. 보이는 카메라를 모두 동시에 열어 보기</button>
+    <div class="res" id="res5"></div><div id="v5"></div>
+  </div>
   <img id="im" alt="" hidden><canvas id="cv" hidden></canvas>
 </div>
 <div class="card dim">‘화면 표시’는 되는데 ‘화소 읽기’가 막히면, 영상은 보이지만 판정 프로그램이 분석할 수 없는 상태입니다(앱이 CORS 허용 헤더를 안 보냄). 그 결과를 알려 주세요.</div>
@@ -72,4 +77,23 @@ $('b4').onclick=async()=>{save();reset();let u=url();if(!u){say('주소를 넣�
     else say('· '+p+' — 없음','dim');}
   if(!found.length)say('⛔ 흔한 경로에는 영상이 없습니다. 앱 웹 페이지의 영상을 길게 눌러 ‘이미지 주소 복사’로 주소를 알려 주세요.','bad');
   else say('끝. 영상이 있는 경로를 위 주소 칸에 넣고 2번 시험을 해 보세요.','dim');};
+
+$('b5').onclick=async()=>{const R=$('res5');R.innerHTML='';$('v5').innerHTML='';
+  const say5=(t,c)=>{const d=document.createElement('div');d.className=c||'';d.textContent=t;R.appendChild(d);};
+  const streams=[];
+  try{const t=await navigator.mediaDevices.getUserMedia({video:true});t.getTracks().forEach(x=>x.stop());}catch(e){say5('⛔ 카메라 권한 없음: '+e.name,'bad');return;}
+  const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+  say5(`Chrome이 보는 카메라: ${ds.length}개`,ds.length?'ok':'bad');ds.forEach((d,i)=>say5(`  ${i+1}. ${d.label||'(이름 없음)'}`,'dim'));
+  for(let i=0;i<Math.min(ds.length,4);i++){
+    try{const st=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:ds[i].deviceId},width:{ideal:1280}}});streams.push({i,st});
+      const v=document.createElement('video');v.muted=true;v.playsInline=true;v.autoplay=true;v.srcObject=st;v.style.cssText='width:100%;border-radius:10px;background:#000;margin-top:8px';
+      const cap=document.createElement('div');cap.className='dim';cap.textContent=`${i+1}번 ${ds[i].label||''}`;$('v5').appendChild(cap);$('v5').appendChild(v);
+      const s0=st.getVideoTracks()[0].getSettings();say5(`✅ ${i+1}번 열림 (${s0.width}×${s0.height})`,'ok');}
+    catch(e){say5(`⛔ ${i+1}번 열기 실패: ${e.name}`,'bad');}
+    await new Promise(r=>setTimeout(r,800));}
+  await new Promise(r=>setTimeout(r,1500));
+  const live=streams.filter(x=>x.st.getVideoTracks()[0].readyState==='live'&&!x.st.getVideoTracks()[0].muted).length;
+  say5(`동시에 살아 있는 카메라: ${live}개 / 연 것 ${streams.length}개`,live>=2?'ok':'warn');
+  if(streams.length>=2&&live<2)say5('→ 먼저 연 카메라가 멈췄습니다. 이 폰에서는 카메라 두 개를 동시에 못 씁니다.','warn');
+  if(live>=2)say5('→ 동시에 열립니다. 화면에 영상이 둘 다 움직이는지 확인하세요.','ok');};
 </script></body></html>
