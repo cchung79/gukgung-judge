@@ -105,7 +105,8 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 
 <div class="card log"><h2>이벤트</h2><div id="evLog"></div></div>
 
-<details class="card"><summary>설정</summary>
+<details class="card" id="setAll"><summary>설정 · 카메라 줌 · 화면 맞추기 · 점검</summary>
+  <h2>① 판정 설정</h2>
   <div class="row"><span class="dim">1순 당 시수(한 선수)</span><input id="cA" type="number" min="1" max="10" value="5"></div>
   <div class="row"><span class="dim">관중 판정 시간창(발시 후 초)</span><input id="cWa" type="number" step="0.1" value="2.0"><input id="cWb" type="number" step="0.1" value="4.5"></div>
   <div class="row"><span class="dim">뻐꾸기 판정</span><select id="cTone"><option value="A">A형(우리 관)만 관중</option><option value="A?">A형 + 불명도 관중</option><option value="any">종류 불문 모두 관중</option><option value="off">관중 판정 끔 (발시만 셈)</option></select></div>
@@ -114,11 +115,10 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div class="row"><span class="dim">녹화 화질</span><select id="cRecq"><option value="m">중 (분당 약 19MB)</option><option value="h">상 (분당 약 30MB)</option><option value="l">하 (분당 약 9MB)</option></select></div>
   <div class="row"><label class="dim"><input id="cManual" type="checkbox">선수 수 직접 지정</label><input id="cN" type="number" min="0" max="12" value="4"></div>
   <div class="dim">설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다. ‘직접 지정’은 사람 인식이 안 될 때용 — 선수 수를 지정하고 자세 인식 수와 다르면 소리만으로 발시를 셉니다. 카운트 시작 전에 정하세요.</div>
-</details>
-
-<details class="card" id="zoomCard"><summary>카메라 줌 · 카메라 선택 · 사진 (준비 모드에서 조작)</summary>
+  <h2 style="margin-top:14px">② 카메라 · 줌 · 사진 (준비 모드에서 조작)</h2>
   <div class="row"><span class="dim" style="flex:0 0 auto">카메라</span><select id="mCamSel" disabled></select></div>
     <div class="row"><select id="mSize"><option value="1920">큰 사진(1920px)</option><option value="1280">중간(1280px)</option><option value="640">작게(640px)</option></select></div>
+  <label style="display:block;margin:6px 0"><input type="checkbox" id="mPhoto">준비 중 확인 사진 받기</label>
   <button id="mSnap" class="sub" disabled>노트 10에 사진 요청</button>
   <div id="mPhotoInfo" class="dim">-</div>
   <img id="mImg" class="shot" alt="" hidden>
@@ -126,22 +126,18 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <input id="mZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0">
   <div class="row" id="mZBtn"></div>
   <label class="dim" style="display:block;margin:6px 0"><input id="mAuto" type="checkbox" checked>줌을 바꾸고 1.2초 가만히 있으면 사진 자동 요청</label>
-  <div class="dim">줌·카메라를 바꾼 뒤에는 ‘현재 상황’ 카드의 사진에서 선수가 모두 들어오는지 확인하고, 설치·점검 도구의 ‘화면 맞추기’를 다시 하세요. 발시 카운트 중에는 줌·카메라 변경이 잠깁니다.</div>
-</details>
-
-<details class="card"><summary>설치·점검 도구 (화면 맞추기 · 사진 · 줌 · 카메라 비교 · 속도)</summary>
-  <h2>① 화면 맞추기 (준비 모드)</h2>
+  <div class="dim">줌·카메라를 바꾼 뒤에는 ‘현재 상황’ 카드의 사진에서 선수가 모두 들어오는지 확인하고, 아래 ‘③ 화면 맞추기’를 다시 하세요. 발시 카운트 중에는 줌·카메라 변경이 잠깁니다.</div>
+  <h2 style="margin-top:14px">③ 화면 맞추기 (준비 모드)</h2>
   <button id="mFit" disabled>화면 맞추기 (1회 정밀 검사)</button>
   <div id="mFitHead" class="big dim">-</div>
   <div id="mFitMsgs" style="white-space:pre-line;margin:4px 0"></div>
   <img id="mFitImg" class="shot" alt="" hidden>
   <div class="dim">슬레이브가 전체 화면에서 선수를 찾아 잘림·키 크기를 검사하고 모두 들어오는 확대 영역(청록 점선)을 정합니다. 설치 때 한 번 누르면 됩니다.</div>
-  <label style="display:block;margin:6px 0"><input type="checkbox" id="mPhoto">준비 중 확인 사진 받기</label>
-  <h2 style="margin-top:14px">② 카메라 전체 비교 (ELP 줌 카메라 확인용)</h2>
+  <h2 style="margin-top:14px">④ 카메라 전체 비교 (ELP 줌 카메라 확인용)</h2>
   <button id="mCamScan" class="sub" disabled>슬레이브의 모든 카메라로 촬영해 비교</button>
   <div id="mCamInfo" class="dim">브라우저가 열어 주는 카메라가 전부 나타납니다. 외장(USB) 카메라가 보이는지 확인하세요.</div>
   <div id="mCamList"></div>
-  <h2 style="margin-top:14px">③ 자세 인식 속도</h2>
+  <h2 style="margin-top:14px">⑤ 자세 인식 속도</h2>
   <button id="mBench" class="sub" disabled>슬레이브에서 자세 모델 속도 측정</button>
   <div id="mBenchInfo" class="dim">기준: 중앙값 500 ms 이하 사용 가능, 300 ms 이하 여유.</div>
 </details>
@@ -174,7 +170,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.4.2';
+const VER=qs.get('fakever')||'1.4.3';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
