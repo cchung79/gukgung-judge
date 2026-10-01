@@ -81,14 +81,14 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <h2>순별 발시·관중 기록</h2>
   <div class="tabs" id="tabs"></div>
   <div style="overflow-x:auto"><table class="bd" id="bd"></table></div>
-  <div class="dim" id="bdNote" style="margin-top:4px">中 = 관중, ／ = 불, … = 판정 중, ● = 발시만 셈(관중 판정 꺼짐). 칸을 누르면 관중→불→판정 전 순으로 수정합니다. ⚠ = 확인 필요.</div>
-  <table class="kv" id="sumT" style="margin-top:8px"></table>
+  <div style="overflow-x:auto;margin-top:10px"><table class="bd" id="sumT"></table></div>
   <div class="row">
     <button id="eUndo" class="sub sm">↩ 마지막 발시 취소</button>
     <button id="eAdd" class="sub sm">＋ 발시 직접 추가</button>
     <button id="eNext" class="sub sm">다음 순으로</button>
   </div>
-  <details><summary>차례(순·선수·시) 직접 고치기 / 기록 지우기</summary>
+  <details><summary>고치기 · 차례 · 기록 지우기</summary>
+    <div class="dim" style="margin-bottom:6px">점수표의 칸을 누르면 관중 → 불 → 판정 전 순으로 바뀝니다.</div>
     <div class="row"><input id="pU" type="number" min="1" placeholder="순"><input id="pP" type="number" min="1" placeholder="선수"><input id="pS" type="number" min="1" placeholder="시"><button id="pSet" class="sub sm" style="margin:0">적용</button></div>
     <button id="eClear" class="stop sm">기록 모두 지우기</button>
   </details>
@@ -165,7 +165,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.5';
+const VER=qs.get('fakever')||'1.5.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -479,26 +479,23 @@ function renderBoard(){
   tabs.innerHTML='';for(let u=1;u<=uMax;u++){const bt=document.createElement('button');bt.textContent=u+'순';bt.className=u===C.sel?'on':'';bt.onclick=()=>{C.sel=u;C.selAuto=(u===b.sun);renderBoard();};tabs.appendChild(bt);}
   const N=b.N||Math.max(0,...b.arrows.map(a=>a.p+1));
   const sym=a=>{if(!a)return '';if(a.r==='hit')return '<span class="h">中</span>';if(a.r==='miss')return '<span class="m">／</span>';return '<span class="p">'+(b.shot?'●':'…')+'</span>';};
-  let h='<tr><th>선수</th>';for(let s=0;s<b.A;s++)h+=`<th>${s+1}시</th>`;h+='<th>中/발</th></tr>';
+  let h='<tr><th>선수</th>';for(let s=0;s<b.A;s++)h+=`<th>${s+1}시</th>`;h+='<th>관중</th></tr>';
   for(let p=0;p<N;p++){
-    const sl=(C.mode==='count'&&C.st&&C.st.sl&&C.st.sl[p])?C.st.sl[p]:'',stn=sl.split(' ')[0];
-    const pend=b.arrows.filter(x=>x.p===p&&x.r==='pending').length;
-    const lab=sl?sl:(C.mode==='count'?(C.st&&C.st.jm==='sound'?'':'대기'):'');
-    h+=`<tr><th class="pl s-${stn}">${p+1}번<br><span>${lab}${(!sl||stn==='대기')&&pend?' · 판정 중':''}</span></th>`;let hit=0,sh=0;
+    h+=`<tr><th class="pl">${p+1}번</th>`;let hit=0;
     for(let s=0;s<b.A;s++){
-      const a=b.arrows.find(x=>x.u===C.sel&&x.p===p&&x.s===s);if(a){sh++;if(a.r==='hit')hit++;}
+      const a=b.arrows.find(x=>x.u===C.sel&&x.p===p&&x.s===s);if(a&&a.r==='hit')hit++;
       const cur=b.sun===C.sel&&b.ptr.p===p&&b.ptr.s===s&&C.mode==='count';
       const warn=a&&a.fl&&a.fl.some(f=>FLAGW.includes(f));
       h+=`<td class="c${cur?' cur':''}"${a?` data-id="${a.id}"`:''}>${sym(a)}${warn?'<sup>⚠</sup>':''}${cur&&!a?'<span class="dim" style="font-size:12px">▶</span>':''}</td>`;
     }
-    h+=`<td>${hit}/${sh}</td></tr>`;
+    h+=`<td class="c">${hit}</td></tr>`;
   }
   tb.innerHTML=h;
-  // 순별 · 선수별 합계
-  const bySun={};b.arrows.forEach(a=>{const o=bySun[a.u]||(bySun[a.u]={n:0,h:0,m:0,p:0});o.n++;if(a.r==='hit')o.h++;else if(a.r==='miss')o.m++;else o.p++;});
-  let r='';Object.keys(bySun).sort((x,y)=>x-y).forEach(u=>{const o=bySun[u];r+=`<tr><td>${u}순</td><td>발시 ${o.n} · 中 ${o.h} · 불 ${o.m}${o.p?` · 판정 전 ${o.p}`:''}</td></tr>`;});
-  const pl=[];for(let p=0;p<N;p++){const aa=b.arrows.filter(a=>a.p===p);pl.push(`${p+1}번 ${aa.filter(a=>a.r==='hit').length}/${aa.length}`);}
-  r+=`<tr><td>전체</td><td>발시 ${b.arrows.length} · 中 ${b.arrows.filter(a=>a.r==='hit').length}</td></tr>`;if(N)r+=`<tr><td>선수별 中</td><td>${pl.join(' · ')}</td></tr>`;
+  // 선수별 순합계 관중수
+  let r='<tr><th>순합계</th>';for(let u=1;u<=uMax;u++)r+=`<th>${u}순</th>`;r+='<th>합계</th></tr>';
+  for(let p=0;p<N;p++){let tot=0;r+=`<tr><th class="pl">${p+1}번</th>`;
+    for(let u=1;u<=uMax;u++){const aa=b.arrows.filter(a=>a.p===p&&a.u===u);const n=aa.filter(a=>a.r==='hit').length;tot+=n;r+=`<td class="c">${aa.length?n:''}</td>`;}
+    r+=`<td class="c">${tot}</td></tr>`;}
   sm.innerHTML=r;
 }
 function csvRows(){
