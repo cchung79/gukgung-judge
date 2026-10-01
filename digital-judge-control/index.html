@@ -35,6 +35,9 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 .bd .h{color:var(--ok)}.bd .m{color:var(--bad)}.bd .p{color:var(--dim)}
 .bd th.pl{font-size:13px;color:var(--tx);min-width:56px}.bd th.pl span{font-size:11px;color:var(--dim)}.bd th.s-준비{background:#3a3a14}.bd th.s-만작{background:#4a3a10}.bd th.s-발시{background:#4a1c1c}
 .bd sup{font-size:10px;color:var(--warn)}
+details.sub{margin:8px 0;border:1px solid var(--line);border-radius:10px;padding:0 10px;background:#161d27}details.sub>summary{padding:11px 0;color:var(--tx);font-size:15px}
+.tgchips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.tgchips button{width:auto;min-width:52px;min-height:42px;margin:0;padding:0 10px;background:#2a3544}.tgchips button.on{background:#ffb300;color:#1a1a1a}
+#selWrap{position:relative;margin-top:8px}#selWrap img{display:block;width:100%}#selOv{position:absolute;inset:0}.tgb{position:absolute;border-radius:4px;cursor:pointer}.tgb.on{background:rgba(255,179,0,.22);outline:3px solid #ffb300;outline-offset:-3px}
 .log div{padding:2px 0;border-top:1px solid var(--line);font-size:13px}
 .log .hit{color:var(--ok)}.log .rel{color:var(--tx)}.log .note{color:var(--dim)}
 details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;padding:8px 0}
@@ -96,15 +99,8 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 
 <div class="card log"><h2>이벤트</h2><div id="evLog"></div></div>
 
-<details class="card" id="setAll"><summary>설정 · 카메라 줌 · 화면 맞추기 · 점검</summary>
-  <h2>① 판정 설정</h2>
-  <div class="row"><span class="dim">내 관 (뻐꾸기 소리)</span><select id="cKwan"><option value="3">3관 (A형 소리)</option><option value="2">2관 (B형 소리)</option><option value="1">1관 (소리 미등록 · 뻐꾸기 판정 안 함)</option><option value="0">뻐꾸기 없음 (비봉정 등)</option></select></div>
-  <div class="row"><span class="dim">관중 확인 최대 시간 (발시 후 초)</span><input id="cWm" type="number" step="0.5" min="3" max="15" value="7"></div>
-  <div class="row"><span class="dim">현소리 감도</span><select id="cSens"><option value="n">보통</option><option value="h">민감</option><option value="l">둔감</option></select></div>
-  <div class="row"><label class="dim"><input id="cRec" type="checkbox" checked>원본 영상+소리 녹화 (발시 카운트 중 노트 10에 저장)</label></div>
-  <div class="row"><span class="dim">녹화 화질</span><select id="cRecq"><option value="m">중 (분당 약 19MB)</option><option value="h">상 (분당 약 30MB)</option><option value="l">하 (분당 약 9MB)</option></select></div>
-  <div class="dim">뻐꾸기는 관중 판정의 보조 신호입니다(램프 판정은 추가 예정). 발시 후 ‘최대 시간’ 안에 내 관의 뻐꾸기가 울리면 관중, 아니면 불로 확정합니다 — 활이 약한 선수는 7초까지 걸립니다. 설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다.</div>
-  <h2 style="margin-top:14px">② 카메라 · 줌 · 사진 (준비 모드에서 조작)</h2>
+<details class="card" id="setAll"><summary>설정</summary>
+<details class="sub"><summary>카메라 설정</summary>
   <div class="row"><span class="dim" style="flex:0 0 auto">카메라</span><select id="mCamSel" disabled></select></div>
     <div class="row"><select id="mSize"><option value="1920">큰 사진(1920px)</option><option value="1280">중간(1280px)</option><option value="640">작게(640px)</option></select></div>
   <label style="display:block;margin:6px 0"><input type="checkbox" id="mPhoto">준비 중 확인 사진 받기</label>
@@ -116,25 +112,44 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div class="row" id="mZBtn"></div>
   <label class="dim" style="display:block;margin:6px 0"><input id="mAuto" type="checkbox" checked>줌을 바꾸고 1.2초 가만히 있으면 사진 자동 요청</label>
   <div class="dim">줌·카메라를 바꾼 뒤에는 ‘현재 상황’ 카드의 사진에서 선수가 모두 들어오는지 확인하고, 아래 ‘③ 화면 맞추기’를 다시 하세요. 발시 카운트 중에는 줌·카메라 변경이 잠깁니다.</div>
-  <h2 style="margin-top:14px">③ 화면 맞추기 (준비 모드)</h2>
+  <h2 style="margin-top:14px">화면 맞추기 (준비 모드)</h2>
   <button id="mFit" disabled>화면 맞추기 (1회 정밀 검사)</button>
   <div id="mFitHead" class="big dim">-</div>
   <div id="mFitMsgs" style="white-space:pre-line;margin:4px 0"></div>
   <img id="mFitImg" class="shot" alt="" hidden>
   <div class="dim">슬레이브가 전체 화면에서 선수를 찾아 잘림·키 크기를 검사하고 모두 들어오는 확대 영역(청록 점선)을 정합니다. 설치 때 한 번 누르면 됩니다.</div>
-  <h2 style="margin-top:14px">④ 카메라 전체 비교 (ELP 줌 카메라 확인용)</h2>
+</details>
+<details class="sub" id="tgSet"><summary>선수 설정</summary>
+  <div id="tgInfo" class="big dim">지정 없음 — 모든 선수 판정</div>
+  <div class="tgchips" id="tgChips"></div>
+  <div id="selWrap" hidden><img id="selImg" class="shot" alt=""><div id="selOv"></div></div>
+  <div id="selHint" class="dim" style="margin-top:6px">준비 모드에서 선수 사진이 오면 여기에 표시됩니다. 사진에서 선수를 누르거나 위의 번호 버튼으로 지정하세요.</div>
+  <button id="tgClear" class="sub" disabled>지정 해제 (모든 선수 판정)</button>
+  <div class="dim" style="margin-bottom:8px">번호는 사진 속 번호(왼쪽부터)입니다. 여러 명을 지정할 수 있습니다(예: 2·4·5번). 지정한 선수만 모니터링하고 점수표에 나옵니다. 발시 카운트 중에는 바꿀 수 없고, 다음 카운트부터 적용됩니다.</div>
+</details>
+<details class="sub"><summary>판정 설정</summary>
+  <div class="row"><span class="dim">내 관 (뻐꾸기 소리)</span><select id="cKwan"><option value="3">3관 (A형 소리)</option><option value="2">2관 (B형 소리)</option><option value="1">1관 (소리 미등록 · 뻐꾸기 판정 안 함)</option><option value="0">뻐꾸기 없음 (비봉정 등)</option></select></div>
+  <div class="row"><span class="dim">관중 확인 최대 시간 (발시 후 초)</span><input id="cWm" type="number" step="0.5" min="3" max="15" value="7"></div>
+  <div class="row"><span class="dim">현소리 감도</span><select id="cSens"><option value="n">보통</option><option value="h">민감</option><option value="l">둔감</option></select></div>
+  <div class="row"><label class="dim"><input id="cRec" type="checkbox" checked>원본 영상+소리 녹화 (발시 카운트 중 노트 10에 저장)</label></div>
+  <div class="row"><span class="dim">녹화 화질</span><select id="cRecq"><option value="m">중 (분당 약 19MB)</option><option value="h">상 (분당 약 30MB)</option><option value="l">하 (분당 약 9MB)</option></select></div>
+  <div class="dim">뻐꾸기는 관중 판정의 보조 신호입니다(램프 판정은 추가 예정). 발시 후 ‘최대 시간’ 안에 내 관의 뻐꾸기가 울리면 관중, 아니면 불로 확정합니다 — 활이 약한 선수는 7초까지 걸립니다. 설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다.</div>
+</details>
+<details class="sub"><summary>점검 도구</summary>
+  <h2>카메라 전체 비교 (ELP 줌 카메라 확인용)</h2>
   <button id="mCamScan" class="sub" disabled>슬레이브의 모든 카메라로 촬영해 비교</button>
   <div id="mCamInfo" class="dim">브라우저가 열어 주는 카메라가 전부 나타납니다. 외장(USB) 카메라가 보이는지 확인하세요.</div>
   <div id="mCamList"></div>
-  <h2 style="margin-top:14px">⑤ 자세 인식 속도</h2>
+  <h2 style="margin-top:14px">자세 인식 속도</h2>
   <button id="mBench" class="sub" disabled>슬레이브에서 자세 모델 속도 측정</button>
   <div id="mBenchInfo" class="dim">기준: 중앙값 500 ms 이하 사용 가능, 300 ms 이하 여유.</div>
-  <h2 style="margin-top:14px">⑥ 소리 감지 확인 (노트 10 마이크)</h2>
+  <h2 style="margin-top:14px">소리 감지 확인 (노트 10 마이크)</h2>
   <button id="mSnd" class="sub sm" disabled>소리 모니터 켜기</button>
   <div style="height:14px;background:#0c1118;border-radius:7px;overflow:hidden;margin-top:6px"><div id="mLvlB" style="height:100%;width:0;background:var(--ok)"></div></div>
   <div id="mLvlT" class="dim" style="margin-top:4px">-</div>
   <table class="kv" id="mSndT"></table>
   <div class="dim">현소리 후보·뻐꾸기(A/B/불명)가 들릴 때마다 한 줄씩 표시됩니다. 현장에서 A가 안 나오고 ‘불명’이 나오면 설정의 ‘뻐꾸기 판정’을 바꿔 보세요.</div>
+</details>
 </details>
 
 <details class="card"><summary>연결 정보 · 기록 내보내기</summary>
@@ -165,7 +180,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.5.1';
+const VER=qs.get('fakever')||'1.6';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -252,10 +267,10 @@ const RESN={hit:'中',miss:'／',pending:''};
 function initControl(){
   const saved=lsG('dj_ccode');
   $('mCode').value=qs.get('code')||saved||String(1000+Math.floor(Math.random()*9000));
-  const cf=jparse(lsG('dj_ccfg'),{});
+  const cf=jparse(lsG('dj_ccfg'),{});C.tg=jparse(lsG('dj_ctg'),[]);if(!Array.isArray(C.tg))C.tg=[];
   if(cf.kwan!=null)$('cKwan').value=cf.kwan;if(cf.wm)$('cWm').value=cf.wm;if(cf.sens)$('cSens').value=cf.sens;
   if(cf.rec===false)$('cRec').checked=false;if(cf.recq)$('cRecq').value=cf.recq;
-  ['cKwan','cWm','cSens','cRec','cRecq'].forEach(i=>$(i).onchange=sendCfg);
+  ['cKwan','cWm','cSens','cRec','cRecq'].forEach(i=>$(i).onchange=sendCfg);$('tgClear').onclick=()=>setTg([]);renderTg(true);
   $('mStart').onclick=startControl;
   $('bPrep').onclick=()=>cmd('active','준비 중… (노트 10 카메라 켜는 중)');
   $('bCount').onclick=()=>{const n=C.board?C.board.arrows.length:0;if(n>0){$('scN').textContent=n;$('startChoice').hidden=false;}else startCount(false);};
@@ -285,7 +300,23 @@ function initControl(){
   if(qs.get('auto')||saved)startControl();
 }
 const send=d=>{if(C.conn&&C.conn.open){try{C.conn.send(d);return true}catch(e){}}return false;};
-function getCfg(){return{kwan:+$('cKwan').value,wm:Math.max(3,Math.min(15,+$('cWm').value||7)),sens:$('cSens').value,rec:$('cRec').checked,recq:$('cRecq').value};}
+function getCfg(){return{kwan:+$('cKwan').value,tg:C.tg||[],wm:Math.max(3,Math.min(15,+$('cWm').value||7)),sens:$('cSens').value,rec:$('cRec').checked,recq:$('cRecq').value};}
+
+/* ---------- 선수 설정: 지정한 선수만 판정 (사진의 선수 상자를 누르거나 번호 버튼) ---------- */
+function setTg(a){C.tg=[...new Set(a)].sort((x,y)=>x-y);lsS('dj_ctg',JSON.stringify(C.tg));renderTg(true);sendCfg();renderNow();}
+function renderTg(force){
+  const K=Math.max(7,C.players||0,(C.bx||[]).length),lock=C.mode==='count';
+  const sig=[K,lock,(C.tg||[]).join(','),C.players,C.bxId].join('|');if(!force&&sig===C.tgSig)return;C.tgSig=sig;
+  const box=$('tgChips');box.innerHTML='';
+  for(let i=1;i<=K;i++){const b=document.createElement('button');b.textContent=i+'번';b.className=C.tg.includes(i)?'on':'';b.disabled=lock;b.onclick=()=>toggleTg(i);box.appendChild(b);}
+  const miss=C.players!=null?C.tg.filter(i=>i>C.players):[];
+  setT('tgInfo',C.tg.length?`지정: ${C.tg.join('·')}번만 판정${miss.length?` (⚠ ${miss.join('·')}번은 현재 인식 인원 밖)`:''}${lock?' · 카운트 중에는 변경 불가':''}`:'지정 없음 — 모든 선수 판정',C.tg.length?(miss.length?'big warn':'big ok'):'big dim');
+  $('tgClear').disabled=lock||!C.tg.length;
+  const ov=$('selOv');ov.innerHTML='';
+  (C.bx||[]).forEach((b,i)=>{const d=document.createElement('div');d.className='tgb'+(C.tg.includes(i+1)?' on':'');
+    d.style.cssText=`left:${b[0]*100}%;top:${b[1]*100}%;width:${(b[2]-b[0])*100}%;height:${(b[3]-b[1])*100}%`;d.onclick=()=>toggleTg(i+1);ov.appendChild(d);});
+}
+function toggleTg(i){if(C.mode==='count')return;setTg(C.tg.includes(i)?C.tg.filter(x=>x!==i):C.tg.concat(i));}
 function sendCfg(){const c=getCfg();lsS('dj_ccfg',JSON.stringify(c));send(Object.assign({t:'cfg'},c));renderBoard();}
 function setBanner(k,msg){if(msg)C.bn[k]=msg;else delete C.bn[k];$('banner').innerHTML=Object.keys(C.bn).map(x=>'<div class="banner"></div>').join('');Object.keys(C.bn).forEach((x,i)=>{$('banner').children[i].textContent=C.bn[x];});}
 async function startControl(){
@@ -356,12 +387,12 @@ function applyModeUI(){
   ['eUndo','eAdd','eNext','pSet','eClear'].forEach(i=>$(i).disabled=!up);
   if(!up){return;}
   if(!tr)setT('mModeSt',MODETXT[m][0],'huge '+MODETXT[m][1]);
-  const show=m==='active';$('nowImg').hidden=!show||!C.hasNow;$('nowImgT').hidden=!show||!C.hasNow;
+  renderTg();const show=m==='active';$('nowImg').hidden=!show||!C.hasNow;$('nowImgT').hidden=!show||!C.hasNow;
   renderNow();
 }
 function renderNow(){
   const m=C.mode,st=C.st,b=C.board;
-  if(m==='count')setT('mPlayers',`🔒 선수 ${C.players!=null?C.players:(st?st.n:'-')}명 확정`,'huge ok');
+  if(m==='count')setT('mPlayers',`🔒 선수 ${C.players!=null?C.players:(st?st.n:'-')}명 확정${C.selNo&&C.selNo.length?` · 지정 ${C.selNo.join('·')}번만`:''}`,'huge ok');
   else if(C.players!=null)setT('mPlayers',`선수 ${C.players}명${m==='active'?' (실시간 인식)':' (마지막 값)'}`,'huge '+(C.players>0?'ok':'warn'));
   else setT('mPlayers','선수 수: -','huge dim');
   const u=st?st.u:(b?b.sun:1),p=st?st.p:(b?b.ptr.p:0),s=st?st.s:(b?b.ptr.s:0),n=b?b.arrows.length:0;
@@ -373,7 +404,8 @@ function renderNow(){
   // 선수별 상태 칩
   const N=m==='count'||m==='active'?(st&&st.sl&&st.sl.length?st.sl.length:(C.players||0)):0,box=$('chips');
   const cnt=m==='count'&&st?Math.max(st.n||0,st.sl?st.sl.length:0):N;
-  let h='';for(let i=0;i<cnt;i++){const sl=st&&st.sl&&st.sl[i]?st.sl[i]:'';const state=sl.split(' ')[0]||(st&&st.jm==='sound'?'':'대기');
+  const selI=(m==='count'&&b&&b.sel&&b.sel.length)?b.sel:(C.tg&&C.tg.length?C.tg.map(x=>x-1):null);
+  let h='';for(let i=0;i<cnt;i++){if(selI&&!selI.includes(i))continue;const sl=st&&st.sl&&st.sl[i]?st.sl[i]:'';const state=sl.split(' ')[0]||(st&&st.jm==='sound'?'':'대기');
     h+=`<div class="chip s-${state}${m==='count'&&st&&st.p===i?' cur':''}"><b>${i+1}번</b>${sl||(m==='count'&&st&&st.jm==='sound'?'(소리만)':'대기')}</div>`;}
   if(box.dataset.h!==h){box.innerHTML=h;box.dataset.h=h;}
 }
@@ -388,7 +420,7 @@ function onData(c,d){
   else if(d.t==='lg'){addLg(d);}
   else if(d.t==='ev'){C.evN++;if(C.off!=null){const lat=nowE()-(d.w-C.off);setT('mEvLat',`발시 ${d.p}번 선수(${d.u}순 ${d.s}시) → 컨트롤 도착 ${f1(lat/1000)}초 (판정 대기 약 1.2초 포함)`,'dim');}}
   else if(d.t==='count'){if(C.mode==='active'&&!C.locked){C.players=d.n;renderNow();C.lastExq=d.exq;}}
-  else if(d.t==='roster'){C.locked=true;C.players=d.n;C.jm=d.jm;
+  else if(d.t==='roster'){C.locked=true;C.players=d.n;C.jm=d.jm;C.selNo=d.sel||null;
     log(`인원 확정 ${d.n}명 (득표 ${d.votes||'-'}) · ${d.jm==='motion'?'자세+소리':'소리만'}${d.man?' · 수동 지정':''}`);renderNow();}
   else if(d.t==='mode'){onMode(c,d);}
   else if(d.t==='bat'){onBat(d);}
@@ -480,7 +512,8 @@ function renderBoard(){
   const N=b.N||Math.max(0,...b.arrows.map(a=>a.p+1));
   const sym=a=>{if(!a)return '';if(a.r==='hit')return '<span class="h">中</span>';if(a.r==='miss')return '<span class="m">／</span>';return '<span class="p">'+(b.shot?'●':'…')+'</span>';};
   let h='<tr><th>선수</th>';for(let s=0;s<b.A;s++)h+=`<th>${s+1}시</th>`;h+='<th>관중</th></tr>';
-  for(let p=0;p<N;p++){
+  const rows=(b.sel&&b.sel.length)?b.sel:Array.from({length:N},(_,i)=>i);
+  for(const p of rows){
     h+=`<tr><th class="pl">${p+1}번</th>`;let hit=0;
     for(let s=0;s<b.A;s++){
       const a=b.arrows.find(x=>x.u===C.sel&&x.p===p&&x.s===s);if(a&&a.r==='hit')hit++;
@@ -493,7 +526,7 @@ function renderBoard(){
   tb.innerHTML=h;
   // 선수별 순합계 관중수
   let r='<tr><th>순합계</th>';for(let u=1;u<=uMax;u++)r+=`<th>${u}순</th>`;r+='<th>합계</th></tr>';
-  for(let p=0;p<N;p++){let tot=0;r+=`<tr><th class="pl">${p+1}번</th>`;
+  for(const p of rows){let tot=0;r+=`<tr><th class="pl">${p+1}번</th>`;
     for(let u=1;u<=uMax;u++){const aa=b.arrows.filter(a=>a.p===p&&a.u===u);const n=aa.filter(a=>a.r==='hit').length;tot+=n;r+=`<td class="c">${aa.length?n:''}</td>`;}
     r+=`<td class="c">${tot}</td></tr>`;}
   sm.innerHTML=r;
@@ -530,7 +563,7 @@ function finishPhoto(){
   const m=C.rx.meta;const blob=new Blob(C.rx.parts,{type:'image/jpeg'});const tEnd=nowE();
   const url=URL.createObjectURL(blob);
   if(m.kind==='cam'){addCamItem(url,m);return;}
-  if(m.kind==='fit'){const fi=$('mFitImg');fi.src=url;fi.hidden=false;const ni=$('nowImg');ni.src=url;C.hasNow=true;applyModeUI();return;}
+  if(m.kind==='fit'){const fi=$('mFitImg');fi.src=url;fi.hidden=false;const ni=$('nowImg');ni.src=url;C.hasNow=true;C.bx=m.bx||[];C.bxId=m.id;$('selImg').src=url;$('selWrap').hidden=false;$('selHint').hidden=true;renderTg(true);applyModeUI();return;}
   const im=$('mImg');im.src=url;im.hidden=false;
   const total=tEnd-C.snap.t0;
   C.snap.done=true;$('mSnap').disabled=C.mode!=='active';
