@@ -13,7 +13,7 @@ h1{font-size:18px;margin:6px 0 10px}h1 .ver{font-size:12px;color:var(--dim);font
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}
 .card h2{font-size:14px;margin:0 0 8px;color:var(--dim);font-weight:700}
 button{font:inherit;font-weight:700;color:#fff;background:var(--ac);border:0;border-radius:10px;min-height:48px;padding:0 16px;width:100%;margin:6px 0}
-button.sub{background:#344256}button.go{background:#1e9e66}button.stop{background:#c0504d}button:disabled{opacity:.4}
+button.sub{background:#344256}.bsub{font-weight:400;font-size:12px}.cmdmain button{min-height:68px}button.newb{background:#2b3442;border:2px solid #c0504d;color:#ffb3b0}button.newb.arm{background:#e0a030;border-color:#e0a030;color:#1a1a1a}button.go{background:#1e9e66}button.stop{background:#c0504d}button:disabled{opacity:.4}
 button.sm{min-height:38px;font-size:13px;padding:0 10px}
 .row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
 input,select{font:inherit;color:var(--tx);background:#0d1218;border:1px solid var(--line);border-radius:10px;min-height:44px;padding:0 10px;width:100%}
@@ -57,12 +57,15 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 
 <div class="card">
   <h2>디지털 저지 명령</h2>
-  <button id="bNew" class="stop" disabled>🔄 새로 시작 (기록 지우고 처음부터)</button>
   <div id="mModeSt" class="huge dim">연결 전</div>
-  <div class="row"><button id="bPrep" class="sub" disabled>▶ 준비<br><span style="font-weight:400;font-size:12px">카메라 켜고 선수 수 감시</span></button>
-    <button id="bCount" class="go" disabled>🏹 발시 카운트 시작<br><span style="font-weight:400;font-size:12px">인원 확정 후 판정</span></button></div>
-  <div class="row"><button id="bEnd" class="stop" disabled>⏹ 카운트 종료</button>
-    <button id="bStb" class="sub" disabled>⏸ 대기 (절전)</button></div>
+  <div class="row cmdmain">
+    <button id="bCount" class="go" disabled style="flex:2"><span id="bCountT">🏹 발시 카운트 시작</span><br><span id="bCountS" class="bsub">인원 확정 후 판정</span></button>
+    <button id="bNew" class="newb" disabled>🔄<br><span id="bNewT">새로 시작</span></button>
+  </div>
+  <div class="row">
+    <button id="bPrep" class="sub" disabled>▶ 준비<br><span class="bsub">카메라 켜기 · 인원 감시</span></button>
+    <button id="bStb" class="sub" disabled>⏸ 대기 (절전)<br><span class="bsub">노트 10 절전</span></button>
+  </div>
   <div id="startChoice" hidden class="card" style="margin:6px 0;background:#222d3b">
     <div class="big">이전 기록이 남아 있습니다 (<span id="scN"></span>발)</div>
     <div class="row"><button id="scCont" class="go">이어서 계속</button><button id="scNew" class="stop">기록 지우고 새로 시작</button></div>
@@ -184,7 +187,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.6.3';
+const VER=qs.get('fakever')||'1.6.4';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -276,13 +279,13 @@ function initControl(){
   if(cf.rec===false)$('cRec').checked=false;if(cf.recq)$('cRecq').value=cf.recq;
   ['cAf','cKwan','cWm','cSens','cRec','cRecq'].forEach(i=>$(i).onchange=sendCfg);$('tgClear').onclick=()=>setTg([]);$('tgPh').onclick=()=>reqPh(true);$('tgSet').addEventListener('toggle',()=>{if($('tgSet').open&&!C.bx)reqPh(false);});renderTg(true);
   $('mStart').onclick=startControl;
-  let nw=0;$('bNew').onclick=()=>{if(Date.now()-nw>4000){nw=Date.now();$('bNew').textContent='정말 새로 시작하려면 한 번 더 누르세요 (기록 삭제)';setTimeout(()=>{if(nw){nw=0;$('bNew').textContent=NEWTXT;}},4000);return;}nw=0;$('bNew').textContent=NEWTXT;freshStart();};
+  let nw=0;const nwOff=()=>{nw=0;$('bNewT').textContent='새로 시작';$('bNew').classList.remove('arm');};
+  $('bNew').onclick=()=>{if(Date.now()-nw>4000){nw=Date.now();$('bNewT').textContent='정말? 한 번 더';$('bNew').classList.add('arm');setTimeout(()=>{if(nw)nwOff();},4000);return;}nwOff();freshStart();};
   $('bPrep').onclick=()=>cmd('active','준비 중… (노트 10 카메라 켜는 중)');
-  $('bCount').onclick=()=>{const n=C.board?C.board.arrows.length:0;if(n>0){$('scN').textContent=n;$('startChoice').hidden=false;}else startCount(false);};
+  $('bCount').onclick=()=>{if(C.mode==='count'){cmd('active','카운트 종료 중… (마지막 발시의 관중 소리를 기다리는 중)');return;}const n=C.board?C.board.arrows.length:0;if(n>0){$('scN').textContent=n;$('startChoice').hidden=false;}else startCount(false);};
   $('scCont').onclick=()=>{$('startChoice').hidden=true;startCount(false);};
   $('scNew').onclick=()=>{$('startChoice').hidden=true;startCount(true);};
   $('scCancel').onclick=()=>{$('startChoice').hidden=true;};
-  $('bEnd').onclick=()=>cmd('active','카운트 종료 중… (마지막 발시의 관중 소리를 기다리는 중)');
   $('bStb').onclick=()=>cmd('standby','대기로 전환 중…');
   $('eUndo').onclick=()=>edit({op:'undo'});$('eAdd').onclick=()=>edit({op:'add'});$('eNext').onclick=()=>edit({op:'nextsun'});
   $('pSet').onclick=()=>edit({op:'ptr',u:+$('pU').value||null,p:$('pP').value?(+$('pP').value-1):null,s:$('pS').value?(+$('pS').value-1):null});
@@ -373,7 +376,6 @@ function finishPings(){
 }
 
 /* ---------- 명령 ---------- */
-const NEWTXT='🔄 새로 시작 (기록 지우고 처음부터)';
 function freshStart(){
   if(!send({t:'mode',m:'active',fresh:true}))return;
   C.want='active';C.trans='active';setBanner('mode',null);$('startChoice').hidden=true;
@@ -389,10 +391,10 @@ function startCount(reset){
   setT('mModeSt','인원 확정 중… (카메라를 켜고 사람 수를 세는 중, 수 초)','huge dim');applyModeUI();log('명령: 발시 카운트 시작'+(reset?' (새로 시작)':''));
 }
 function edit(o){send(Object.assign({t:'edit'},o));}
-const MODETXT={standby:['⏸ 대기 — 노트 10 절전 (검은 화면)','warn'],active:['▶ 준비 — 카메라 켜짐, 선수 수 실시간 감시','ok'],count:['🏹 발시 카운트 중 — 인원 확정·판정','ok']};
+const MODETXT={standby:['⏸ 대기 (절전)','warn'],active:['▶ 준비 중','ok'],count:['🏹 발시 카운트 중','ok']};
 function applyModeUI(){
   const up=!!(C.conn&&C.conn.open),m=C.mode,tr=!!C.trans;
-  $('bNew').disabled=!up||tr;$('bPrep').disabled=!up||tr||m==='active';$('bCount').disabled=!up||tr||m==='count';$('bEnd').disabled=!up||tr||m!=='count';$('bStb').disabled=!up||tr||m==='standby';
+  $('bNew').disabled=!up||tr;$('bPrep').disabled=!up||tr||m==='active';$('bCount').disabled=!up||tr;{const ct=m==='count';$('bCount').className=ct?'stop':'go';$('bCountT').textContent=ct?'⏹ 카운트 종료':'🏹 발시 카운트 시작';$('bCountS').textContent=ct?'관중 확인 후 마무리':'인원 확정 후 판정';}$('bStb').disabled=!up||tr||m==='standby';
   ['mFit','mSnap','mBench','mCamScan'].forEach(i=>$(i).disabled=!up||m!=='active'||tr);
   $('mSnd').disabled=!up||m==='standby';$('mCamSel').disabled=!up||m!=='active'||$('mCamSel').options.length<2;if(m!=='active')$('mZ').disabled=true;else if(C.cam&&C.cam.zoom)$('mZ').disabled=false;$('mRecSave').disabled=!up;$('mReload').disabled=!up||m==='count';
   ['eUndo','eAdd','eNext','pSet','eClear'].forEach(i=>$(i).disabled=!up);
