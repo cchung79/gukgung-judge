@@ -175,7 +175,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.3';
+const VER=qs.get('fakever')||'1.4';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -304,6 +304,7 @@ async function startControl(){
   lsS('dj_ccode',code);$('mStart').disabled=true;$('mCode').disabled=true;$('startBox').hidden=true;
   checkLatest((x,k)=>setT('mSt',x,k));setInterval(()=>{if(C.mode!=='count')checkLatest((x,k)=>setT('mSt',x,k))},600000);
   keepAwake((t,c)=>setT('mWake',t,c));
+  document.addEventListener('visibilitychange',()=>{log('화면 '+document.visibilityState);if(document.visibilityState==='visible'){try{if(C.peer&&C.peer.disconnected)C.peer.reconnect()}catch(e){}send({t:'sync'});}});
   setT('mSt','시그널링 서버 연결 중…','dim');setT('mModeSt','연결 중…','huge dim');
   const peer=C.peer=mkPeer(PREFIX+code);
   peer.on('open',()=>{C.startTries=0;setT('mSt','대기 중 — 노트 10의 디지털 저지에서 코드 '+code+' 입력','warn');setT('mModeSt','노트 10 연결 대기 (코드 '+code+')','huge warn');log('컨트롤 대기 시작 '+code);});
@@ -445,12 +446,15 @@ function onMode(c,d){
   if(d.m==='standby')setBanner('mic',null);
   applyModeUI();
 }
+function batRate(){const h=C.batH.filter(x=>x.lvl!=null);if(h.length<2)return null;const last=h[h.length-1];if(last.chg)return null;let i=h.length-1;
+  while(i>0&&last.t-h[i-1].t<=300000&&last.t>h[i-1].t&&!h[i-1].chg)i--;const f=h[i],dt=(last.t-f.t)/60000;if(dt<2)return null;return Math.max(0,(f.lvl-last.lvl)*100/dt);}
 function onBat(d){
   if(d.tx){C.lastTx=d.tx;showTx(d);}C.batH.push({t:Math.round(d.ts-(C.off||0)),lvl:d.lvl,chg:d.chg,mode:d.mode});if(C.batH.length>400)C.batH.shift();
   const now=Date.now();if(C.lastBatAt&&now-C.lastBatAt>15000){C.gaps.push({at:hms(C.lastBatAt),sec:Math.round((now-C.lastBatAt)/1000)});}C.lastBatAt=now;
-  setT('mBat',`${d.lvl==null?'-':Math.round(d.lvl*100)+'%'} ${d.chg?'⚡충전 중':'방전 중'} · 화면 ${d.vis==='visible'?'켜짐':'⚠ 숨김'}${d.ms?` · 자세 ${d.ms}ms/회`:''}`,d.chg?'warn':'dim');
+  const br=batRate(),brT=(br!=null&&d.lvl!=null&&!d.chg)?(br>0.05?` · 분당 ${f1(br)}% · 약 ${Math.round(d.lvl*100/br)}분 남음`:' · 소모 거의 없음'):'';
+  setT('mBat',`${d.lvl==null?'-':Math.round(d.lvl*100)+'%'} ${d.chg?'⚡충전 중':'방전 중'}${brT} · 화면 ${d.vis==='visible'?'켜짐':'⚠ 숨김'}${d.ms?` · 자세 ${d.ms}ms/회`:''}`,d.chg?'warn':'dim');
   setT('mHb',`마지막 ${hms(now)} · 카메라 ${d.cs||'-'}`+(C.gaps.length?` · 끊김 ${C.gaps.length}회(최근 ${C.gaps[C.gaps.length-1].sec}초 @${C.gaps[C.gaps.length-1].at})`:' · 끊김 없음'),C.gaps.length?'warn':'dim');
-  if(d.lvl!=null&&d.lvl<0.2&&!d.chg)setBanner('bat','🔋 노트 10 배터리 '+Math.round(d.lvl*100)+'% — 충전하세요');else setBanner('bat',null);
+  if(d.lvl!=null&&d.lvl<0.4&&!d.chg)setBanner('bat','🔋 노트 10 배터리 '+Math.round(d.lvl*100)+'%'+(br>0.05?` (분당 ${f1(br)}% 소모, 약 ${Math.round(d.lvl*100/br)}분)`:'')+' — 충전하면서 쓰세요');else setBanner('bat',null);
 }
 const TXG={'사진':['ph','pc'],'신호':['pong','bat','lvl','st'],'판정·기록':null};
 function showTx(d){
@@ -467,9 +471,9 @@ function addSnd(d){
   let x='';
   if(d.k==='rel')x=`현소리 후보 (크기 ${d.up}배)`;
   else if(d.k==='tone0')x='뻐꾸기(과녁 소리) 감지 — 종류 판별 중…';
-  else if(d.k==='tone')x=`뻐꾸기 판별: ${d.cl==='A'?'A형(우리 관)':d.cl==='B'?'B형(옆 관)':'불명'} (A창 ${d.nA}·B창 ${d.nB}${d.why?' · '+d.why:''})${d.acc?' → 관중 신호':''}`;
+  else if(d.k==='tone')x=`뻐꾸기 판별: ${d.cl==='A'?'A형(우리 관)':d.cl==='B'?'B형(옆 관)':'불명'} (A창 ${d.nA}·B창 ${d.nB}${d.why?' · '+d.why:''})${d.acc?' → 관중 신호':''}${d.pk?' · 피크 '+d.pk.join(' '):''}`;
   else if(d.k==='excl')x=`제외: ${d.x} (${d.up}배)`;
-  C.snd.push({w:d.w,x,k:d.k,cl:d.cl,acc:d.acc});if(C.snd.length>30)C.snd.shift();
+  C.snd.push({w:d.w,x,k:d.k,cl:d.cl,acc:d.acc});if(C.snd.length>200)C.snd.shift();
   const t=$('mSndT');t.innerHTML='';C.snd.slice(-12).reverse().forEach(s=>{const tr=document.createElement('tr');
     const td1=document.createElement('td'),td2=document.createElement('td');td1.textContent=hms(s.w);td2.textContent=s.x;
     td2.className=s.k==='tone'?(s.cl==='A'?'ok':(s.cl==='B'?'dim':'warn')):(s.k==='excl'?'dim':'');tr.appendChild(td1);tr.appendChild(td2);t.appendChild(tr);});

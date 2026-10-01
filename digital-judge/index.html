@@ -54,7 +54,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
   <video id="sVid" class="pv" playsinline muted autoplay></video>
   <div class="row" style="margin-top:8px"><select id="sSel"></select></div>
 </div>
-<div class="card"><h2>저장된 녹화 (원본 영상 + 소리, 인식 결과 없음)</h2><div id="rcInfo" class="dim">-</div><div id="rcList"></div></div>
+<div class="card"><h2>저장된 녹화 (원본 영상 + 소리) · 소리 증거 zip</h2><div id="rcInfo" class="dim">-</div><div id="rcList"></div></div>
 <div class="card"><h2>로그</h2><pre id="log"></pre></div>
 
 <script src="peerjs.min.js"></script>
@@ -62,7 +62,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.3';
+const VER=qs.get('fakever')||'1.4';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -340,6 +340,7 @@ const J={N:0,A:5,wa:2.0,wb:4.5,toneMode:'A',sens:'n',manualN:null,
   slots:[],spacing:0.2,mode:'sound',arrows:[],aid:0,sun:1,ptr:{p:0,s:0},rev:0,
   running:false,winding:false,snd:[],pend:[],tones:[],ring:[],ringRate:16000,
   prev:null,inferMs:[],lastTone:-1e9,cand:null,abuf:{rms:[],hf:[]},med:{rms:1e-4,hf:1e-4},aCount:0,lastSt:'',rec:true,recBps:2500000,lastRelAny:-1e9,blkTxt:'',wdTok:0,rosterMsg:null,tk:0};
+J.ev=[];J.clips=[];J.ac=null;J.clipSamp=0;
 const median=a=>{const b=a.slice().sort((x,y)=>x-y);return b.length?b[b.length>>1]:0;};
 const r1=x=>Math.round(x*10)/10;
 $('verT').textContent='v'+VER+' · 슬레이브(노트 10)';
@@ -366,7 +367,8 @@ function boardMsg(){
     arrows:J.arrows.map(a=>({id:a.id,u:a.sun,p:a.p,s:a.s,r:a.res,src:a.src,fl:a.flags,sr:a.srcs,dt:a.dt==null?null:+(+a.dt).toFixed(2),w:a.wt}))};
 }
 function sendBoard(){J.rev++;saveBoard();const c=S.conn;if(c&&c.open)c.send(boardMsg());}
-function jlog(k,x,t){log(x);const c=S.conn;if(c&&c.open)c.send({t:'lg',k,x,w:Math.round(Date.now()-(t!=null?(nowS()-t)*1000:0))});}
+function evLog(k,o,t){const w=Math.round(Date.now()-(t!=null?(nowS()-t)*1000:0));J.ev.push(Object.assign({w,k},o||{}));if(J.ev.length>5000)J.ev.shift();}
+function jlog(k,x,t){log(x);evLog('lg:'+k,{x},t);const c=S.conn;if(c&&c.open)c.send({t:'lg',k,x,w:Math.round(Date.now()-(t!=null?(nowS()-t)*1000:0))});}
 
 /* ---------- 시작 · 연결 ---------- */
 let audioTouched=false;
@@ -405,23 +407,24 @@ function tryConnect(){
   const rawSend=c.send.bind(c);       // 보낸 데이터 종류별 집계 (컨트롤에 표시)
   c.send=d=>{try{const k=d&&d.t||'?',sz=(k==='pc'&&d.d)?d.d.byteLength:JSON.stringify(d).length;const e=S.tx[k]||(S.tx[k]=[0,0]);e[0]++;e[1]+=sz;}catch(x){}return rawSend(d);};
   c.on('open',async()=>{
-    setT('sSt','✅ 연결됨 — 컨트롤의 명령을 기다립니다','ok');log('연결됨');sendHello();sendBat();sendBoard();sendSt(true);
+    evLog('conn',{open:1});setT('sSt','✅ 연결됨 — 컨트롤의 명령을 기다립니다','ok');log('연결됨');sendHello();sendBat();sendBoard();sendSt(true);
     await sleep(600);const p=pathText(await pathInfo(c));setT('sPath',p[0],p[1]);
   });
   c.on('data',d=>onSData(c,d));
-  c.on('close',()=>{if(S.conn===c){setT('sSt','연결 끊김 — 재접속 중 (판정은 계속됩니다)','bad');log('연결 끊김');scheduleRetry();}});
+  c.on('close',()=>{evLog('conn',{open:0});if(S.conn===c){setT('sSt','연결 끊김 — 재접속 중 (판정은 계속됩니다)','bad');log('연결 끊김');scheduleRetry();}});
   c.on('error',e=>log('conn 오류 '+e));
 }
 function micInfo(){const c=AU.ctx;return{on:!!AU.st,state:c?c.state:null,sr:c?c.sampleRate:null,lat:c?c.baseLatency:null,err:AU.err};}
 function sendHello(){if(S.conn&&S.conn.open)S.conn.send({t:'hello',app:'dj',cams:[...$('sSel').options].map(o=>({id:o.value,l:o.textContent})),devId:S.devId,cam:S.cam,ver:VER,mic:micInfo(),mode:S.mode,N:J.N,nb:J.arrows.length,roi:S.roi?1:0});}
 async function sendBat(){
-  const c=S.conn;if(!c||!c.open)return;
   let lvl=null,chg=null;try{if(navigator.getBattery){const b=S.bat||(S.bat=await navigator.getBattery());lvl=b.level;chg=b.charging;}}catch(e){}
+  evLog('bat',{lvl,chg,vis:document.visibilityState,mode:S.mode});
+  const c=S.conn;if(!c||!c.open)return;
   const tr=S.stream&&S.stream.getVideoTracks()[0];
   try{c.send({t:'bat',tx:S.tx,lvl,chg,vis:document.visibilityState,mode:S.mode,cs:tr?(tr.readyState+(tr.muted?'·muted':'')):'꺼짐',ts:nowE(),ms:J.inferMs.length?Math.round(J.inferMs.reduce((a,b)=>a+b)/J.inferMs.length):null});}catch(e){}
 }
 setInterval(sendBat,10000);
-document.addEventListener('visibilitychange',()=>{log('화면 '+document.visibilityState);sendBat();});
+document.addEventListener('visibilitychange',()=>{log('화면 '+document.visibilityState);evLog('vis',{v:document.visibilityState});sendBat();});
 $('blk').addEventListener('pointerdown',()=>{const b=$('blk'),now=Date.now();
   if(now-(S.lastTap||0)<450){S.blkOff=now+180000;b.style.display='none';S.lastTap=0;return;}   // 두 번 빠르게 터치: 3분간 화면 켜기(저장된 녹화 목록 등)
   S.lastTap=now;b.classList.add('peek');b.textContent=(S.mode==='count'?J.blkTxt+'\n':'')+'보관 중인 녹화 '+RC.pend.n+'개 ('+RC.pend.mb+' MB) · 두 번 빠르게 터치하면 화면이 켜집니다';
@@ -456,6 +459,7 @@ function onSData(c,d){
   else if(d.t==='reload'){if(S.mode==='count')return;rlClr();setT('sSt','컨트롤 요청으로 새로고침 중…','warn');setTimeout(goReload,300);}
   else if(d.t==='lvlon'){S.lvlOn=!!d.on;}
   else if(d.t==='recsave'){rcSaveAll();}
+  else if(d.t==='sync'){sendHello();sendBat();sendBoard();sendSt(true);}
 }
 let modeChain=Promise.resolve();
 
@@ -481,6 +485,7 @@ async function windDown(){            // 마지막 발시의 뻐꾸기를 기다
   if(J.toneMode!=='off')for(const a of J.arrows)if(a.res==='pending'&&!a.manual){a.res='miss';jlog('note',`불 ${a.p+1}번 선수 · ${a.sun}순 ${a.s+1}시 (종료 시 확정)`);}
   J.running=false;J.winding=false;J.pend=[];sendBoard();setModeTxt();
   if(S.mode!=='count')await rcStop();
+  flushEvidence('카운트 종료').catch(e=>log('소리 증거 저장 오류 '+((e&&e.message)||e)));
 }
 async function doMode(c,m,d){
   const t0=performance.now();d=d||{};
@@ -640,19 +645,70 @@ async function sndInit(){
 }
 function sndOff(){
   try{if(AU.src){AU.src.disconnect();AU.src=null;}if(AU.st){AU.st.getTracks().forEach(t=>t.stop());}}catch(e){}
-  AU.st=null;try{AU.ctx&&AU.ctx.suspend()}catch(e){}J.ring=[];J.tones=[];J.snd=[];J.cand=null;sndStat();
+  AU.st=null;try{AU.ctx&&AU.ctx.suspend()}catch(e){}acClose();J.ring=[];J.tones=[];J.snd=[];J.cand=null;sndStat();
 }
 function keepRing(t,pcm,nc){   // 최근 ~5초의 소리(모노) 보관 — 뻐꾸기 종류 판별용 (t = 마지막 샘플 시각)
   const n=pcm.length/nc,m=new Float32Array(n);for(let i=0;i<n;i++){let a=0;for(let c=0;c<nc;c++)a+=pcm[i*nc+c];m[i]=a/nc}
   J.ringRate=AU.pcmRate;J.ring.push({t,m});let tot=0;for(const r of J.ring)tot+=r.m.length;while(tot>J.ringRate*5&&J.ring.length>1){tot-=J.ring[0].m.length;J.ring.shift()}
+  acFeed(t,m);
+}
+
+/* ---------- v1.4 소리 증거: 발시·소리 후보·뻐꾸기 전후 ±2.5초를 16 kHz WAV 로 모아 카운트 종료 때 zip 으로 저장 ---------- */
+function toI16(m){const o=new Int16Array(m.length);for(let i=0;i<m.length;i++){const v=m[i]>1?1:(m[i]<-1?-1:m[i]);o[i]=v<0?v*32768:v*32767}return o;}
+function ringFrom(t0){const R=J.ringRate;const parts=[];let ts=null;
+  for(const r of J.ring){if(r.t<=t0)continue;const rt0=r.t-r.m.length/R;const a=ts==null?Math.max(0,Math.round((t0-rt0)*R)):0;if(ts==null)ts=rt0+a/R;parts.push(r.m.subarray(a));}
+  return ts==null?null:{ts,parts};}
+function acTrigger(te){
+  if(!J.running||!AU.st)return;
+  const until=te+2.5;
+  if(J.ac){J.ac.until=Math.max(J.ac.until,until);return;}
+  const f=ringFrom(te-2.5),a={ts:f?f.ts:te,chunks:[],n:0,until};
+  if(f)for(const p of f.parts){const q=toI16(p);a.chunks.push(q);a.n+=q.length;}
+  J.ac=a;
+}
+function acFeed(t,m){const a=J.ac;if(!a)return;const q=toI16(m);a.chunks.push(q);a.n+=q.length;if(t>=a.until)acClose();}
+function acClose(){const a=J.ac;J.ac=null;if(!a||!a.n)return;
+  const pcm=new Int16Array(a.n);let p=0;for(const c of a.chunks){pcm.set(c,p);p+=c.length}
+  J.clips.push({w0:Math.round(Date.now()-(nowS()-a.ts)*1000),rate:J.ringRate,pcm});J.clipSamp+=pcm.length;
+  if(J.clipSamp>12e6)flushEvidence('용량').catch(()=>{});}
+function wavBytes(pcm,rate){const b=new ArrayBuffer(44+pcm.length*2),v=new DataView(b);const ws=(o,x)=>{for(let i=0;i<x.length;i++)v.setUint8(o+i,x.charCodeAt(i))};
+  ws(0,'RIFF');v.setUint32(4,36+pcm.length*2,true);ws(8,'WAVE');ws(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);ws(36,'data');v.setUint32(40,pcm.length*2,true);
+  for(let i=0;i<pcm.length;i++)v.setInt16(44+i*2,pcm[i],true);return new Uint8Array(b);}
+const CRCT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(u){let c=0xFFFFFFFF;for(let i=0;i<u.length;i++)c=CRCT[(c^u[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0;}
+function zipStore(files){
+  const enc=new TextEncoder(),parts=[],cen=[];let off=0;
+  const d=new Date(),dt=((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1))&0xFFFF,dd=(((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate())&0xFFFF;
+  for(const f of files){const nm=enc.encode(f.name),crc=crc32(f.data),sz=f.data.length;
+    const h=new DataView(new ArrayBuffer(30));h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x0800,true);h.setUint16(10,dt,true);h.setUint16(12,dd,true);h.setUint32(14,crc,true);h.setUint32(18,sz,true);h.setUint32(22,sz,true);h.setUint16(26,nm.length,true);
+    parts.push(new Uint8Array(h.buffer),nm,f.data);
+    const c=new DataView(new ArrayBuffer(46));c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0x0800,true);c.setUint16(12,dt,true);c.setUint16(14,dd,true);c.setUint32(16,crc,true);c.setUint32(20,sz,true);c.setUint32(24,sz,true);c.setUint16(28,nm.length,true);c.setUint32(42,off,true);
+    cen.push(new Uint8Array(c.buffer),nm);off+=30+nm.length+sz;}
+  let cl=0;for(const p of cen)cl+=p.length;
+  const e=new DataView(new ArrayBuffer(22));e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cl,true);e.setUint32(16,off,true);
+  return new Blob([...parts,...cen,new Uint8Array(e.buffer)],{type:'application/zip'});}
+async function flushEvidence(why){
+  acClose();
+  if(!J.clips.length&&!J.ev.some(e=>e.k!=='bat'&&e.k!=='vis'&&e.k!=='conn'))return;
+  const clips=J.clips,ev=J.ev;J.clips=[];J.ev=[];J.clipSamp=0;
+  const files=[],idx=[];
+  clips.forEach((c,i)=>{const d=new Date(c.w0),nm=`clip${p2(i+1)}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}_${String(d.getMilliseconds()).padStart(3,'0')}.wav`;
+    files.push({name:nm,data:wavBytes(c.pcm,c.rate)});idx.push({file:nm,w0:c.w0,rate:c.rate,sec:+(c.pcm.length/c.rate).toFixed(2)});});
+  const meta={ver:VER,saved:new Date().toISOString(),why,ua:navigator.userAgent,cfg:{A:J.A,wa:J.wa,wb:J.wb,toneMode:J.toneMode,sens:J.sens,N:J.N},clips:idx,events:ev,note:'w=에포크 ms(노트 10 시계). clip 의 w0 = 첫 샘플 시각. 소리는 16 kHz 모노 16비트 PCM'};
+  files.push({name:'events.json',data:new TextEncoder().encode(JSON.stringify(meta))});
+  const blob=zipStore(files),t0=clips.length?clips[0].w0:ev[0].w,name=`dj_${stampName(t0)}_audio.zip`;
+  const secs=Math.round(clips.reduce((x,c)=>x+c.pcm.length/c.rate,0));
+  try{await idbPut({name,blob,size:blob.size,ts:t0,dur:secs});}catch(e){jlog('note','소리 증거 보관 실패: '+((e&&e.message)||e));return;}
+  await rcRefresh();rcDownload(name,true);
+  jlog('note',`소리 증거 저장: ${name} (${Math.round(blob.size/1024)} KB · 소리 구간 ${clips.length}개)`);
 }
 function sndEv(o){const c=S.conn;if(c&&c.open)c.send(Object.assign({t:'snd',w:Date.now()},o));}
 function onSoundRel(t,info){
   if(J.running&&!J.winding){J.snd.push({t,info,cancel:false,used:false});}
-  log(`현소리 후보 (크기 ${info.rr}배)`);sndEv({k:'rel',up:info.rr,low:info.low,dec:info.dec});
+  log(`현소리 후보 (크기 ${info.rr}배)`);sndEv({k:'rel',up:info.rr,low:info.low,dec:info.dec});evLog('rel',info,t);acTrigger(t);
 }
 function cancelSound(tTone){for(const e of J.snd)if(!e.used&&tTone-e.t>0&&tTone-e.t<=TONE_POST)e.cancel=true}
-function onTone(t){J.tones.push({t,done:false});sndEv({k:'tone0'});}
+function onTone(t){J.tones.push({t,done:false});sndEv({k:'tone0'});evLog('tone0',{},t);acTrigger(t);}
 function onAudio(rms,hf,lf,pcm,nc,ct){
   const c=AU.ctx;if(!AU.st)return;
   const t=(c&&ct!=null)?nowS()-(c.currentTime-ct):nowS();
@@ -673,9 +729,9 @@ function onAudio(rms,hf,lf,pcm,nc,ct){
         J.lastTone=k.t;}
       else if(ok){
         const info={rr:+pr.toFixed(1),hr:+k.hr.toFixed(1),low:+low.toFixed(2),dec:+dec.toFixed(2)};
-        if(k.t-J.lastTone<TONE_PRE){log(`과녁 소리 직후라 발시에서 제외 (크기 ${info.rr}배)`);sndEv({k:'excl',x:'과녁 소리 직후 제외',up:info.rr});}
+        if(k.t-J.lastTone<TONE_PRE){log(`과녁 소리 직후라 발시에서 제외 (크기 ${info.rr}배)`);sndEv({k:'excl',x:'과녁 소리 직후 제외',up:info.rr});evLog('excl',{x:'과녁 소리 직후 제외',up:info.rr},k.t);acTrigger(k.t);}
         else onSoundRel(k.t,info);}
-      else if(pr>2){const why=dull?'둔탁한 소리(화살 맞는 소리 등)':`충격음 아님(저음 ${Math.round(low*100)}%, 잔향 ${Math.round(dec*100)}%)`;log('제외: '+why);sndEv({k:'excl',x:why,up:+pr.toFixed(1)});}
+      else if(pr>2){const why=dull?'둔탁한 소리(화살 맞는 소리 등)':`충격음 아님(저음 ${Math.round(low*100)}%, 잔향 ${Math.round(dec*100)}%)`;log('제외: '+why);sndEv({k:'excl',x:why,up:+pr.toFixed(1)});evLog('excl',{x:why,up:+pr.toFixed(1),low:+low.toFixed(2),dec:+dec.toFixed(2),sharp:+sharp.toFixed(3)},k.t);acTrigger(k.t);}
     }
     return;}
   if(hr>sens.khf)J.cand={t,n:0,rms:[rms],lf:[lf],hfa:[hf],mr:J.med.rms,hr};
@@ -690,13 +746,13 @@ function fft(re,im){const n=re.length;for(let i=1,j=0;i<n;i++){let b=n>>1;for(;j
     for(let i=0;i<n;i+=len){let cr=1,ci=0;for(let j=0;j<len/2;j++){const a=i+j,b=a+len/2,tr=re[b]*cr-im[b]*ci,ti=re[b]*ci+im[b]*cr;re[b]=re[a]-tr;im[b]=im[a]-ti;re[a]+=tr;im[a]+=ti;const nr=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=nr}}}}
 /* A형(우리 관): 1294→1535→679 Hz, B형(옆 관): ~800→673→1330→673 Hz. 1500~1600 Hz 가 두 창 이상이면 A */
 function classify(t){
-  const x=segment(t-0.15,t+1.3);if(!x||x.length<J.ringRate*0.5)return{k:'?',why:'소리 부족'};
+  const x=segment(t-0.5,t+1.3);if(!x||x.length<J.ringRate*0.5)return{k:'?',why:'소리 부족'};
   const R=J.ringRate,N=1024,hop=Math.round(R*0.05),pk=[];let mx=0;
   for(let s=0;s+N<=x.length;s+=hop){const re=new Float64Array(N),im=new Float64Array(N);for(let i=0;i<N;i++)re[i]=x[s+i]*(0.5-0.5*Math.cos(2*Math.PI*i/N));fft(re,im);
     let bi=0,bm=0;for(let k=Math.floor(400*N/R);k<=Math.floor(3000*N/R);k++){const a=re[k]*re[k]+im[k]*im[k];if(a>bm){bm=a;bi=k}}
     pk.push([bi*R/N,bm]);if(bm>mx)mx=bm}
   let nA=0,nB=0;for(const[f,a]of pk){if(a<mx*0.05)continue;if(f>=1480&&f<=1600)nA++;else if(f>=1290&&f<=1350)nB++}
-  return{k:nA>=2?'A':(nB>=2?'B':'?'),nA,nB};
+  return{k:nA>=2?'A':(nB>=2?'B':'?'),nA,nB,pk:pk.map(([f,a])=>a>=mx*0.05?Math.round(f/10)*10:0)};
 }
 
 /* ---------- 판정: 동작(만작→발시) ---------- */
@@ -755,7 +811,7 @@ function motionRelease(s,end,hs,dur){
   let tM=end,method='자세';
   if(w.length>3){const mx=Math.max(...w.map(d=>d[1])),thr=Math.max(DIFF_MIN,FRAC*mx),f=w.find(d=>d[1]>thr);if(f){tM=f[0];method='동작'}}
   s.state='발시';setTimeout(()=>{if(s.state==='발시')s.state='대기'},1500);
-  J.pend.push({idx:J.slots.indexOf(s),no:s.no,tM,dur,method});
+  J.pend.push({idx:J.slots.indexOf(s),no:s.no,tM,dur,method});evLog('mot',{no:s.no,dur:+dur.toFixed(2),method,end:+(end-tM).toFixed(2)},tM);acTrigger(tM);
   log(`${s.no}번 동작 발시 (만작 ${dur.toFixed(1)}초, ${method}) · 소리와 맞추는 중`);
 }
 
@@ -817,10 +873,10 @@ function jtick(){
   for(const e of J.tones){if(e.done||t<e.t+TONE_WAIT)continue;e.done=true;const r=classify(e.t);
     const acc=J.toneMode!=='off'&&(r.k==='A'||(J.toneMode==='A?'&&r.k==='?')||J.toneMode==='any');
     const use=acc&&J.running;
-    sndEv({k:'tone',cl:r.k,nA:r.nA,nB:r.nB,why:r.why,acc:use});
+    sndEv({k:'tone',cl:r.k,nA:r.nA,nB:r.nB,why:r.why,acc:use,pk:r.pk});evLog('tone',{cl:r.k,nA:r.nA,nB:r.nB,pk:r.pk,acc:use},e.t);
     if(use){log('뻐꾸기 '+r.k+'형 → 관중 신호');onFlash(e.t,'tone')}
     else if(r.k==='B')log('옆 관 뻐꾸기(B형) · 제외');
-    else log(`뻐꾸기 종류 ${r.k==='A'?'A':'불명'} · ${J.running?'제외':'(카운트 중 아님)'} ${r.why||`(A${r.nA}/B${r.nB})`}`);
+    else log(`뻐꾸기 종류 ${r.k==='A'?'A':'불명'} · ${J.running?'제외':'(카운트 중 아님)'} ${r.why||`(A${r.nA}/B${r.nB})`} 피크 ${(r.pk||[]).join(' ')}`);
   }
   while(J.tones.length&&J.tones[0].done&&t-J.tones[0].t>10)J.tones.shift();
   // 불(관중 없음) 확정
@@ -914,7 +970,7 @@ async function rcRefresh(){
 }
 function rcRender(){
   const box=$('rcList');if(!box)return;box.innerHTML='';
-  setT('rcInfo',RC.list.length?`보관 중 ${RC.pend.n}개 · ${RC.pend.mb} MB — ‘저장’을 누르면 이 폰의 다운로드 폴더로 저장됩니다. 확인한 뒤 ‘삭제’로 지우세요.`:'보관 중인 녹화 없음 (발시 카운트 중에 자동으로 녹화됩니다)','dim');
+  setT('rcInfo',RC.list.length?`보관 중 ${RC.pend.n}개 · ${RC.pend.mb} MB — ‘저장’을 누르면 이 폰의 다운로드 폴더로 저장됩니다. …_audio.zip 은 소리 증거(작은 파일)입니다. 확인한 뒤 ‘삭제’로 지우세요.`:'보관 중인 녹화 없음 (발시 카운트 중에 자동으로 녹화됩니다)','dim');
   RC.list.forEach(o=>{const row=document.createElement('div');row.className='row';row.style.margin='4px 0';
     const t=document.createElement('div');t.style.cssText='flex:2;font-size:12px;word-break:break-all';t.textContent=`${o.name} · ${Math.round(o.size/1048576*10)/10} MB · ${o.dur}초`;
     const b1=document.createElement('button');b1.className='sub';b1.style.cssText='min-height:36px;margin:0';b1.textContent='저장';b1.onclick=()=>rcDownload(o.name,false);
