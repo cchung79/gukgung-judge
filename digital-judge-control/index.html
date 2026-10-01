@@ -77,6 +77,20 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div id="nowImgT" class="dim" hidden>↑ 준비 모드에서만 오는 확인 사진입니다 (발시 카운트 중에는 사진·영상을 보내지 않고 번호·결과만 받습니다)</div>
 </div>
 
+<div class="card" id="zoomCard">
+  <h2>카메라 줌 · 카메라 선택 · 사진 (준비 모드에서 조작)</h2>
+  <div class="row"><span class="dim" style="flex:0 0 auto">카메라</span><select id="mCamSel" disabled></select></div>
+    <div class="row"><select id="mSize"><option value="1920">큰 사진(1920px)</option><option value="1280">중간(1280px)</option><option value="640">작게(640px)</option></select></div>
+  <button id="mSnap" class="sub" disabled>노트 10에 사진 요청</button>
+  <div id="mPhotoInfo" class="dim">-</div>
+  <img id="mImg" class="shot" alt="" hidden>
+  <div id="mZInfo" class="dim" style="margin-top:8px">슬레이브 연결 후 표시</div>
+  <input id="mZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0">
+  <div class="row" id="mZBtn"></div>
+  <label class="dim" style="display:block;margin:6px 0"><input id="mAuto" type="checkbox" checked>줌을 바꾸고 1.2초 가만히 있으면 사진 자동 요청</label>
+  <div class="dim">줌·카메라를 바꾼 뒤에는 위 ‘현재 상황’의 사진에서 선수가 모두 들어오는지 확인하고, 설치·점검 도구의 ‘화면 맞추기’를 다시 하세요. 발시 카운트 중에는 줌·카메라 변경이 잠깁니다.</div>
+</div>
+
 <div class="card">
   <h2>순별 발시·관중 기록</h2>
   <div class="tabs" id="tabs"></div>
@@ -124,20 +138,11 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <img id="mFitImg" class="shot" alt="" hidden>
   <div class="dim">슬레이브가 전체 화면에서 선수를 찾아 잘림·키 크기를 검사하고 모두 들어오는 확대 영역(청록 점선)을 정합니다. 설치 때 한 번 누르면 됩니다.</div>
   <label style="display:block;margin:6px 0"><input type="checkbox" id="mPhoto">준비 중 확인 사진 받기</label>
-  <h2 style="margin-top:14px">② 사진 요청 · 줌 원격 조작</h2>
-  <div class="row"><select id="mSize"><option value="1920">큰 사진(1920px)</option><option value="1280">중간(1280px)</option><option value="640">작게(640px)</option></select></div>
-  <button id="mSnap" class="sub" disabled>노트 10에 사진 요청</button>
-  <div id="mPhotoInfo" class="dim">-</div>
-  <img id="mImg" class="shot" alt="" hidden>
-  <div id="mZInfo" class="dim" style="margin-top:8px">슬레이브 연결 후 표시</div>
-  <input id="mZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0">
-  <div class="row" id="mZBtn"></div>
-  <label class="dim" style="display:block;margin:6px 0"><input id="mAuto" type="checkbox" checked>줌을 바꾸고 1.2초 가만히 있으면 사진 자동 요청</label>
-  <h2 style="margin-top:14px">③ 카메라 전체 비교 (ELP 줌 카메라 확인용)</h2>
+  <h2 style="margin-top:14px">② 카메라 전체 비교 (ELP 줌 카메라 확인용)</h2>
   <button id="mCamScan" class="sub" disabled>슬레이브의 모든 카메라로 촬영해 비교</button>
   <div id="mCamInfo" class="dim">브라우저가 열어 주는 카메라가 전부 나타납니다. 외장(USB) 카메라가 보이는지 확인하세요.</div>
   <div id="mCamList"></div>
-  <h2 style="margin-top:14px">④ 자세 인식 속도</h2>
+  <h2 style="margin-top:14px">③ 자세 인식 속도</h2>
   <button id="mBench" class="sub" disabled>슬레이브에서 자세 모델 속도 측정</button>
   <div id="mBenchInfo" class="dim">기준: 중앙값 500 ms 이하 사용 가능, 300 ms 이하 여유.</div>
 </details>
@@ -170,7 +175,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.2';
+const VER=qs.get('fakever')||'1.3';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -279,6 +284,7 @@ function initControl(){
   $('mRecSave').onclick=()=>{send({t:'recsave'});log('녹화 저장 요청 (노트 10에서 다운로드 허용 창이 뜨면 허용)');};
   $('mReload').onclick=()=>{send({t:'reload'});log('슬레이브 새로고침 요청');setT('mSVer','새로고침 요청함…','dim');};
   $('mSnap').onclick=doSnap;
+  $('mCamSel').onchange=()=>{send({t:'camset',id:$('mCamSel').value});setT('mZInfo','카메라 전환 요청…','dim');log('카메라 전환 요청');};
   $('mFit').onclick=()=>{send({t:'fitreq',id:Date.now()});$('mFit').disabled=true;setT('mFitHead','요청함…','dim');$('mFitMsgs').textContent='';log('자동 화면 맞추기 요청');};
   $('mBench').onclick=()=>{send({t:'benchreq'});$('mBench').disabled=true;setT('mBenchInfo','측정 요청함…','dim');};
   $('mCamScan').onclick=()=>{send({t:'camscan',id:Date.now()});$('mCamScan').disabled=true;$('mCamList').innerHTML='';setT('mCamInfo','카메라를 하나씩 열어 촬영 중…(수 초 걸림)','dim');};
@@ -356,7 +362,7 @@ function applyModeUI(){
   const up=!!(C.conn&&C.conn.open),m=C.mode,tr=!!C.trans;
   $('bPrep').disabled=!up||tr||m==='active';$('bCount').disabled=!up||tr||m==='count';$('bEnd').disabled=!up||tr||m!=='count';$('bStb').disabled=!up||tr||m==='standby';
   ['mFit','mSnap','mBench','mCamScan'].forEach(i=>$(i).disabled=!up||m!=='active'||tr);
-  $('mSnd').disabled=!up||m==='standby';$('mRecSave').disabled=!up;$('mReload').disabled=!up||m==='count';
+  $('mSnd').disabled=!up||m==='standby';$('mCamSel').disabled=!up||m!=='active'||$('mCamSel').options.length<2;if(m!=='active')$('mZ').disabled=true;else if(C.cam&&C.cam.zoom)$('mZ').disabled=false;$('mRecSave').disabled=!up;$('mReload').disabled=!up||m==='count';
   ['eUndo','eAdd','eNext','pSet','eClear'].forEach(i=>$(i).disabled=!up);
   if(!up){return;}
   if(!tr)setT('mModeSt',MODETXT[m][0],'huge '+MODETXT[m][1]);
@@ -419,7 +425,8 @@ function onData(c,d){
 }
 function onHello(c,d){
   C.hello=d;
-  if(d.cam){C.cam=d.cam;setT('mCam',camText(d.cam),'ok');setupZoom(d.cam);}else setT('mCam','꺼짐 (대기 모드)','dim');
+  if(d.cam){C.cam=d.cam;setT('mCam',camText(d.cam),'ok');setupZoom(d.cam);}else{setT('mCam','꺼짐 (대기 모드)','dim');setT('mZInfo','대기 모드에서는 카메라가 꺼져 있습니다 — ▶ 준비를 누르세요','dim');$('mZ').disabled=true;}
+  { const sel=$('mCamSel');sel.innerHTML='';(d.cams||[]).forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.l;if(x.id===d.devId)o.selected=true;sel.appendChild(o);});sel.disabled=!(d.cams&&d.cams.length>1)||C.mode!=='active'; }
   C.smic=d.mic;if(d.mic){const m=d.mic;setT('mSMic',!m.on?(m.err?'⛔ 실패: '+m.err:'꺼짐'):(m.state==='running'?`🎤 켜짐 · ${m.sr} Hz · 지연 ${m.lat!=null?Math.round(m.lat*1000):'?'} ms`:`⚠ 일시정지(${m.state}) — 노트 10 화면을 한 번 터치`),m.on&&m.state==='running'?'ok':'warn');
     setBanner('mic',(d.mode!=='standby'&&m.on&&m.state!=='running')?'⚠ 노트 10의 마이크가 일시정지 상태입니다 — 노트 10 화면을 한 번 터치해 주세요 (소리 판정이 안 됩니다)':(d.mode!=='standby'&&!m.on&&m.err?'⛔ 노트 10 마이크 실패: '+m.err:null));}
   if(d.ver){const k=cmpVer(d.ver,VER);setT('mSVer','v'+d.ver+(k===0?' · 같은 버전':(k<0?' · 구버전 → 갱신 요청함':' · 이 폰이 구버전')),k===0?'ok':'warn');

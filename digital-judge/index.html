@@ -62,7 +62,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.2';
+const VER=qs.get('fakever')||'1.3';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -413,7 +413,7 @@ function tryConnect(){
   c.on('error',e=>log('conn 오류 '+e));
 }
 function micInfo(){const c=AU.ctx;return{on:!!AU.st,state:c?c.state:null,sr:c?c.sampleRate:null,lat:c?c.baseLatency:null,err:AU.err};}
-function sendHello(){if(S.conn&&S.conn.open)S.conn.send({t:'hello',app:'dj',cam:S.cam,ver:VER,mic:micInfo(),mode:S.mode,N:J.N,nb:J.arrows.length,roi:S.roi?1:0});}
+function sendHello(){if(S.conn&&S.conn.open)S.conn.send({t:'hello',app:'dj',cams:[...$('sSel').options].map(o=>({id:o.value,l:o.textContent})),devId:S.devId,cam:S.cam,ver:VER,mic:micInfo(),mode:S.mode,N:J.N,nb:J.arrows.length,roi:S.roi?1:0});}
 async function sendBat(){
   const c=S.conn;if(!c||!c.open)return;
   let lvl=null,chg=null;try{if(navigator.getBattery){const b=S.bat||(S.bat=await navigator.getBattery());lvl=b.level;chg=b.charging;}}catch(e){}
@@ -431,8 +431,8 @@ function setBlk(txt){if(S.mode==='active'||Date.now()<(S.blkOff||0))return;const
 /* ---------- 컨트롤 → 슬레이브 명령 ---------- */
 function onSData(c,d){
   if(!d||!d.t)return;
-  if(S.mode==='standby'&&['snap','zoom','benchreq','camscan','fitreq'].includes(d.t))return;
-  if(S.locked&&['fitreq','benchreq','camscan'].includes(d.t))return;      // 확정 중에는 화면·인원 설정 명령 무시
+  if(S.mode==='standby'&&['snap','zoom','benchreq','camscan','fitreq','camset'].includes(d.t))return;
+  if(S.locked&&['fitreq','benchreq','camscan','camset','zoom'].includes(d.t))return;      // 확정 중에는 화면·인원 설정 명령 무시
   if(d.t==='ping')c.send({t:'pong',i:d.i,m0:d.m0,s:nowE()});
   else if(d.t==='snap')sendPhoto(c,d);
   else if(d.t==='zoom')applyZoom(c,d.v);
@@ -440,6 +440,7 @@ function onSData(c,d){
   else if(d.t==='camscan')camScan(c,d);
   else if(d.t==='fitreq')autoFit(c,d);
   else if(d.t==='photocfg')S.photoOn=!!d.on;
+  else if(d.t==='camset'){S.busy=true;(async()=>{try{await openCam(d.id);S.zoomV=null;S.roi=null;log('카메라 전환: '+(S.cam&&S.cam.label));}catch(e){log('카메라 전환 실패 '+((e&&e.name)||e));}finally{S.busy=false;sendHello();}})();}
   else if(d.t==='mode')modeChain=modeChain.then(()=>doMode(c,d.m,d)).catch(e=>log('모드 오류 '+e));
   else if(d.t==='cfg')applyCfg(d);
   else if(d.t==='edit')editOp(d);
