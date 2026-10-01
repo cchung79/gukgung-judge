@@ -62,7 +62,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.6.2';
+const VER=qs.get('fakever')||'1.6.3';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -535,12 +535,14 @@ async function doMode(c,m,d){
   if(m==='active'){
     const was=S.mode;
     try{
-      if(was==='count'){S.locked=false;S.mode='active';$('blk').style.display='none';J.blkTxt='';setModeTxt();windDown();}   // 판정은 마무리만 하고 뒤에서 끝낸다
+      if(was==='count'&&!d.fresh){S.locked=false;S.mode='active';$('blk').style.display='none';J.blkTxt='';setModeTxt();windDown();}   // 판정은 마무리만 하고 뒤에서 끝낸다
+      if(d.fresh&&was==='count'){S.locked=false;await windDown();}
+      if(d.fresh){editOp({op:'clear'});J.sel=null;log('새로 시작 — 기록을 모두 지웠습니다');}
       S.mode='active';$('blk').style.display='none';J.blkTxt='';
       await startActive();setModeTxt();
       rep({ready:true,ms:performance.now()-t0,mic:micInfo()});log('준비 모드 — 카메라 '+Math.round(performance.now()-t0)+'ms');
       monStart(c);
-      if(J.af&&was!=='count')autoFitOnEnter(c,'준비 모드 진입');
+      if(J.af&&(was!=='count'||d.fresh))autoFitOnEnter(c,d.fresh?'새로 시작':'준비 모드 진입');
     }catch(e){rep({ready:false,err:(e&&e.name)||String(e)});setT('sCam','카메라 시작 실패: '+((e&&e.name)||e),'bad');}
     sendBat();sendSt(true);return;
   }

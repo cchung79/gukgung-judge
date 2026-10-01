@@ -57,6 +57,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 
 <div class="card">
   <h2>디지털 저지 명령</h2>
+  <button id="bNew" class="stop" disabled>🔄 새로 시작 (기록 지우고 처음부터)</button>
   <div id="mModeSt" class="huge dim">연결 전</div>
   <div class="row"><button id="bPrep" class="sub" disabled>▶ 준비<br><span style="font-weight:400;font-size:12px">카메라 켜고 선수 수 감시</span></button>
     <button id="bCount" class="go" disabled>🏹 발시 카운트 시작<br><span style="font-weight:400;font-size:12px">인원 확정 후 판정</span></button></div>
@@ -183,7 +184,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.6.2';
+const VER=qs.get('fakever')||'1.6.3';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -275,6 +276,7 @@ function initControl(){
   if(cf.rec===false)$('cRec').checked=false;if(cf.recq)$('cRecq').value=cf.recq;
   ['cAf','cKwan','cWm','cSens','cRec','cRecq'].forEach(i=>$(i).onchange=sendCfg);$('tgClear').onclick=()=>setTg([]);$('tgPh').onclick=()=>reqPh(true);$('tgSet').addEventListener('toggle',()=>{if($('tgSet').open&&!C.bx)reqPh(false);});renderTg(true);
   $('mStart').onclick=startControl;
+  let nw=0;$('bNew').onclick=()=>{if(Date.now()-nw>4000){nw=Date.now();$('bNew').textContent='정말 새로 시작하려면 한 번 더 누르세요 (기록 삭제)';setTimeout(()=>{if(nw){nw=0;$('bNew').textContent=NEWTXT;}},4000);return;}nw=0;$('bNew').textContent=NEWTXT;freshStart();};
   $('bPrep').onclick=()=>cmd('active','준비 중… (노트 10 카메라 켜는 중)');
   $('bCount').onclick=()=>{const n=C.board?C.board.arrows.length:0;if(n>0){$('scN').textContent=n;$('startChoice').hidden=false;}else startCount(false);};
   $('scCont').onclick=()=>{$('startChoice').hidden=true;startCount(false);};
@@ -371,6 +373,12 @@ function finishPings(){
 }
 
 /* ---------- 명령 ---------- */
+const NEWTXT='🔄 새로 시작 (기록 지우고 처음부터)';
+function freshStart(){
+  if(!send({t:'mode',m:'active',fresh:true}))return;
+  C.want='active';C.trans='active';setBanner('mode',null);$('startChoice').hidden=true;
+  setT('mModeSt','새로 시작 중… (기록 지우고 준비 모드로, 자동 줌 다시 맞춤)','huge dim');applyModeUI();log('명령: 새로 시작 (기록 삭제 → 준비 모드)');
+}
 function cmd(m,txt){
   if(!send({t:'mode',m}))return;
   C.want=m;C.trans=m;setT('mModeSt',txt,'huge dim');setBanner('mode',null);applyModeUI();log('명령: '+m);
@@ -384,7 +392,7 @@ function edit(o){send(Object.assign({t:'edit'},o));}
 const MODETXT={standby:['⏸ 대기 — 노트 10 절전 (검은 화면)','warn'],active:['▶ 준비 — 카메라 켜짐, 선수 수 실시간 감시','ok'],count:['🏹 발시 카운트 중 — 인원 확정·판정','ok']};
 function applyModeUI(){
   const up=!!(C.conn&&C.conn.open),m=C.mode,tr=!!C.trans;
-  $('bPrep').disabled=!up||tr||m==='active';$('bCount').disabled=!up||tr||m==='count';$('bEnd').disabled=!up||tr||m!=='count';$('bStb').disabled=!up||tr||m==='standby';
+  $('bNew').disabled=!up||tr;$('bPrep').disabled=!up||tr||m==='active';$('bCount').disabled=!up||tr||m==='count';$('bEnd').disabled=!up||tr||m!=='count';$('bStb').disabled=!up||tr||m==='standby';
   ['mFit','mSnap','mBench','mCamScan'].forEach(i=>$(i).disabled=!up||m!=='active'||tr);
   $('mSnd').disabled=!up||m==='standby';$('mCamSel').disabled=!up||m!=='active'||$('mCamSel').options.length<2;if(m!=='active')$('mZ').disabled=true;else if(C.cam&&C.cam.zoom)$('mZ').disabled=false;$('mRecSave').disabled=!up;$('mReload').disabled=!up||m==='count';
   ['eUndo','eAdd','eNext','pSet','eClear'].forEach(i=>$(i).disabled=!up);
