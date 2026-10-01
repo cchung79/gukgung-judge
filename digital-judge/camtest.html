@@ -13,14 +13,14 @@ button.sub{background:#344256}.row{display:flex;gap:8px}.row>*{flex:1}
 .res div{padding:6px 0;border-top:1px solid #2a3544}.res div:first-child{border-top:0}
 img,canvas{width:100%;border-radius:10px;background:#000;display:block;margin-top:8px}
 </style></head><body>
-<h1>외장(USB) 카메라 주소 시험</h1>
+<h1>외장(USB) 카메라 주소 시험 <span class="dim">v2</span></h1>
 <div class="card">
   <h2>순서</h2>
   <div class="dim">① 노트 10에 ‘USB Camera’ 앱(Shenyaocn)을 깔고 ELP를 연결 → 앱 설정에서 HTTP 서버를 켭니다. ② 앱이 알려 주는 주소(예: http://127.0.0.1:8080/ 또는 같은 와이파이의 http://192.168.x.x:포트/)를 아래에 넣고 시험합니다.</div>
 </div>
 <div class="card">
   <h2>영상 주소 (MJPEG 주소를 정확히)</h2>
-  <input id="u" inputmode="url" placeholder="http://127.0.0.1:8080/video" autocapitalize="off" autocomplete="off">
+  <input id="u" inputmode="url" placeholder="http://127.0.0.1:8081" autocapitalize="off" autocomplete="off">
   <div class="row"><button id="b1">1. 화면 표시 시험</button><button id="b2">2. 화소 읽기 시험</button></div>
   <button id="b3" class="sub">3. fetch 시험 (헤더 확인)</button>
   <button id="b4" class="sub">4. 영상 경로 자동 찾기 (주소는 127.0.0.1:포트만 넣어도 됨)</button>
@@ -32,6 +32,7 @@ img,canvas{width:100%;border-radius:10px;background:#000;display:block;margin-to
 const $=id=>document.getElementById(id);let tm=null;
 const reset=()=>{$('res').innerHTML='';$('cv').hidden=true;};
 const say=(t,c)=>{const d=document.createElement('div');d.className=c||'';d.textContent=t;$('res').appendChild(d);};
+const hostWarn=()=>{try{const h=new URL(url()).hostname;if(location.protocol==='https:'&&!['127.0.0.1','localhost'].includes(h)){say('⚠ 주소가 '+h+' 입니다. 이 페이지는 https라서 Chrome이 일반 http의 와이파이 주소(172.x, 192.168.x)를 막습니다. 주소를 http://127.0.0.1:8081 로 바꿔서 다시 누르세요.','warn');return true;}}catch(e){}return false;};
 const url=()=>{let u=$('u').value.trim();if(u&&!/^https?:\/\//i.test(u))u='http://'+u;return u;};
 try{const s=localStorage.getItem('ct_u');if(s)$('u').value=s;}catch(e){}
 const save=()=>{try{localStorage.setItem('ct_u',$('u').value)}catch(e){}};
@@ -42,11 +43,11 @@ function loadImg(cors){
     im.hidden=false;im.src=url()+sep+'_='+Date.now();
     setTimeout(()=>{if(!done){done=true;rej(new Error('8초 안에 영상이 오지 않음 (주소·포트·접속 확인)'))}},8000);});
 }
-$('b1').onclick=async()=>{save();reset();if(!url()){say('주소를 넣으세요','warn');return;}
+$('b1').onclick=async()=>{save();reset();if(!url()){say('주소를 넣으세요','warn');return;}if(hostWarn())return;
   say('주소: '+url()+(location.protocol==='https:'?' · (이 페이지는 https — 일반 http 주소는 127.0.0.1일 때만 허용될 수 있음)':''),'dim');
   try{const im=await loadImg(false);say(`✅ 영상이 표시됩니다 (${im.naturalWidth}×${im.naturalHeight})`,'ok');}
   catch(e){say('⛔ '+e.message,'bad');$('im').hidden=true;}};
-$('b2').onclick=async()=>{save();reset();if(!url()){say('주소를 넣으세요','warn');return;}
+$('b2').onclick=async()=>{save();reset();if(!url()){say('주소를 넣으세요','warn');return;}if(hostWarn())return;
   let im=null,mode='';
   try{im=await loadImg(true);mode='CORS 허용 요청';}catch(e){say('· CORS 요청으로는 열리지 않음 — 앱이 읽기 허용 헤더를 안 보냄','warn');}
   if(!im){try{im=await loadImg(false);mode='일반 요청';}catch(e){say('⛔ '+e.message,'bad');return;}}
@@ -59,7 +60,7 @@ $('b3').onclick=async()=>{save();reset();if(!url()){say('주소를 넣으세요'
     say('응답 '+r.status+' · 형식 '+(r.headers.get('content-type')||'?'),'ok');say('✅ fetch로 읽기가 허용됨 (CORS 허용 확인)','ok');ac.abort();}
   catch(e){say('⛔ fetch 실패: '+(e.name==='AbortError'?'응답 없음/중단':e.message)+' — (CORS 허용이 없으면 이 시험은 실패하는 것이 정상)','warn');}};
 
-$('b4').onclick=async()=>{save();reset();let u=url();if(!u){say('주소를 넣으세요 (예: http://127.0.0.1:8081)','warn');return;}
+$('b4').onclick=async()=>{save();reset();let u=url();if(!u){say('주소를 넣으세요 (예: http://127.0.0.1:8081)','warn');return;}if(hostWarn())return;
   const base=u.replace(/^(https?:\/\/[^\/]+).*$/,'$1');say('기본 주소 '+base+' 에서 흔한 영상 경로를 차례로 시험합니다 (경로당 4초)…','dim');
   const paths=['/video','/video.mjpg','/mjpeg','/mjpg/video.mjpg','/stream','/stream.mjpg','/live','/cam.mjpg','/snapshot','/snapshot.jpg','/shot.jpg','/image.jpg','/jpeg','/capture','/frame.jpg'];
   let found=[];
