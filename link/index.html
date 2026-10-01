@@ -85,15 +85,16 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
     <div id="mBenchInfo" class="dim">처음엔 모델(13MB)을 내려받아 1분쯤 걸릴 수 있음. 기준: 중앙값 500 ms 이하면 사용 가능, 300 ms 이하면 여유.</div>
   </div>
   <div class="card">
-    <h2>시험 ④ 자동 화면 맞추기 (슬레이브가 스스로 확인)</h2>
+    <h2>시험 ④ 선수 인식 · 화면 맞추기</h2>
     <div class="row"><label class="dim" style="flex:0 0 auto">선수 수</label><input id="mN" type="number" min="0" max="7" value="0" style="flex:0 0 80px"><span class="dim">인식 결과로 자동 갱신</span></div>
-    <button id="mFit" disabled>자동 화면 맞추기 시작</button>
-    <button id="mMon" class="sub" disabled>실시간 인원 감시 시작</button>
+    <button id="mFit" disabled>① 화면 맞추기 (1회 정밀 검사)</button>
+    <button id="mMon" class="sub" disabled>② 인원 자동 갱신 켜짐</button>
     <div id="mCount" class="big dim">선수 수: -</div>
     <div id="mFitHead" class="big dim">-</div>
     <div id="mFitMsgs" style="white-space:pre-line;margin:4px 0"></div>
     <img id="mFitImg" class="shot" alt="" hidden>
-    <div class="dim">전체 화면에서 선수를 찾아 잘림·인원·키 크기를 검사하고, 모두 들어오는 확대 영역(청록 사각형)을 계산합니다.</div>
+    <div class="dim">① <b>화면 맞추기</b>: 슬레이브가 전체 화면에서 선수를 찾아 잘림·키 크기를 검사하고, 모두 들어오는 확대 영역(청록 점선)을 계산합니다. 설치 때 한 번 누르면 됩니다.<br>
+    ② <b>인원 자동 갱신</b>: ①이 끝나면 저절로 켜져서 1~2초마다 사람 수를 세고, 인원이 바뀌면 선수 수와 사진을 새로 보냅니다(선수는 초록 번호 상자, 몸이 일부만 보여 제외한 사람은 주황 ‘제외’ 상자). 끄고 싶을 때만 누르세요.</div>
   </div>
   <div class="card">
     <h2>시험 ⑤ 모의 발시 이벤트(5회)</h2>
@@ -150,7 +151,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'0.9';
+const VER=qs.get('fakever')||'0.10';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('gkj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('gkj_rl',v)}catch(e){}};
@@ -234,7 +235,7 @@ function initMaster(){
   $('mPing').onclick=()=>runPings(20);
   $('mCamScan').onclick=()=>{M.conn.send({t:'camscan',id:Date.now()});$('mCamScan').disabled=true;$('mCamList').innerHTML='';setT('mCamInfo','카메라를 하나씩 열어 촬영 중…(수 초 걸림)','dim');log('카메라 비교 요청');};
   $('mAuto').checked=lsG('gkj_auto')!=='0';$('mAuto').onchange=()=>{lsS('gkj_auto',$('mAuto').checked?'1':'0');if(!$('mAuto').checked)clearTimeout(M.autoT);};
-  $('mMon').onclick=()=>{M.mon=!M.mon;M.conn.send({t:M.mon?'monstart':'monstop'});$('mMon').textContent=M.mon?'실시간 인원 감시 중지':'실시간 인원 감시 시작';setT('mCount',M.mon?'감시 시작… 첫 결과 대기':'감시 중지됨','dim');log(M.mon?'인원 감시 시작':'인원 감시 중지');};
+  $('mMon').onclick=()=>setMon(!M.mon);
   $('mFit').onclick=()=>{M.conn.send({t:'fitreq',id:Date.now()});$('mFit').disabled=true;setT('mFitHead','요청함…','dim');$('mFitMsgs').textContent='';log('자동 화면 맞추기 요청');};
   $('mBench').onclick=()=>{M.conn.send({t:'benchreq'});$('mBench').disabled=true;setT('mBenchInfo','측정 요청함…','dim');log('속도 측정 요청');};
   $('mReload').onclick=()=>{M.conn.send({t:'reload'});log('슬레이브 새로고침 요청');setT('mSVer','새로고침 요청함…','dim');};
@@ -269,7 +270,7 @@ async function startMaster(){
   });
 }
 async function onMOpen(c){
-  setT('mSt','✅ 연결됨','ok');['mSnap','mEv','mPing','mBench','mFit','mCamScan','mMon','mSnd','mReload'].forEach(i=>$(i).disabled=false);log('데이터 채널 열림');c.send({t:'ver',v:VER});
+  setT('mSt','✅ 연결됨','ok');['mSnap','mEv','mPing','mBench','mFit','mCamScan','mMon','mSnd','mReload'].forEach(i=>$(i).disabled=false);$('mMon').textContent='② 인원 자동 갱신 꺼짐 (누르면 켬)';log('데이터 채널 열림');c.send({t:'ver',v:VER});
   runPings(20);
   await sleep(600);M.path=await pathInfo(c);const p=pathText(M.path);setT('mPath',p[0],p[1]);log('경로 '+(M.path?M.path.lt+'↔'+M.path.rt:'?'));
 }
@@ -302,12 +303,13 @@ function doSnap(){
 function onMData(c,d){
   if(!d||!d.t)return;
   if(d.t==='pong'){const m1=nowE();M.pr.push({rtt:m1-d.m0,off:d.s-(d.m0+m1)/2});}
-  else if(d.t==='count'){if(M.mon)setPlayers(d.n,'실시간 감시',d.ex);}
+  else if(d.t==='count'){if(M.mon){setPlayers(d.n,'자동 갱신',d.ex);M.lastExq=d.exq;}}
   else if(d.t==='camerr'){addCamItem(null,d);}
   else if(d.t==='camdone'){$('mCamScan').disabled=false;setT('mCamInfo',`✅ 카메라 ${d.n}개 확인 완료 — 같은 자리에서 더 넓게 보이는 쪽이 광각입니다`,'ok');M.camList=d.list;log('카메라 비교 완료 '+d.n+'개');}
   else if(d.t==='fitmsg'){setT('mFitHead',d.msg,'dim');}
   else if(d.t==='fit'){
     $('mFit').disabled=false;M.fit=d;
+    if(!M.mon&&!d.err)setTimeout(()=>setMon(true),400);
     if(!d.err&&d.n!=null)setPlayers(d.n,'화면 맞추기',d.ex);
     if(d.err){setT('mFitHead','⚠ 실패: '+d.err,'bad');return;}
     const cl=d.status==='ok'?'ok':(d.status==='warn'?'warn':'bad'),ic=d.status==='ok'?'✅':(d.status==='warn'?'⚠':'⛔');
@@ -379,6 +381,12 @@ async function checkLatest(){
   try{const r=await fetch(location.pathname+'?_='+Date.now(),{cache:'no-store'});const t=await r.text();
     const m=t.match(new RegExp('const V'+"ER=qs.get\\('fakever'\\)\\|\\|'([^']+)'"));
     if(m&&cmpVer(m[1],VER)>0)tryUpdate(m[1],'m',(x,k)=>setT('mSt',x,k));}catch(e){}
+}
+function setMon(on){
+  if(!M.conn||!M.conn.open)return;M.mon=on;M.conn.send({t:on?'monstart':'monstop'});
+  $('mMon').textContent=on?'② 인원 자동 갱신 켜짐 (누르면 끔)':'② 인원 자동 갱신 꺼짐 (누르면 켬)';
+  if(on)setT('mCount','인원 자동 갱신 시작… 첫 결과 대기','dim');else setT('mCount','인원 자동 갱신 꺼짐 — 선수 수 '+(M.players==null?'-':M.players)+'명 (마지막 값)','dim');
+  log(on?'인원 자동 갱신 켬':'인원 자동 갱신 끔');
 }
 function setPlayers(n,src,ex){
   const old=M.players;M.players=n;$('mN').value=n;
@@ -579,7 +587,12 @@ function monStart(c){
   const loop=async()=>{
     if(!m.on)return;
     if(!S.busy&&c.open){
-      try{const ps=await detect({x:0,y:0,w:1,h:1});if(m.on&&c.open)c.send({t:'count',n:ps.length,ex:(ps.ex||[]).length,xs:ps.map(p=>Math.round((p.x1+p.x2)*500)/1000),ts:nowE()});}
+      try{const ps=await detect({x:0,y:0,w:1,h:1});
+        if(m.on&&c.open){
+          const sig=ps.length+'|'+(ps.ex||[]).length;
+          c.send({t:'count',n:ps.length,ex:(ps.ex||[]).length,xs:ps.map(p=>Math.round((p.x1+p.x2)*500)/1000),ts:nowE(),exq:(ps.ex||[]).map(e=>e.q)});
+          if(sig!==m.sig||performance.now()-(m.lastPh||0)>8000){m.sig=sig;m.lastPh=performance.now();sendAnno(c,Date.now(),{final:ps,ex:ps.ex||[],used:S.roi,maxW:800,q:0.65}).catch(()=>{});}
+        }}
       catch(e){log('감시 오류 '+((e&&e.message)||e));}
     }
     if(m.on)setTimeout(loop,1200);
@@ -601,7 +614,7 @@ const PW=640,PH=352;let LC=null;
 function iouB(a,b){const x1=Math.max(a[0],b[0]),y1=Math.max(a[1],b[1]),x2=Math.min(a[2],b[2]),y2=Math.min(a[3],b[3]);const i=Math.max(0,x2-x1)*Math.max(0,y2-y1);return i/((a[2]-a[0])*(a[3]-a[1])+(b[2]-b[0])*(b[3]-b[1])-i);}
 // roi: 전체 프레임 기준 정규화 영역. 반환 좌표도 전체 프레임 기준 정규화. hIn = 모델 입력 안에서의 키(px)
 let detChain=Promise.resolve();
-const Q={head:0.25,sh:0.3,hip:0.3};
+const Q={head:0.2,sh:0.2,hip:0.2};
 function detect(roi){const p=detChain.then(()=>detectRaw(roi));detChain=p.catch(()=>{});return p;}
 async function detectRaw(roi){
   await ensureModel();
@@ -644,8 +657,9 @@ async function autoFitInner(c,d){
     const v=S.vid,vw=v.videoWidth,vh=v.videoHeight,full={x:0,y:0,w:1,h:1},msgs=[];
     say('모델 준비 및 전체 화면 검사 중…');
     const P0=await detectStable(full,3);
-    const exTxt=a=>`선수로 세지 않은 사람 ${a.length}명 — 머리·어깨~허리가 다 보이지 않음(${a.map(e=>e.why+' 불명확').join(', ')})`;
+    const exTxt=a=>`선수로 세지 않은 사람 ${a.length}명 — 머리·어깨~허리가 다 보이지 않음(${a.map(e=>`${e.why} 불명확: 머리 ${e.q.head}·어깨 ${e.q.sh}·골반 ${e.q.hip}`).join(' / ')})`;
     if(!P0.length){const m0=[{lv:'warn',t:'인식된 선수 없음 → 선수 수를 0명으로 갱신 (사대 쪽을 향하고 있는지, 선수가 서 있는지 확인)'}];if(P0.ex.length)m0.push({lv:'warn',t:exTxt(P0.ex)});
+      await sendAnno(c,d.id,{final:[],ex:P0.ex,used:full,maxW:1280,q:0.8});
       c.send({t:'fit',status:'bad',n:0,ex:P0.ex.length,z:1,hBefore:0,hAfter:0,ms:performance.now()-t0,roi:full,msgs:m0});return;}
     const hBefore=Math.round(med(P0.map(p=>p.hIn)));
     // 1) 잘림 검사 (확대로는 해결 불가 → 위치 조정 경고)
@@ -682,14 +696,8 @@ async function autoFitInner(c,d){
     msgs.unshift({lv:'ok',t:`선수 ${final.length}명 인식 → 선수 수를 ${final.length}명으로 갱신`});
     const status=msgs.some(m=>m.lv==='bad')?'bad':(msgs.some(m=>m.lv==='warn')?'warn':'ok');
     S.roi=used;
-    // 주석 사진: 전체 프레임 + 선수 박스(번호) + 확대 영역
-    const sc=Math.min(1,1280/vw),W=Math.round(vw*sc),H=Math.round(vh*sc),cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
-    g.drawImage(v,0,0,W,H);g.lineWidth=3;g.font='bold 22px sans-serif';
-    final.forEach((p,i)=>{g.strokeStyle='#3ecf8e';g.strokeRect(p.x1*W,p.y1*H,(p.x2-p.x1)*W,(p.y2-p.y1)*H);g.fillStyle='#3ecf8e';g.fillText(String(i+1),p.x1*W+4,p.y1*H+22);});
-    g.strokeStyle='#ff9800';g.lineWidth=2;P0.ex.forEach(e=>{g.strokeRect(e.x1*W,e.y1*H,(e.x2-e.x1)*W,(e.y2-e.y1)*H);g.fillStyle='#ff9800';g.fillText('제외',e.x1*W+4,e.y1*H+22);});g.strokeStyle='#00e5ff';g.lineWidth=3;g.setLineDash([10,6]);g.strokeRect(used.x*W,used.y*H,used.w*W,used.h*H);
-    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.8));const buf=await blob.arrayBuffer();const CH=16000,n=Math.ceil(buf.byteLength/CH);
-    c.send({t:'ph',id:d.id,n,w:W,h:H,bytes:buf.byteLength,tShot:nowE(),kind:'fit'});
-    for(let i=0;i<n;i++){while(c.dataChannel&&c.dataChannel.bufferedAmount>1500000)await sleep(20);c.send({t:'pc',id:d.id,i,d:buf.slice(i*CH,(i+1)*CH)});}
+    // 주석 사진: 전체 프레임 + 선수 박스(번호) + 제외 박스 + 확대 영역
+    await sendAnno(c,d.id,{final,ex:P0.ex,used,maxW:1280,q:0.8});
     c.send({t:'fit',status,n:final.length,ex:P0.ex.length,exq:P0.ex.map(e=>({u:Math.round(e.u*1000)/1000,why:e.why,q:e.q,edge:e.edge})),pq:final.map(p=>p.q),z,hBefore,hAfter,ms:performance.now()-t0,roi:used,msgs,persons:final.map((p,i)=>({i:i+1,u:(p.x1+p.x2)/2,hIn:Math.round(p.hIn)}))});
     setT('sLast',`화면 맞추기: ${status}, ${final.length}명, 확대 ${f1(z)}배`,status==='ok'?'ok':'warn');
   }catch(e){c.send({t:'fit',err:(e&&e.message)||String(e)});setT('sLast','화면 맞추기 실패: '+((e&&e.message)||e),'bad');}
@@ -750,7 +758,25 @@ async function applyZoom(c,v){
     c.send({t:'zoomed',ok:true,req:v,v:(z==null?v:z)});setT('sCam',camText(S.cam)+' · 현재 '+f1(z==null?v:z)+'배','ok');
   }catch(e){c.send({t:'zoomed',ok:false,req:v,err:e.name+' '+e.message});log('줌 실패 '+e.name);}
 }
-async function sendPhoto(c,d){
+let txQ=Promise.resolve();
+const queueTx=fn=>{const r=txQ.then(fn);txQ=r.catch(()=>{});return r;};
+async function sendAnno(c,id,o){
+  return queueTx(async()=>{
+    const v=S.vid,vw=v.videoWidth,vh=v.videoHeight,sc=Math.min(1,(o.maxW||1280)/vw),W=Math.round(vw*sc),H=Math.round(vh*sc);
+    const cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
+    g.drawImage(v,0,0,W,H);g.lineWidth=3;g.font='bold 22px sans-serif';
+    (o.final||[]).forEach((p,i)=>{g.strokeStyle='#3ecf8e';g.strokeRect(p.x1*W,p.y1*H,(p.x2-p.x1)*W,(p.y2-p.y1)*H);g.fillStyle='#3ecf8e';g.fillText(String(i+1),p.x1*W+4,p.y1*H+22);});
+    g.strokeStyle='#ff9800';g.lineWidth=2;(o.ex||[]).forEach(e=>{g.strokeRect(e.x1*W,e.y1*H,(e.x2-e.x1)*W,(e.y2-e.y1)*H);g.fillStyle='#ff9800';g.fillText('제외',e.x1*W+4,e.y1*H+22);});
+    if(o.used&&o.used.w<0.999){g.strokeStyle='#00e5ff';g.lineWidth=3;g.setLineDash([10,6]);g.strokeRect(o.used.x*W,o.used.y*H,o.used.w*W,o.used.h*H);}
+    g.setLineDash([]);g.fillStyle='rgba(0,0,0,.55)';g.fillRect(0,H-28,W,28);g.fillStyle='#fff';g.font='16px sans-serif';
+    g.fillText(`${new Date().toTimeString().slice(0,8)} · 선수 ${(o.final||[]).length}명 · 제외 ${(o.ex||[]).length}명`,8,H-8);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',o.q||0.8));const buf=await blob.arrayBuffer(),CH=16000,n=Math.ceil(buf.byteLength/CH);
+    c.send({t:'ph',id,n,w:W,h:H,bytes:buf.byteLength,tShot:nowE(),kind:'fit'});
+    for(let i=0;i<n;i++){while(c.dataChannel&&c.dataChannel.bufferedAmount>1500000)await sleep(20);c.send({t:'pc',id,i,d:buf.slice(i*CH,(i+1)*CH)});}
+  });
+}
+async function sendPhoto(c,d){return queueTx(()=>sendPhotoRaw(c,d));}
+async function sendPhotoRaw(c,d){
   try{
     const v=S.vid;const sc=Math.min(1,(d.maxW||1920)/v.videoWidth);
     const w=Math.round(v.videoWidth*sc),h=Math.round(v.videoHeight*sc);
