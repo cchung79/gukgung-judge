@@ -26,7 +26,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 </style>
 </head>
 <body>
-<h1>링크 테스트 <span class="ver">v0.4 · 마스터(아이폰) ↔ 슬레이브(노트 10)</span></h1>
+<h1>링크 테스트 <span class="ver">v0.5 · 마스터(아이폰) ↔ 슬레이브(노트 10)</span></h1>
 
 <div id="roleBox" class="card">
   <h2>1. 이 폰의 역할을 고르세요</h2>
@@ -65,7 +65,9 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
     <div id="mZInfo" class="dim">슬레이브 연결 후 표시</div>
     <input id="mZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0">
     <div class="row" id="mZBtn"></div>
-    <div class="dim">줌을 바꾼 뒤 위의 ‘사진 요청’을 눌러 화면이 실제로 바뀌었는지 확인하세요.</div>
+    <label class="dim" style="display:block;margin:6px 0"><input id="mAuto" type="checkbox" checked style="width:auto;min-height:0;margin-right:6px">줌을 바꾸고 1.2초 가만히 있으면 자동으로 사진 가져오기</label>
+    <div id="mZPInfo" class="dim">-</div>
+    <img id="mZImg" class="shot" alt="" hidden>
   </div>
   <div class="card">
     <h2>시험 ③ 노트 10 자세 인식 속도</h2>
@@ -181,6 +183,7 @@ function initMaster(){
   $('mStart').onclick=startMaster;
   $('mSnap').onclick=doSnap;$('mEv').onclick=()=>{M.ev=[];renderEv();M.conn.send({t:'evreq',n:5});log('이벤트 5회 요청');};
   $('mPing').onclick=()=>runPings(20);
+  $('mAuto').checked=lsG('gkj_auto')!=='0';$('mAuto').onchange=()=>{lsS('gkj_auto',$('mAuto').checked?'1':'0');if(!$('mAuto').checked)clearTimeout(M.autoT);};
   $('mFit').onclick=()=>{M.conn.send({t:'fitreq',id:Date.now(),expectN:+$('mN').value||0});$('mFit').disabled=true;setT('mFitHead','요청함…','dim');$('mFitMsgs').textContent='';log('자동 화면 맞추기 요청');};
   $('mBench').onclick=()=>{M.conn.send({t:'benchreq'});$('mBench').disabled=true;setT('mBenchInfo','측정 요청함…','dim');log('속도 측정 요청');};
   $('mCopy').onclick=()=>copyText(summary());
@@ -232,6 +235,9 @@ function finishPings(){
   setT('mOff',`슬레이브 시계가 마스터보다 ${f1(Math.abs(M.off))} ms ${sg} (±${f1(M.offErr)} ms)`,Math.abs(M.off)<300?'ok':'warn');
   log(`RTT 중앙 ${f1(med)} / 시계차 ${f1(M.off)}ms`);
 }
+function snapBusy(){return M.snap&&!M.snap.done&&nowE()-M.snap.t0<15000;}
+function autoSnap(){if(!M.conn||!M.conn.open)return;if(snapBusy()){M.snapQueued=true;return;}doSnap();}
+function scheduleAutoSnap(){clearTimeout(M.autoT);if(!$('mAuto').checked)return;M.autoT=setTimeout(autoSnap,1200);}
 function doSnap(){
   if(!M.conn||!M.conn.open)return;
   const id=Date.now();M.snap={id,t0:nowE()};M.rx=null;
@@ -260,7 +266,12 @@ function onMData(c,d){
     setT('mBenchInfo',`추론 1회 중앙 ${f1(d.med)} ms (최소 ${f1(d.min)} · 최대 ${f1(d.max)}, ${d.n}회)\n모델 준비 ${f1(d.loadMs/1000)}초 · SIMD ${d.simd?'지원':'미지원'} · 스레드 ${d.threads} · 코어 ${d.hc||'?'}${d.mem?' · 메모리 '+d.mem+'GB':''}`,c);
     log('자세 추론 중앙 '+f1(d.med)+'ms');
   }
-  else if(d.t==='zoomed'){setT('mZInfo',d.ok?`✅ 적용됨: ${f1(d.v)}배 (요청 ${f1(d.req)}배)`:`⚠ 적용 실패: ${d.err}`,d.ok?'ok':'bad');log('줌 '+(d.ok?f1(d.v)+'배':'실패 '+d.err));}
+  else if(d.t==='zoomed'){
+    const au=d.ok&&$('mAuto').checked;
+    setT('mZInfo',d.ok?`✅ 적용됨: ${f1(d.v)}배 (요청 ${f1(d.req)}배)`+(au?' · 잠시 후 사진 자동 요청':''):`⚠ 적용 실패: ${d.err}`,d.ok?'ok':'bad');
+    log('줌 '+(d.ok?f1(d.v)+'배':'실패 '+d.err));
+    if(d.ok){M.lastZoom=d.v;scheduleAutoSnap();}
+  }
   else if(d.t==='hello'){M.cam=d.cam;setT('mCam',camText(d.cam),'ok');setupZoom(d.cam);log('슬레이브 카메라 '+d.cam.w+'x'+d.cam.h);}
   else if(d.t==='ph'){M.rx={meta:d,parts:new Array(d.n),got:0};}
   else if(d.t==='pc'&&M.rx&&M.rx.meta.id===d.id){
@@ -277,11 +288,14 @@ function finishPhoto(){
   const url=URL.createObjectURL(blob);
   if(m.kind==='fit'){const fi=$('mFitImg');fi.src=url;fi.hidden=false;return;}
   const im=$('mImg');im.src=url;im.hidden=false;
+  const zi=$('mZImg');zi.src=url;zi.hidden=false;
   const total=tEnd-M.snap.t0;const ship=(M.off==null)?null:tEnd-(m.tShot-M.off);
   M.snap.done=true;$('mSnap').disabled=false;
   M.photo={kb:Math.round(blob.size/1024),w:m.w,h:m.h,total,ship};
   setT('mPhotoInfo',`✅ 수신: ${m.w}×${m.h}, ${M.photo.kb} KB · 요청→표시 ${f1(total)} ms`+(ship!=null?` · 촬영→수신 ${f1(ship)} ms`:''),'ok');
+  setT('mZPInfo',`📷 ${M.lastZoom!=null?'줌 '+f1(M.lastZoom)+'배 · ':''}${m.w}×${m.h} · ${M.photo.kb} KB · ${f1(total)} ms`,'ok');
   log('사진 수신 '+M.photo.kb+'KB '+f1(total)+'ms');
+  if(M.snapQueued){M.snapQueued=false;setTimeout(autoSnap,50);}
 }
 function renderEv(){
   const t=$('mEvT');t.innerHTML='';
@@ -293,8 +307,8 @@ function setupZoom(c){
   const [mn,mx,st,cur]=c.zoom;sl.min=mn;sl.max=mx;sl.step=st||0.1;sl.value=cur;sl.disabled=false;
   setT('mZInfo',`줌 범위 ${f1(mn)}~${f1(mx)}배 · 현재 ${f1(cur)}배`,'ok');
   const send=v=>{if(M.conn&&M.conn.open)M.conn.send({t:'zoom',v:+v});};
-  sl.oninput=null;let tm=null;sl.oninput=()=>{setT('mZInfo','요청 '+f1(+sl.value)+'배…','dim');clearTimeout(tm);tm=setTimeout(()=>send(sl.value),150);};
-  [1,2,3,5].filter(v=>v>=mn&&v<=mx).forEach(v=>{const b=document.createElement('button');b.className='sub';b.textContent=v+'×';b.onclick=()=>{sl.value=v;send(v);};bt.appendChild(b);});
+  sl.oninput=null;let tm=null;sl.oninput=()=>{clearTimeout(M.autoT);setT('mZInfo','요청 '+f1(+sl.value)+'배…','dim');clearTimeout(tm);tm=setTimeout(()=>send(sl.value),150);};
+  [1,2,3,5].filter(v=>v>=mn&&v<=mx).forEach(v=>{const b=document.createElement('button');b.className='sub';b.textContent=v+'×';b.onclick=()=>{clearTimeout(M.autoT);sl.value=v;setT('mZInfo','요청 '+v+'배…','dim');send(v);};bt.appendChild(b);});
 }
 function camText(c){return `${c.label||'카메라'} · ${c.w}×${c.h}${c.fps?' @'+Math.round(c.fps)+'fps':''}${c.zoom?' · 줌 '+c.zoom[0]+'~'+c.zoom[1]:''}`;}
 function summary(){
