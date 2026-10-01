@@ -94,27 +94,16 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   </details>
 </div>
 
-<div class="card">
-  <h2>소리 감지 확인 (노트 10 마이크)</h2>
-  <button id="mSnd" class="sub sm" disabled>소리 모니터 켜기</button>
-  <div style="height:14px;background:#0c1118;border-radius:7px;overflow:hidden;margin-top:6px"><div id="mLvlB" style="height:100%;width:0;background:var(--ok)"></div></div>
-  <div id="mLvlT" class="dim" style="margin-top:4px">-</div>
-  <table class="kv" id="mSndT"></table>
-  <div class="dim">현소리 후보·뻐꾸기(A/B/불명)가 들릴 때마다 한 줄씩 표시됩니다. 현장에서 A가 안 나오고 ‘불명’이 나오면 설정의 ‘뻐꾸기 판정’을 바꿔 보세요.</div>
-</div>
-
 <div class="card log"><h2>이벤트</h2><div id="evLog"></div></div>
 
 <details class="card" id="setAll"><summary>설정 · 카메라 줌 · 화면 맞추기 · 점검</summary>
   <h2>① 판정 설정</h2>
-  <div class="row"><span class="dim">1순 당 시수(한 선수)</span><input id="cA" type="number" min="1" max="10" value="5"></div>
-  <div class="row"><span class="dim">관중 판정 시간창(발시 후 초)</span><input id="cWa" type="number" step="0.1" value="2.0"><input id="cWb" type="number" step="0.1" value="4.5"></div>
-  <div class="row"><span class="dim">뻐꾸기 판정</span><select id="cTone"><option value="A">A형(우리 관)만 관중</option><option value="A?">A형 + 불명도 관중</option><option value="any">종류 불문 모두 관중</option><option value="off">관중 판정 끔 (발시만 셈)</option></select></div>
+  <div class="row"><span class="dim">내 관 (뻐꾸기 소리)</span><select id="cKwan"><option value="3">3관 (A형 소리)</option><option value="2">2관 (B형 소리)</option><option value="1">1관 (소리 미등록 · 뻐꾸기 판정 안 함)</option><option value="0">뻐꾸기 없음 (비봉정 등)</option></select></div>
+  <div class="row"><span class="dim">관중 확인 최대 시간 (발시 후 초)</span><input id="cWm" type="number" step="0.5" min="3" max="15" value="7"></div>
   <div class="row"><span class="dim">현소리 감도</span><select id="cSens"><option value="n">보통</option><option value="h">민감</option><option value="l">둔감</option></select></div>
   <div class="row"><label class="dim"><input id="cRec" type="checkbox" checked>원본 영상+소리 녹화 (발시 카운트 중 노트 10에 저장)</label></div>
   <div class="row"><span class="dim">녹화 화질</span><select id="cRecq"><option value="m">중 (분당 약 19MB)</option><option value="h">상 (분당 약 30MB)</option><option value="l">하 (분당 약 9MB)</option></select></div>
-  <div class="row"><label class="dim"><input id="cManual" type="checkbox">선수 수 직접 지정</label><input id="cN" type="number" min="0" max="12" value="4"></div>
-  <div class="dim">설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다. ‘직접 지정’은 사람 인식이 안 될 때용 — 선수 수를 지정하고 자세 인식 수와 다르면 소리만으로 발시를 셉니다. 카운트 시작 전에 정하세요.</div>
+  <div class="dim">뻐꾸기는 관중 판정의 보조 신호입니다(램프 판정은 추가 예정). 발시 후 ‘최대 시간’ 안에 내 관의 뻐꾸기가 울리면 관중, 아니면 불로 확정합니다 — 활이 약한 선수는 7초까지 걸립니다. 설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다.</div>
   <h2 style="margin-top:14px">② 카메라 · 줌 · 사진 (준비 모드에서 조작)</h2>
   <div class="row"><span class="dim" style="flex:0 0 auto">카메라</span><select id="mCamSel" disabled></select></div>
     <div class="row"><select id="mSize"><option value="1920">큰 사진(1920px)</option><option value="1280">중간(1280px)</option><option value="640">작게(640px)</option></select></div>
@@ -140,6 +129,12 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <h2 style="margin-top:14px">⑤ 자세 인식 속도</h2>
   <button id="mBench" class="sub" disabled>슬레이브에서 자세 모델 속도 측정</button>
   <div id="mBenchInfo" class="dim">기준: 중앙값 500 ms 이하 사용 가능, 300 ms 이하 여유.</div>
+  <h2 style="margin-top:14px">⑥ 소리 감지 확인 (노트 10 마이크)</h2>
+  <button id="mSnd" class="sub sm" disabled>소리 모니터 켜기</button>
+  <div style="height:14px;background:#0c1118;border-radius:7px;overflow:hidden;margin-top:6px"><div id="mLvlB" style="height:100%;width:0;background:var(--ok)"></div></div>
+  <div id="mLvlT" class="dim" style="margin-top:4px">-</div>
+  <table class="kv" id="mSndT"></table>
+  <div class="dim">현소리 후보·뻐꾸기(A/B/불명)가 들릴 때마다 한 줄씩 표시됩니다. 현장에서 A가 안 나오고 ‘불명’이 나오면 설정의 ‘뻐꾸기 판정’을 바꿔 보세요.</div>
 </details>
 
 <details class="card"><summary>연결 정보 · 기록 내보내기</summary>
@@ -170,7 +165,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.4.3';
+const VER=qs.get('fakever')||'1.5';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -258,10 +253,9 @@ function initControl(){
   const saved=lsG('dj_ccode');
   $('mCode').value=qs.get('code')||saved||String(1000+Math.floor(Math.random()*9000));
   const cf=jparse(lsG('dj_ccfg'),{});
-  if(cf.A)$('cA').value=cf.A;if(cf.wa)$('cWa').value=cf.wa;if(cf.wb)$('cWb').value=cf.wb;if(cf.toneMode)$('cTone').value=cf.toneMode;if(cf.sens)$('cSens').value=cf.sens;
-  if(cf.manualN!=null){$('cManual').checked=true;$('cN').value=cf.manualN;}
+  if(cf.kwan!=null)$('cKwan').value=cf.kwan;if(cf.wm)$('cWm').value=cf.wm;if(cf.sens)$('cSens').value=cf.sens;
   if(cf.rec===false)$('cRec').checked=false;if(cf.recq)$('cRecq').value=cf.recq;
-  ['cA','cWa','cWb','cTone','cSens','cManual','cN','cRec','cRecq'].forEach(i=>$(i).onchange=sendCfg);
+  ['cKwan','cWm','cSens','cRec','cRecq'].forEach(i=>$(i).onchange=sendCfg);
   $('mStart').onclick=startControl;
   $('bPrep').onclick=()=>cmd('active','준비 중… (노트 10 카메라 켜는 중)');
   $('bCount').onclick=()=>{const n=C.board?C.board.arrows.length:0;if(n>0){$('scN').textContent=n;$('startChoice').hidden=false;}else startCount(false);};
@@ -291,7 +285,7 @@ function initControl(){
   if(qs.get('auto')||saved)startControl();
 }
 const send=d=>{if(C.conn&&C.conn.open){try{C.conn.send(d);return true}catch(e){}}return false;};
-function getCfg(){return{A:Math.max(1,Math.min(10,+$('cA').value||5)),wa:+$('cWa').value||2,wb:+$('cWb').value||4.5,toneMode:$('cTone').value,sens:$('cSens').value,manualN:$('cManual').checked?Math.max(0,Math.min(12,+$('cN').value||0)):null,rec:$('cRec').checked,recq:$('cRecq').value};}
+function getCfg(){return{kwan:+$('cKwan').value,wm:Math.max(3,Math.min(15,+$('cWm').value||7)),sens:$('cSens').value,rec:$('cRec').checked,recq:$('cRecq').value};}
 function sendCfg(){const c=getCfg();lsS('dj_ccfg',JSON.stringify(c));send(Object.assign({t:'cfg'},c));renderBoard();}
 function setBanner(k,msg){if(msg)C.bn[k]=msg;else delete C.bn[k];$('banner').innerHTML=Object.keys(C.bn).map(x=>'<div class="banner"></div>').join('');Object.keys(C.bn).forEach((x,i)=>{$('banner').children[i].textContent=C.bn[x];});}
 async function startControl(){
@@ -375,7 +369,7 @@ function renderNow(){
   { const st2=C.st,rc=st2&&st2.rc,rp=st2&&st2.rp;
     setT('mRec',rc&&rc.on?`🔴 원본 영상 녹화 중 · 구간 ${rc.seg} · ${rc.mb} MB (노트 10에 저장)`:(m==='count'&&!getCfg().rec?'녹화 꺼짐 (설정)':''),rc&&rc.on?'bad':'dim');
     setT('mRp',rp&&rp.n?`${rp.n}개 · ${rp.mb} MB — 노트 10 화면을 두 번 빠르게 터치하면 목록에서 저장·삭제`:'없음',rp&&rp.n?'warn':'dim'); }
-  setT('mJm',C.jm&&m==='count'?('판정 방식: '+(C.jm==='motion'?'자세(만작→발시) + 현소리':'현소리만 (자세로 선수를 찾지 못함)')+' · 관중: '+({A:'뻐꾸기 A형','A?':'뻐꾸기 A형+불명',any:'뻐꾸기 모두',off:'판정 안 함(발시만 셈)'}[getCfg().toneMode])):'','dim');
+  setT('mJm',C.jm&&m==='count'?('판정 방식: '+(C.jm==='motion'?'자세(만작→발시) + 현소리':'현소리만 (자세로 선수를 찾지 못함)')+' · 관중: '+({3:'3관 뻐꾸기(A형)',2:'2관 뻐꾸기(B형)',1:'판정 안 함(1관 소리 미등록 · 발시만 셈)',0:'판정 안 함(뻐꾸기 없음 · 발시만 셈)'}[getCfg().kwan])):'','dim');
   // 선수별 상태 칩
   const N=m==='count'||m==='active'?(st&&st.sl&&st.sl.length?st.sl.length:(C.players||0)):0,box=$('chips');
   const cnt=m==='count'&&st?Math.max(st.n||0,st.sl?st.sl.length:0):N;
@@ -480,7 +474,7 @@ function renderAll(){renderBoard();renderLg();renderNow();}
 function renderBoard(){
   const b=C.board,tabs=$('tabs'),tb=$('bd'),sm=$('sumT');
   if(!b||(!b.arrows.length&&!b.N)){tabs.innerHTML='';tb.innerHTML='<tr><td class="dim">아직 기록이 없습니다. ‘🏹 발시 카운트 시작’을 누르면 시작됩니다.</td></tr>';sm.innerHTML='';return;}
-  const A=getCfg().A||b.A,uMax=Math.max(b.sun,...b.arrows.map(a=>a.u),1);
+  const A=b.A||5,uMax=Math.max(b.sun,...b.arrows.map(a=>a.u),1);
   if(C.selAuto||C.sel==null||C.sel>uMax)C.sel=b.sun;
   tabs.innerHTML='';for(let u=1;u<=uMax;u++){const bt=document.createElement('button');bt.textContent=u+'순';bt.className=u===C.sel?'on':'';bt.onclick=()=>{C.sel=u;C.selAuto=(u===b.sun);renderBoard();};tabs.appendChild(bt);}
   const N=b.N||Math.max(0,...b.arrows.map(a=>a.p+1));
