@@ -77,8 +77,18 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div id="nowImgT" class="dim" hidden>↑ 준비 모드에서만 오는 확인 사진입니다 (발시 카운트 중에는 사진·영상을 보내지 않고 번호·결과만 받습니다)</div>
 </div>
 
-<div class="card" id="zoomCard">
-  <h2>카메라 줌 · 카메라 선택 · 사진 (준비 모드에서 조작)</h2>
+<details class="card"><summary>설정</summary>
+  <div class="row"><span class="dim">1순 당 시수(한 선수)</span><input id="cA" type="number" min="1" max="10" value="5"></div>
+  <div class="row"><span class="dim">관중 판정 시간창(발시 후 초)</span><input id="cWa" type="number" step="0.1" value="2.0"><input id="cWb" type="number" step="0.1" value="4.5"></div>
+  <div class="row"><span class="dim">뻐꾸기 판정</span><select id="cTone"><option value="A">A형(우리 관)만 관중</option><option value="A?">A형 + 불명도 관중</option><option value="any">종류 불문 모두 관중</option><option value="off">관중 판정 끔 (발시만 셈)</option></select></div>
+  <div class="row"><span class="dim">현소리 감도</span><select id="cSens"><option value="n">보통</option><option value="h">민감</option><option value="l">둔감</option></select></div>
+  <div class="row"><label class="dim"><input id="cRec" type="checkbox" checked>원본 영상+소리 녹화 (발시 카운트 중 노트 10에 저장)</label></div>
+  <div class="row"><span class="dim">녹화 화질</span><select id="cRecq"><option value="m">중 (분당 약 19MB)</option><option value="h">상 (분당 약 30MB)</option><option value="l">하 (분당 약 9MB)</option></select></div>
+  <div class="row"><label class="dim"><input id="cManual" type="checkbox">선수 수 직접 지정</label><input id="cN" type="number" min="0" max="12" value="4"></div>
+  <div class="dim">설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다. ‘직접 지정’은 사람 인식이 안 될 때용 — 선수 수를 지정하고 자세 인식 수와 다르면 소리만으로 발시를 셉니다. 카운트 시작 전에 정하세요.</div>
+</details>
+
+<details class="card" id="zoomCard"><summary>카메라 줌 · 카메라 선택 · 사진 (준비 모드에서 조작)</summary>
   <div class="row"><span class="dim" style="flex:0 0 auto">카메라</span><select id="mCamSel" disabled></select></div>
     <div class="row"><select id="mSize"><option value="1920">큰 사진(1920px)</option><option value="1280">중간(1280px)</option><option value="640">작게(640px)</option></select></div>
   <button id="mSnap" class="sub" disabled>노트 10에 사진 요청</button>
@@ -88,7 +98,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <input id="mZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0">
   <div class="row" id="mZBtn"></div>
   <label class="dim" style="display:block;margin:6px 0"><input id="mAuto" type="checkbox" checked>줌을 바꾸고 1.2초 가만히 있으면 사진 자동 요청</label>
-  <div class="dim">줌·카메라를 바꾼 뒤에는 위 ‘현재 상황’의 사진에서 선수가 모두 들어오는지 확인하고, 설치·점검 도구의 ‘화면 맞추기’를 다시 하세요. 발시 카운트 중에는 줌·카메라 변경이 잠깁니다.</div>
+  <div class="dim">줌·카메라를 바꾼 뒤에는 ‘현재 상황’ 카드의 사진에서 선수가 모두 들어오는지 확인하고, 설치·점검 도구의 ‘화면 맞추기’를 다시 하세요. 발시 카운트 중에는 줌·카메라 변경이 잠깁니다.</div>
 </div>
 
 <div class="card">
@@ -117,18 +127,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div class="dim">현소리 후보·뻐꾸기(A/B/불명)가 들릴 때마다 한 줄씩 표시됩니다. 현장에서 A가 안 나오고 ‘불명’이 나오면 설정의 ‘뻐꾸기 판정’을 바꿔 보세요.</div>
 </div>
 
-<div class="card log"><h2>이벤트</h2><div id="evLog"></div></div>
-
-<details class="card"><summary>설정</summary>
-  <div class="row"><span class="dim">1순 당 시수(한 선수)</span><input id="cA" type="number" min="1" max="10" value="5"></div>
-  <div class="row"><span class="dim">관중 판정 시간창(발시 후 초)</span><input id="cWa" type="number" step="0.1" value="2.0"><input id="cWb" type="number" step="0.1" value="4.5"></div>
-  <div class="row"><span class="dim">뻐꾸기 판정</span><select id="cTone"><option value="A">A형(우리 관)만 관중</option><option value="A?">A형 + 불명도 관중</option><option value="any">종류 불문 모두 관중</option><option value="off">관중 판정 끔 (발시만 셈)</option></select></div>
-  <div class="row"><span class="dim">현소리 감도</span><select id="cSens"><option value="n">보통</option><option value="h">민감</option><option value="l">둔감</option></select></div>
-  <div class="row"><label class="dim"><input id="cRec" type="checkbox" checked>원본 영상+소리 녹화 (발시 카운트 중 노트 10에 저장)</label></div>
-  <div class="row"><span class="dim">녹화 화질</span><select id="cRecq"><option value="m">중 (분당 약 19MB)</option><option value="h">상 (분당 약 30MB)</option><option value="l">하 (분당 약 9MB)</option></select></div>
-  <div class="row"><label class="dim"><input id="cManual" type="checkbox">선수 수 직접 지정</label><input id="cN" type="number" min="0" max="12" value="4"></div>
-  <div class="dim">설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다. ‘직접 지정’은 사람 인식이 안 될 때용 — 선수 수를 지정하고 자세 인식 수와 다르면 소리만으로 발시를 셉니다. 카운트 시작 전에 정하세요.</div>
-</details>
+<div class="card log"><h2>이벤트</h2><div id="evLog"></div></details>
 
 <details class="card"><summary>설치·점검 도구 (화면 맞추기 · 사진 · 줌 · 카메라 비교 · 속도)</summary>
   <h2>① 화면 맞추기 (준비 모드)</h2>
@@ -175,7 +174,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.4';
+const VER=qs.get('fakever')||'1.4.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
