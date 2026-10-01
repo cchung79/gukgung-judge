@@ -62,7 +62,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.6.1';
+const VER=qs.get('fakever')||'1.6.2';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -336,7 +336,7 @@ const S={peer:null,conn:null,stream:null,code:'',retry:null,vid:null,mode:'stand
 const FULL={x:0,y:0,w:1,h:1};
 const SENS={n:{khf:6,krms:4,low:0.7},h:{khf:5,krms:3,low:0.75},l:{khf:8,krms:6,low:0.6}};
 const HOLD_MIN=1.5,GAP_TOL=0.3,WIN=2.2,FRAC=0.35,DIFF_MIN=10,POSE_DT=0.25,LOCK=6,SND_MATCH=0.7,RESOLVE_LAG=1.2,TONE_POST=0.8,TONE_WAIT=1.35,TONE_PRE=0.6,MISS_GRACE=2.2,SHARP_MIN=0.09,SOUND_ONLY_LOCK=1.5;
-const J={N:0,A:5,wa:2.0,wb:7,toneMode:'own',own:'A',kwan:3,sens:'n',manualN:null,tg:[],sel:null,
+const J={af:true,N:0,A:5,wa:2.0,wb:7,toneMode:'own',own:'A',kwan:3,sens:'n',manualN:null,tg:[],sel:null,
   slots:[],spacing:0.2,mode:'sound',arrows:[],aid:0,sun:1,ptr:{p:0,s:0},rev:0,
   running:false,winding:false,snd:[],pend:[],tones:[],ring:[],ringRate:16000,
   prev:null,inferMs:[],lastTone:-1e9,cand:null,abuf:{rms:[],hf:[]},med:{rms:1e-4,hf:1e-4},aCount:0,lastSt:'',rec:true,recBps:2500000,lastRelAny:-1e9,blkTxt:'',wdTok:0,rosterMsg:null,tk:0};
@@ -349,7 +349,7 @@ $('verT').textContent='v'+VER+' · 슬레이브(노트 10)';
 /* 관별 뻐꾸기 소리: 3관=A형, 2관=B형, 1관=아직 소리 미등록(판정 안 함), 0=뻐꾸기 없음 */
 function setKwan(k){k=+k;J.kwan=k;J.own={3:'A',2:'B'}[k]||null;J.toneMode=J.own?'own':'off';}
 (function(){const c=jparse(lsG('dj_cfg'),{});
-  if(c.kwan!=null)setKwan(c.kwan);if(Array.isArray(c.tg))J.tg=c.tg;if(c.wm)J.wb=+c.wm;if(c.sens&&SENS[c.sens])J.sens=c.sens;if(c.rec!=null)J.rec=!!c.rec;if(c.recBps)J.recBps=c.recBps;
+  if(c.kwan!=null)setKwan(c.kwan);if(Array.isArray(c.tg))J.tg=c.tg;if(c.wm)J.wb=+c.wm;if(c.sens&&SENS[c.sens])J.sens=c.sens;if(c.rec!=null)J.rec=!!c.rec;if(c.recBps)J.recBps=c.recBps;if(c.af!=null)J.af=!!c.af;
   const b=jparse(lsG('dj_board'),null);
   if(b&&Array.isArray(b.arrows)){J.arrows=b.arrows.map(a=>Object.assign({},a,{tRel:null,tFlash:null,manual:a.res==='pending'?true:!!a.manual}));J.aid=b.aid||b.arrows.length;J.sun=b.sun||1;J.ptr=b.ptr||{p:0,s:0};J.N=b.N||0;}
 })();
@@ -358,8 +358,8 @@ function applyCfg(d){
   if(d.wm!=null)J.wb=Math.max(3,Math.min(15,+d.wm||7));
   if(d.kwan!=null)setKwan(d.kwan);if(d.sens&&SENS[d.sens])J.sens=d.sens;
   if(Array.isArray(d.tg)){if(S.locked)log('발시 카운트 중이라 선수 지정 변경은 다음 카운트부터 적용');else{J.tg=[...new Set(d.tg.map(x=>x|0).filter(x=>x>=1&&x<=20))].sort((a,b)=>a-b);log('지정 선수: '+(J.tg.length?J.tg.join('·')+'번':'없음(전체)'));}}
-  if('rec' in d)J.rec=!!d.rec;if(d.recq)J.recBps={h:4000000,m:2500000,l:1200000}[d.recq]||2500000;
-  lsS('dj_cfg',JSON.stringify({kwan:J.kwan,tg:J.tg,wm:J.wb,sens:J.sens,rec:J.rec,recBps:J.recBps}));
+  if('af' in d)J.af=!!d.af;if('rec' in d)J.rec=!!d.rec;if(d.recq)J.recBps={h:4000000,m:2500000,l:1200000}[d.recq]||2500000;
+  lsS('dj_cfg',JSON.stringify({kwan:J.kwan,tg:J.tg,wm:J.wb,sens:J.sens,rec:J.rec,recBps:J.recBps,af:J.af}));
   sendBoard();
 }
 function boardMsg(){
@@ -501,6 +501,7 @@ async function doMode(c,m,d){
       const wasStb=S.mode==='standby';
       if(wasStb){S.mode='active';$('blk').style.display='none';}
       await startActive();await sleep(wasStb?700:300);
+      if(wasStb&&J.af&&!S.roi){try{await autoFitInner(c,{id:Date.now()});}catch(e){log('자동 줌 실패 '+((e&&e.message)||e));}}
       const ps=await detectVote(S.roi||FULL,5);
       const n=J.manualN!=null?J.manualN:ps.length;
       if(n===0)throw new Error('선수가 한 명도 인식되지 않음 — 카메라 화면을 확인하세요');
@@ -539,6 +540,7 @@ async function doMode(c,m,d){
       await startActive();setModeTxt();
       rep({ready:true,ms:performance.now()-t0,mic:micInfo()});log('준비 모드 — 카메라 '+Math.round(performance.now()-t0)+'ms');
       monStart(c);
+      if(J.af&&was!=='count')autoFitOnEnter(c,'준비 모드 진입');
     }catch(e){rep({ready:false,err:(e&&e.name)||String(e)});setT('sCam','카메라 시작 실패: '+((e&&e.name)||e),'bad');}
     sendBat();sendSt(true);return;
   }
@@ -548,6 +550,15 @@ async function doMode(c,m,d){
   }
 }
 
+
+/* v1.6.2: 준비 모드에 들어갈 때 서 있는 선수 전원이 들어오게 자동 줌 — 감시 루프와 겹치지 않게 감시를 잠시 멈추고 1회 맞춘 뒤 다시 시작 */
+async function autoFitOnEnter(c,why){
+  if(S.busy||S.locked||S.mode!=='active'||!c||!c.open)return;
+  S.busy=true;monStop();
+  try{log('자동 줌 맞추기 ('+why+')');await sleep(600);await autoFitInner(c,{id:Date.now()});}
+  catch(e){log('자동 줌 실패 '+((e&&e.message)||e));}
+  finally{S.busy=false;if(S.mode==='active'&&c.open)monStart(c);}
+}
 
 /* v1.6: 사진 위 선수 표시 — 지정 선수는 주황 굵은 선, 나머지는 회색. 컨트롤이 눌러서 고를 수 있도록 상자 좌표(0~1)도 보낸다 */
 async function sendAnno(c,id,o){
