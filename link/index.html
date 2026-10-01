@@ -167,7 +167,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'0.12';
+const VER=qs.get('fakever')||'0.13';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('gkj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('gkj_rl',v)}catch(e){}};
@@ -366,6 +366,7 @@ function onMData(c,d){
   else if(d.t==='bat'){onBat(d);}
   else if(d.t==='mode'){
     M.modeConfirmed=true;M.smode=d.m;
+    if(d.ready===false&&d.cur){M.mode=d.cur;M.locked=false;}
     applyModeUI();
     if(d.m==='active'&&d.ready){setT('mModeSt','모드: ▶ 준비 (카메라 준비 '+Math.round(d.ms)+' ms)','big ok');log('슬레이브 준비 — 카메라 '+Math.round(d.ms)+'ms');
       setMon(true);if(M.sndOn){M.conn.send({t:'sndcfg',thr:+$('mThr').value});M.conn.send({t:'sndstart'});}}
@@ -491,6 +492,7 @@ function initSlave(){
   $('sSel').onchange=async()=>{await openCam($('sSel').value);sendHello();};
   if(qs.get('auto'))startSlave();
 }
+async function waitFrame(v,ms){const t=performance.now();while(performance.now()-t<(ms||6000)){if(v.readyState>=2&&v.videoWidth>0&&v.videoHeight>0)return true;await sleep(80);}return false;}
 async function openCam(devId){
   if(S.stream)S.stream.getTracks().forEach(t=>t.stop());
   const base={width:{ideal:1920},height:{ideal:1080}};
@@ -499,6 +501,7 @@ async function openCam(devId){
   catch(e){log('zoom 포함 요청 실패('+e.name+') → 일반 요청');S.stream=await navigator.mediaDevices.getUserMedia({video:v,audio:false});}
   S.vid.srcObject=S.stream;try{await S.vid.play()}catch(e){}
   await new Promise(r=>{if(S.vid.videoWidth)r();else S.vid.onloadedmetadata=()=>r();});
+  if(!await waitFrame(S.vid,8000))log('카메라 첫 화면 대기 시간 초과');
   const tr=S.stream.getVideoTracks()[0];const st=tr.getSettings();let z=null,capMax=null;S.devId=st.deviceId||null;
   try{const cp=tr.getCapabilities();if(cp&&cp.zoom)z=[cp.zoom.min,cp.zoom.max,cp.zoom.step||0.1,st.zoom||cp.zoom.min];if(cp&&cp.width&&cp.height)capMax=[cp.width.max,cp.height.max];}catch(e){}
   S.cam={label:tr.label,w:S.vid.videoWidth,h:S.vid.videoHeight,fps:st.frameRate||null,zoom:z,facing:st.facingMode||null,cap:capMax};
@@ -541,7 +544,7 @@ async function setSMode(c,m){
       c.send({t:'mode',m:'count',ready:true,ms:performance.now()-t0});
       c.send({t:'roster',n:ps.length,votes:ps.votes,ex:(ps.ex||[]).length,xs:ps.map(p=>Math.round((p.x1+p.x2)*500)/1000),exq:(ps.ex||[]).map(e=>e.q),ts:nowE()});
       setT('sLast','🔒 인원 확정: '+ps.length+'명','ok');log('인원 확정 '+ps.length+'명');
-    }catch(e){S.locked=false;c.send({t:'mode',m:'count',ready:false,err:(e&&e.message)||String(e)});setT('sLast','인원 확정 실패: '+((e&&e.message)||e),'bad');}
+    }catch(e){S.locked=false;if(S.mode==='count')S.mode=S.stream?'active':'standby';c.send({t:'mode',m:'count',ready:false,cur:S.mode,err:(e&&e.message)||String(e)});setT('sLast','인원 확정 실패: '+((e&&e.message)||e),'bad');}
     finally{S.busy=false;}
     sendBat();return;
   }
@@ -880,7 +883,8 @@ let txQ=Promise.resolve();
 const queueTx=fn=>{const r=txQ.then(fn);txQ=r.catch(()=>{});return r;};
 async function sendAnno(c,id,o){
   return queueTx(async()=>{
-    const v=S.vid,vw=v.videoWidth,vh=v.videoHeight,sc=Math.min(1,(o.maxW||1280)/vw),W=Math.round(vw*sc),H=Math.round(vh*sc);
+    const v=S.vid;if(!await waitFrame(v,5000))throw new Error('카메라 화면이 아직 없음 (프레임 수신 전)');
+    const vw=v.videoWidth,vh=v.videoHeight,sc=Math.min(1,(o.maxW||1280)/vw),W=Math.round(vw*sc),H=Math.round(vh*sc);
     const cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
     g.drawImage(v,0,0,W,H);g.lineWidth=3;g.font='bold 22px sans-serif';
     (o.final||[]).forEach((p,i)=>{g.strokeStyle='#3ecf8e';g.strokeRect(p.x1*W,p.y1*H,(p.x2-p.x1)*W,(p.y2-p.y1)*H);g.fillStyle='#3ecf8e';g.fillText(String(i+1),p.x1*W+4,p.y1*H+22);});
@@ -888,7 +892,9 @@ async function sendAnno(c,id,o){
     if(o.used&&o.used.w<0.999){g.strokeStyle='#00e5ff';g.lineWidth=3;g.setLineDash([10,6]);g.strokeRect(o.used.x*W,o.used.y*H,o.used.w*W,o.used.h*H);}
     g.setLineDash([]);g.fillStyle='rgba(0,0,0,.55)';g.fillRect(0,H-28,W,28);g.fillStyle='#fff';g.font='16px sans-serif';
     g.fillText(`${new Date().toTimeString().slice(0,8)} · 선수 ${(o.final||[]).length}명 · 제외 ${(o.ex||[]).length}명`,8,H-8);
-    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',o.q||0.8));const buf=await blob.arrayBuffer(),CH=16000,n=Math.ceil(buf.byteLength/CH);
+    let blob=null;for(let k=0;k<3&&!blob;k++){blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',o.q||0.8));if(!blob)await sleep(200);}
+    if(!blob)throw new Error('사진 인코딩 실패 (캔버스 '+W+'×'+H+')');
+    const buf=await blob.arrayBuffer(),CH=16000,n=Math.ceil(buf.byteLength/CH);
     c.send({t:'ph',id,n,w:W,h:H,bytes:buf.byteLength,tShot:nowE(),kind:'fit'});
     for(let i=0;i<n;i++){while(c.dataChannel&&c.dataChannel.bufferedAmount>1500000)await sleep(20);c.send({t:'pc',id,i,d:buf.slice(i*CH,(i+1)*CH)});}
   });
