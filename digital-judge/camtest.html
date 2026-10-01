@@ -13,7 +13,7 @@ button.sub{background:#344256}.row{display:flex;gap:8px}.row>*{flex:1}
 .res div{padding:6px 0;border-top:1px solid #2a3544}.res div:first-child{border-top:0}
 img,canvas{width:100%;border-radius:10px;background:#000;display:block;margin-top:8px}
 </style></head><body>
-<h1>외장(USB) 카메라 주소 시험 <span class="dim">v3</span></h1>
+<h1>외장(USB) 카메라 주소 시험 <span class="dim">v4</span></h1>
 <div class="card">
   <h2>순서</h2>
   <div class="dim">① 노트 10에 ‘USB Camera’ 앱(Shenyaocn)을 깔고 ELP를 연결 → 앱 설정에서 HTTP 서버를 켭니다. ② 앱이 알려 주는 주소(예: http://127.0.0.1:8080/ 또는 같은 와이파이의 http://192.168.x.x:포트/)를 아래에 넣고 시험합니다.</div>
@@ -27,7 +27,7 @@ img,canvas{width:100%;border-radius:10px;background:#000;display:block;margin-to
   <div class="res" id="res"></div>
   <div class="card" style="background:#141b24">
     <h2>카메라 두 개 동시에 열기 시험 (이 폰의 앞·뒷면 등)</h2>
-    <button id="b5">5. 보이는 카메라를 모두 동시에 열어 보기</button>
+    <button id="b5">5. 보이는 카메라를 모두 동시에 열어 보기 (최대 해상도 요청)</button>
     <div class="res" id="res5"></div><div id="v5"></div>
   </div>
   <img id="im" alt="" hidden><canvas id="cv" hidden></canvas>
@@ -85,10 +85,10 @@ $('b5').onclick=async()=>{const R=$('res5');R.innerHTML='';$('v5').innerHTML='';
   const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
   say5(`Chrome이 보는 카메라: ${ds.length}개`,ds.length?'ok':'bad');ds.forEach((d,i)=>say5(`  ${i+1}. ${d.label||'(이름 없음)'}`,'dim'));
   for(let i=0;i<Math.min(ds.length,4);i++){
-    try{const st=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:ds[i].deviceId},width:{ideal:1280}}});streams.push({i,st});
+    try{const st=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:ds[i].deviceId},width:{ideal:3840},height:{ideal:2160}}});streams.push({i,st});
       const v=document.createElement('video');v.muted=true;v.playsInline=true;v.autoplay=true;v.srcObject=st;v.style.cssText='width:100%;border-radius:10px;background:#000;margin-top:8px';
       const cap=document.createElement('div');cap.className='dim';cap.textContent=`${i+1}번 ${ds[i].label||''}`;$('v5').appendChild(cap);$('v5').appendChild(v);
-      const s0=st.getVideoTracks()[0].getSettings();say5(`✅ ${i+1}번 열림 (${s0.width}×${s0.height})`,'ok');}
+      const s0=st.getVideoTracks()[0].getSettings();say5(`✅ ${i+1}번 열림 (${s0.width}×${s0.height}${s0.facingMode?' · '+s0.facingMode:''})`,'ok');}
     catch(e){say5(`⛔ ${i+1}번 열기 실패: ${e.name}`,'bad');}
     await new Promise(r=>setTimeout(r,800));}
   await new Promise(r=>setTimeout(r,1500));
