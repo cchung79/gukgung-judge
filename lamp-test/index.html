@@ -77,10 +77,13 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
   <div id="grpT" class="dim"></div>
   <div id="verdict" class="big dim">시험 시작 전</div>
   <button id="bTap" class="tapb">👆 관중 (수동 +1)</button>
-  <div class="row"><button id="bMic" class="sub">🎤 마이크 켜기</button><select id="mMode"><option value="word">단어 인식 (관중)</option><option value="level">소리 크기</option></select></div>
+  <div class="row"><button id="bMic" class="sub">🎤 마이크 켜기</button><select id="mMode"><option value="pat">패턴 인식 (내 목소리)</option><option value="word">단어 인식 (사파리)</option><option value="level">소리 크기</option></select></div>
   <div class="row"><select id="mSens"><option value="10">감도 높음</option><option value="14" selected>감도 보통</option><option value="20">감도 낮음</option></select></div>
   <div class="lvl" id="lvlBox"><div id="lvlB"></div></div>
   <div id="lvlT" class="dim">마이크 꺼짐</div>
+  <div id="patBox"><div class="row"><button id="bReg" class="sub">🎓 내 목소리 등록 (관중 ×5)</button><button id="bRegClr" class="sub sm">등록 지우기</button></div>
+    <div class="row"><select id="mStrict"><option value="1.3">엄격 (닮은 것만)</option><option value="1.6" selected>보통</option><option value="2.2">관대 (놓치지 않게)</option></select></div>
+    <div id="patT" class="dim"></div></div>
   <div class="dim" id="micHelp"></div>
 </div>
 
@@ -105,7 +108,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.9.4';
+const VER=qs.get('fakever')||'1.9.5';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -200,8 +203,10 @@ function initT(){
   $('bWake').onclick=()=>{lpSend({t:'mode',m:'active'});};
   $('bTap').onclick=()=>addEv('manual');
   $('bMic').onclick=()=>{if(listening())listenOff();else{listenOn(false);}};
-  T.mm=lsG('dj_tmm')||(SRC?'word':'level');if(T.mm==='word'&&!SRC)T.mm='level';$('mMode').value=T.mm;applyMode();
-  $('mMode').onchange=()=>{const was=listening();listenOff();T.mm=$('mMode').value;lsS('dj_tmm',T.mm);applyMode();if(was)listenOn(false);};
+  T.mm=lsG('dj_tmm2')||'pat';if(T.mm==='word'&&!SRC)T.mm='pat';$('mMode').value=T.mm;applyMode();
+  $('mMode').onchange=()=>{const was=listening();listenOff();T.mm=$('mMode').value;lsS('dj_tmm2',T.mm);applyMode();if(was)listenOn(false);};
+  $('mStrict').onchange=()=>{PT.strict=+$('mStrict').value;lsS('dj_tstrict2',$('mStrict').value);patCalib();patUI();};const sv2=lsG('dj_tstrict2');if(sv2){$('mStrict').value=sv2;PT.strict=+sv2;}
+  $('bReg').onclick=regToggle;$('bRegClr').onclick=regClear;try{const tp=jparse(lsG('dj_ptpl'),[]);if(Array.isArray(tp))PT.tpl=tp.map(m=>({m,f:(patInit(),patFeat(m.map(r=>Float32Array.from(r))))}));patCalib();}catch(e){}patUI();
   $('mSens').onchange=()=>lsS('dj_tsens',$('mSens').value);const sv=lsG('dj_tsens');if(sv)$('mSens').value=sv;
   $('bCopy').onclick=()=>copyText(csv());
   let clr=0;$('bClr').onclick=()=>{if(Date.now()-clr>4000){clr=Date.now();$('bClr').textContent='정말 지우려면 한 번 더';setTimeout(()=>{$('bClr').textContent='기록 지우기';clr=0},4000);return;}clr=0;$('bClr').textContent='기록 지우기';T.ev=[];saveEv();render();};
@@ -371,13 +376,14 @@ function csv(){const P=pairs();return ['종류,시각,색_종류,색상각,채�
 async function micOn(auto){
   const M=T.mic;
   try{
-    const oc=M.ctx,os=M.stream;clearInterval(M.t);M.on=false;
+    const oc=M.ctx,os=M.stream;clearInterval(M.t);M.on=false;if(M.sp){M.sp.onaudioprocess=null;try{M.sp.disconnect()}catch(e){}M.sp=null}
     if(oc){oc.onstatechange=null;try{oc.close()}catch(e){}}
     if(os)os.getTracks().forEach(t=>{t.onended=null;t.onmute=null;t.stop()});
     const st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     const ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state!=='running')await ctx.resume();
     M.stream=st;M.ctx=ctx;
     const src=ctx.createMediaStreamSource(st);M.an=ctx.createAnalyser();M.an.fftSize=1024;src.connect(M.an);M.buf=new Float32Array(M.an.fftSize);
+    if(T.mm==='pat')patAttach(ctx,src);
     M.on=true;M.hist=[];M.above=0;M.flat=0;M.bad=0;M.t=setInterval(micTick,25);$('bMic').textContent='🎤 마이크 끄기';$('bMic').classList.remove('bad');
     lsS('dj_tmic','1');setBanner('mic');
     st.getAudioTracks().forEach(t=>{t.onended=()=>{if(M.stream===st)micLost('트랙이 끝남');};});   // 음소거(mute) 이벤트는 아이폰이 수시로 내므로 쓰지 않는다
@@ -409,16 +415,99 @@ function micCheck(){   // 1초마다 점검. 한 번 이상해 보인다고 바�
 }
 setInterval(micCheck,1000);
 document.addEventListener('visibilitychange',()=>{const M=T.mic;if(document.visibilityState==='visible'&&M.want&&M.on)try{M.ctx.resume()}catch(e){}});
-function micOff(){const M=T.mic;M.want=false;lsS('dj_tmic','0');setBanner('mic');clearInterval(M.t);micRs.length=0;try{M.ctx.onstatechange=null;M.stream.getTracks().forEach(t=>{t.onended=null;t.stop()})}catch(e){}try{M.ctx.close()}catch(e){}M.on=false;$('bMic').textContent='🎤 마이크 켜기';$('bMic').classList.remove('bad');setT('lvlT','마이크 꺼짐','dim');$('lvlB').style.width='0';}
+function micOff(){const M=T.mic;M.want=false;lsS('dj_tmic','0');setBanner('mic');clearInterval(M.t);micRs.length=0;try{if(M.sp){M.sp.onaudioprocess=null;M.sp.disconnect();M.sp=null}M.ctx.onstatechange=null;M.stream.getTracks().forEach(t=>{t.onended=null;t.stop()})}catch(e){}try{M.ctx.close()}catch(e){}M.on=false;$('bMic').textContent='🎤 마이크 켜기';$('bMic').classList.remove('bad');setT('lvlT','마이크 꺼짐','dim');$('lvlB').style.width='0';}
+
+/*PAT-BEGIN*/
+/* ---------- 패턴 인식: 내가 등록한 「관중」 소리와 닮은 소리만 센다 (MFCC + DTW, 기기 안에서 계산) ---------- */
+const PR=16000,PN=400,PH=160,NFFT=512,NMEL=24,NCEP=13;
+const PT={ready:false,hamm:null,mel:null,dct:null,tpl:[],thr:null,reg:false,tmp:[],strict:1.6,hit:null,onSeg:null};
+function patFft(re,im){const n=re.length;for(let i=1,j=0;i<n;i++){let b=n>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){let t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t}}
+  for(let len=2;len<=n;len<<=1){const ang=-2*Math.PI/len,wr=Math.cos(ang),wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){let cr=1,ci=0;for(let j=0;j<len/2;j++){const a=i+j,b=a+len/2,tr=re[b]*cr-im[b]*ci,ti=re[b]*ci+im[b]*cr;re[b]=re[a]-tr;im[b]=im[a]-ti;re[a]+=tr;im[a]+=ti;const nr=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=nr}}}}
+function patInit(){
+  if(PT.ready)return;PT.ready=true;
+  PT.hamm=new Float64Array(PN);for(let i=0;i<PN;i++)PT.hamm[i]=0.54-0.46*Math.cos(2*Math.PI*i/(PN-1));
+  const mel=f=>2595*Math.log10(1+f/700),imel=m=>700*(Math.pow(10,m/2595)-1),lo=mel(100),hi=mel(5000),pts=[];
+  for(let i=0;i<NMEL+2;i++)pts.push(imel(lo+(hi-lo)*i/(NMEL+1)));
+  const bins=pts.map(f=>Math.floor((NFFT+1)*f/PR));PT.mel=[];
+  for(let m=1;m<=NMEL;m++){const f=new Float64Array(NFFT/2+1);
+    for(let k=bins[m-1];k<bins[m];k++)f[k]=(k-bins[m-1])/Math.max(1,bins[m]-bins[m-1]);
+    for(let k=bins[m];k<bins[m+1];k++)f[k]=(bins[m+1]-k)/Math.max(1,bins[m+1]-bins[m]);PT.mel.push(f)}
+  PT.dct=[];for(let c=0;c<NCEP;c++){const r=new Float64Array(NMEL);for(let m=0;m<NMEL;m++)r[m]=Math.cos(Math.PI*c*(m+0.5)/NMEL);PT.dct.push(r)}
+}
+function patFrame(x,off){
+  const re=new Float64Array(NFFT),im=new Float64Array(NFFT);let s=0;
+  for(let i=0;i<PN;i++){const v=x[off+i],p=i?x[off+i-1]:v;re[i]=(v-0.97*p)*PT.hamm[i];s+=v*v}
+  patFft(re,im);const ps=new Float64Array(NFFT/2+1);for(let k=0;k<ps.length;k++)ps[k]=re[k]*re[k]+im[k]*im[k];
+  const le=new Float64Array(NMEL);for(let m=0;m<NMEL;m++){let a=0;const f=PT.mel[m];for(let k=0;k<f.length;k++)if(f[k])a+=f[k]*ps[k];le[m]=Math.log(a+1e-9)}
+  const mf=new Float32Array(NCEP);for(let c=0;c<NCEP;c++){let a=0;const r=PT.dct[c];for(let m=0;m<NMEL;m++)a+=r[m]*le[m];mf[c]=a}
+  return{mf,e:10*Math.log10(s/PN+1e-10)};
+}
+function patFeat(F){   // F: MFCC 프레임들 → (계수+변화량) 를 발화 단위로 평균 0·분산 1 정규화
+  const n=F.length,D=NCEP*2,M=[];
+  for(let t=0;t<n;t++){const v=new Float32Array(D),a=F[Math.min(n-1,t+2)],b=F[Math.max(0,t-2)];for(let c=0;c<NCEP;c++){v[c]=F[t][c];v[NCEP+c]=(a[c]-b[c])/4}M.push(v)}
+  for(let c=0;c<D;c++){let m=0;for(let t=0;t<n;t++)m+=M[t][c];m/=n;let q=0;for(let t=0;t<n;t++){const d=M[t][c]-m;q+=d*d}const sd=Math.sqrt(q/n)||1;for(let t=0;t<n;t++)M[t][c]=(M[t][c]-m)/sd}
+  return M;
+}
+function patDtw(A,B){
+  const n=A.length,m=B.length,D=A[0].length,band=Math.max(Math.abs(n-m),Math.ceil(0.4*Math.max(n,m))),INF=1e18;
+  let prev=new Float64Array(m+1).fill(INF),cur=new Float64Array(m+1).fill(INF);prev[0]=0;
+  for(let i=1;i<=n;i++){cur.fill(INF);const j0=Math.max(1,i-band),j1=Math.min(m,i+band);
+    for(let j=j0;j<=j1;j++){let s=0;const a=A[i-1],b=B[j-1];for(let d=0;d<D;d++){const x=a[d]-b[d];s+=x*x}
+      const c=Math.sqrt(s/D),best=Math.min(prev[j],prev[j-1],cur[j-1]);cur[j]=c+best}
+    const t=prev;prev=cur;cur=t}
+  return prev[m]/(n+m);
+}
+function patScore(M,skip){   // 등록한 소리들과의 거리: 가장 가까운 둘의 평균 (skip: 등록 자기 자신 제외용)
+  const ds=[];PT.tpl.forEach((T,i)=>{if(i!==skip)ds.push(patDtw(M,T.f))});ds.sort((a,b)=>a-b);
+  if(!ds.length)return 9;return ds.length>1?(ds[0]+ds[1])/2:ds[0];
+}
+function patCalib(){   // 문턱 = 등록 소리끼리의 (자기 제외) 거리 중앙값 × 엄격도
+  if(PT.tpl.length<3){PT.thr=null;return}
+  const l=PT.tpl.map((t,i)=>patScore(t.f,i)).sort((a,c)=>a-c),med=l[l.length>>1];
+  PT.base=med;PT.thr=Math.max(0.1,med)*PT.strict;
+}
+/* 연속 소리 → 발화 조각 */
+const PS={tail:new Float32Array(0),recv:0,fr:[],base:0,idx:0,eh:[],floor:-70,inSeg:false,on:-1,last:-1,loud:0,quiet:0,wall:0,sens:14};
+function patReset(){PS.tail=new Float32Array(0);PS.recv=0;PS.fr=[];PS.base=0;PS.idx=0;PS.eh=[];PS.inSeg=false;PS.loud=0;PS.quiet=0;}
+function patFeed(x16,wall){
+  patInit();PS.wall=wall;
+  const t=new Float32Array(PS.tail.length+x16.length);t.set(PS.tail);t.set(x16,PS.tail.length);PS.recv+=x16.length;
+  let pos=0;while(pos+PN<=t.length){const fr=patFrame(t,pos);fr.es=PS.recv-(t.length-(pos+PN));patStep(fr);pos+=PH}
+  PS.tail=t.slice(pos);
+}
+function patStep(fr){
+  PS.fr.push(fr);const idx=PS.idx++;
+  PS.eh.push(fr.e);if(PS.eh.length>800)PS.eh.shift();
+  if(idx%25===0&&PS.eh.length>=50){const a=PS.eh.slice().sort((p,q)=>p-q);PS.floor=a[Math.floor(a.length*0.25)];}
+  const on=PS.floor+PS.sens,off=on-4,e=fr.e;
+  if(!PS.inSeg){
+    if(e>=on){PS.loud++;if(PS.loud>=3){PS.inSeg=true;PS.on=idx-2;PS.last=idx;PS.quiet=0;}}else PS.loud=0;
+    if(!PS.inSeg&&PS.fr.length>260){PS.fr.shift();PS.base++;}
+  }else{
+    if(e>=off){PS.last=idx;PS.quiet=0}else{PS.quiet++;if(PS.quiet>=18){PS.inSeg=false;PS.loud=0;patSegment(PS.on,PS.last);}}
+    if(PS.inSeg&&idx-PS.on>170){PS.inSeg=false;PS.loud=0;}   // 1.7초 넘게 계속되면 말이 아니라 소음으로 보고 버림
+  }
+}
+function patSegment(on,last){
+  const dur=(last-on+1)*0.01;if(dur<0.18||dur>1.6)return;
+  const a=Math.max(PS.base,on-3),b=Math.min(PS.idx-1,last+2);if(b-a<10)return;
+  const F=[];for(let i=a;i<=b;i++){const f=PS.fr[i-PS.base];if(!f)return;F.push(f.mf)}
+  const onWall=PS.wall-(PS.recv-PS.fr[on-PS.base].es)/PR*1000-PN/PR*1000/2;
+  if(PT.onSeg){PT.onSeg(F,{dur,onWall});return;}
+}
+/*PAT-END*/
 
 /* ---------- 단어 인식: 「관중」이라는 말만 센다 (아이폰 사파리의 음성 인식, 한국어) ---------- */
 const SRC=window.SpeechRecognition||window.webkitSpeechRecognition;
 const KW=/관중|관종|광중|관쭝|관증|간중|완중/g;
 const kwCount=t=>{const m=String(t).replace(/[\s.,?!]+/g,'').match(KW);return m?m.length:0;};
 const SR={on:false,rec:null,want:false,cnt:{},last:'',errs:0};
-function applyMode(){const w=T.mm==='word';$('mSens').style.display=w?'none':'';$('lvlBox').style.display=w?'none':'';
+function applyMode(){const m=T.mm,w=m==='word',p=m==='pat';
+  $('mSens').style.display=w?'none':'';$('lvlBox').style.display=w?'none':'';$('patBox').style.display=p?'':'none';
   setT('lvlT',w?'단어 인식 방식 — 마이크를 켜면 들린 말이 여기 표시됩니다':'마이크 꺼짐','dim');
-  $('micHelp').textContent=w?'「관중」이라는 말이 인식될 때만 셉니다(기침·주변 소리·다른 말은 세지 않음). 인식 결과가 한두 박자 늦게 나오므로 시간차가 크게 찍힙니다. 말이 안 세어지면 보라색 버튼을 누르거나 방식을 「소리 크기」로 바꾸세요.':'소리가 커지는 순간을 한 번으로 셉니다(어떤 소리든 셉니다). 이어폰 마이크로 말하세요.';}
+  $('micHelp').textContent=p?'먼저 「🎓 내 목소리 등록」으로 「관중」을 5번 말해 등록하세요. 그 뒤로는 등록한 소리와 닮은 소리만 셉니다(기침·다른 말은 세지 않음). 서버를 쓰지 않아 쉬었다 말해도 똑같이 잡히고, 말이 끝나면 곧바로 셉니다.'
+    :(w?'「관중」이라는 말이 인식될 때만 셉니다. 사파리 음성 인식은 한동안 쉬었다 말하면 놓치는 일이 있습니다.':'소리가 커지는 순간을 한 번으로 셉니다(어떤 소리든 셉니다). 이어폰 마이크로 말하세요.');}
 const listening=()=>T.mm==='word'?SR.on||SR.want:T.mic.on||T.mic.want;
 function listenOn(auto){
   if(T.mm==='word'){
@@ -457,6 +546,41 @@ function srOn(auto){
     if(!auto){setT('lvlT','⛔ 단어 인식을 시작하지 못했습니다 — 방식을 「소리 크기」로 바꿔 보세요','bad');}}
 }
 function srOff(){SR.want=false;try{SR.rec&&SR.rec.stop()}catch(e){}SR.on=false;setT('lvlT','마이크 꺼짐','dim');}
+
+function patAttach(ctx,src){
+  patReset();PS.sens=+$('mSens').value||14;PT.hit=patOnSeg;
+  const sp=ctx.createScriptProcessor(2048,1,1),r=ctx.sampleRate/PR;let acc=0,n=0,ph=0;
+  sp.onaudioprocess=e=>{const x=e.inputBuffer.getChannelData(0),out=[];
+    for(let i=0;i<x.length;i++){acc+=x[i];n++;ph+=1;if(ph>=r){out.push(acc/n);acc=0;n=0;ph-=r}}
+    PS.sens=+$('mSens').value||14;patFeed(Float32Array.from(out),Date.now());};
+  const mute=ctx.createGain();mute.gain.value=0;src.connect(sp);sp.connect(mute);mute.connect(ctx.destination);T.mic.sp=sp;
+  PT.onSeg=patOnSeg;
+}
+function patOnSeg(F,info){
+  if(PT.reg){
+    PT.tmp.push(F.map(f=>Array.from(f,v=>Math.round(v*100)/100)));
+    patUI();log(`등록 소리 ${PT.tmp.length}/5 (${info.dur.toFixed(2)}초)`);
+    if(PT.tmp.length>=5){PT.reg=false;PT.tpl=PT.tmp.map(m=>({m,f:patFeat(m.map(r=>Float32Array.from(r)))}));PT.tmp=[];patCalib();
+      lsS('dj_ptpl',JSON.stringify(PT.tpl.map(t=>t.m)));patUI();log(`등록 완료 · 등록 소리끼리 거리 ${f1(PT.base)} · 문턱 ${f1(PT.thr)}`);}
+    return;}
+  if(PT.thr==null)return;
+  const sc=patScore(patFeat(F)),ok=sc<=PT.thr;
+  log(`소리 조각 ${info.dur.toFixed(2)}초 · 거리 ${sc.toFixed(2)} / 문턱 ${PT.thr.toFixed(2)} → ${ok?'✔ 관중':'✘ 제외'}`);
+  setT('lvlT',`방금 소리: 거리 ${sc.toFixed(2)} (문턱 ${PT.thr.toFixed(2)}) ${ok?'✔ 관중':'✘ 제외'}`,ok?'ok':'dim');
+  if(ok)addEv('voice',info.onWall,{src:'pat',d:+sc.toFixed(3)});
+}
+function regToggle(){
+  if(PT.reg){PT.reg=false;PT.tmp=[];patUI();return;}
+  if(!listening()){T.mm='pat';listenOn(false);}
+  PT.reg=true;PT.tmp=[];patUI();
+}
+function regClear(){PT.tpl=[];PT.tmp=[];PT.reg=false;PT.thr=null;lsS('dj_ptpl','[]');patUI();log('등록 소리 지움');}
+function patUI(){
+  const b=$('bReg');if(!b)return;
+  if(PT.reg){b.textContent='⏹ 등록 중단';b.className='stop';setT('patT',`등록 중 ${PT.tmp.length}/5 — 「관중」을 한 번씩 또박또박, 한 번 말하고 1초쯤 쉬세요`,'warn');}
+  else{b.textContent=PT.tpl.length?'🎓 다시 등록':'🎓 내 목소리 등록 (관중 ×5)';b.className='sub';
+    setT('patT',PT.tpl.length?(PT.thr!=null?`등록 ${PT.tpl.length}개 · 문턱 ${PT.thr.toFixed(2)} (낮을수록 엄격)`:'등록이 부족합니다'):'아직 등록 안 됨 — 「관중」을 5번 말해 등록하세요',PT.tpl.length?'ok':'warn');}
+}
 function micTick(){
   const M=T.mic;if(!M.on)return;M.an.getFloatTimeDomainData(M.buf);
   let s=0;for(let i=0;i<M.buf.length;i++)s+=M.buf[i]*M.buf[i];const db=10*Math.log10(s/M.buf.length+1e-12);M.db=db;if(db<-100)M.flat++;else M.flat=0;
@@ -466,7 +590,7 @@ function micTick(){
   $('lvlB').style.width=Math.max(0,Math.min(100,up/40*100))+'%';$('lvlB').style.background=up>=thr?'var(--warn)':'var(--ok)';
   setT('lvlT',`현재 ${f1(db)} dB · 바닥 ${f1(M.floor)} dB · 차이 ${f1(up)} dB (문턱 ${thr})`,'dim');
   const now=performance.now();
-  if(up>=thr){M.above++;if(M.above===2&&now-M.last>1000&&T.running){M.last=now;addEv('voice',Date.now()-50);}}
+  if(up>=thr){M.above++;if(T.mm==='level'&&M.above===2&&now-M.last>1000&&T.running){M.last=now;addEv('voice',Date.now()-50);}}
   else if(up<thr-5)M.above=0;
 }
 initT();if(lsG('dj_tmic')==='1')listenOn(true);   // 새로고침 뒤에도 마이크를 쓰던 중이었으면 복구 시도 (실패하면 ‘다시 켜기’ 버튼)
