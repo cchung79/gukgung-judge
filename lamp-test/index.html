@@ -22,7 +22,8 @@ input[type=checkbox]{width:auto;min-height:0;margin-right:6px}
 .code{font-size:34px;letter-spacing:6px;text-align:center;font-weight:800}
 table{width:100%;border-collapse:collapse}td,th{padding:5px 4px;border-top:1px solid var(--line);vertical-align:top}
 .kv td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:10px}
-.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.dim{color:var(--dim)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+#bMic.bad{background:#7a2a2a;color:#fff}.dim{color:var(--dim)}
 .big{font-size:16px;font-weight:700}.huge{font-size:22px;font-weight:800}
 img.shot{width:100%;border-radius:8px;background:#000;display:block;margin-top:6px}
 pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,monospace;color:var(--dim);margin:0;max-height:220px;overflow:auto}
@@ -99,7 +100,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.8.0';
+const VER=qs.get('fakever')||'1.8.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -177,8 +178,8 @@ const fmtB=b=>b<1024?b+' B':(b<1048576?Math.round(b/102.4)/10+' KB':Math.round(b
    오늘의 시험용 최소 컨트롤: 샤오미(램프 폰)만 연결해 램프 점멸 횟수를 세고,
    내가 이어폰 마이크로 램프가 켜질 때마다 「관중」이라고 말한 횟수(또는 수동 버튼)와 비교한다. */
 const CODE=()=>$('tCode').value.trim();
-const T={peer:null,lc:null,off:null,offErr:null,rtt:null,pr:[],hello:null,st:null,lsAt:0,running:false,ev:[],startTries:0,bat:null,
-  mic:{on:false,ctx:null,stream:null,an:null,buf:null,hist:[],last:-1e9,above:0,t:null,db:-120,floor:-80}};
+const T={peer:null,lc:null,off:null,offErr:null,rtt:null,pr:[],hello:null,st:null,lsAt:0,running:lsG('dj_trun')==='1',ev:[],startTries:0,bat:null,
+  mic:{want:false,flat:0,on:false,ctx:null,stream:null,an:null,buf:null,hist:[],last:-1e9,above:0,t:null,db:-120,floor:-80}};
 const PAIR_LO=-0.8,PAIR_HI=3.5;     // 램프 대비 내 신호가 이 범위(초) 안에 있으면 한 쌍
 $('verT').textContent='v'+VER+' · 아이폰';
 const lpUp=()=>!!(T.lc&&T.lc.open);
@@ -190,10 +191,10 @@ function initT(){
   $('tStart').onclick=startT;
   const ev=jparse(lsG('dj_tev'),[]);if(Array.isArray(ev))T.ev=ev;
   $('bRun').onclick=()=>T.running?stopRun():startRun();
-  $('bSleep').onclick=()=>{T.running=false;lpSend({t:'mode',m:'standby'});render();};
+  $('bSleep').onclick=()=>{T.running=false;lsS('dj_trun','0');lpSend({t:'mode',m:'standby'});render();};
   $('bWake').onclick=()=>{lpSend({t:'mode',m:'active'});};
   $('bTap').onclick=()=>addEv('manual');
-  $('bMic').onclick=()=>T.mic.on?micOff():micOn();
+  $('bMic').onclick=()=>{if(T.mic.on)micOff();else{T.mic.want=true;micOn();}};
   $('mSens').onchange=()=>lsS('dj_tsens',$('mSens').value);const sv=lsG('dj_tsens');if(sv)$('mSens').value=sv;
   $('bCopy').onclick=()=>copyText(csv());
   let clr=0;$('bClr').onclick=()=>{if(Date.now()-clr>4000){clr=Date.now();$('bClr').textContent='정말 지우려면 한 번 더';setTimeout(()=>{$('bClr').textContent='기록 지우기';clr=0},4000);return;}clr=0;$('bClr').textContent='기록 지우기';T.ev=[];saveEv();render();};
@@ -205,7 +206,7 @@ function startT(){
   const code=CODE();if(!/^\d{4}$/.test(code)){setT('mSt','코드는 숫자 4자리','bad');$('startBox').hidden=false;return;}
   lsS('dj_tcode',code);$('verT').textContent='v'+VER+' · 아이폰 · 코드 '+code;$('tStart').disabled=true;$('tCode').disabled=true;$('startBox').hidden=true;
   checkLatest((x,k)=>setT('mSt',x,k));setInterval(()=>{if(!T.running)checkLatest((x,k)=>setT('mSt',x,k))},600000);
-  keepAwake((t,c)=>setT('mWake',t,c));
+  keepAwake((t,c)=>{setT('mWake',t,c);setBanner('wake',c==='warn'?'⚠ 화면이 꺼지면 마이크가 끊깁니다 — 아이폰 설정 > 디스플레이 및 밝기 > 자동 잠금 > 안 함 (시험 중에는 화면을 켜 둡니다)':'');});
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){try{if(T.peer&&T.peer.disconnected)T.peer.reconnect()}catch(e){}lpSend({t:'sync'});}});
   setT('mSt','시그널링 서버 연결 중…','dim');setT('lpSt','연결 중…','huge dim');
   const peer=T.peer=mkPeer(PREFIX+code);
@@ -275,9 +276,9 @@ function onLamp(d){
 /* ---------- 시험 시작·종료 ---------- */
 function startRun(){
   if(!lpUp())return;
-  T.running=true;T.since=Date.now();lpSend({t:'mode',m:'count'});log('시험 시작');render();
+  T.running=true;lsS('dj_trun','1');T.since=Date.now();lpSend({t:'mode',m:'count'});log('시험 시작');render();
 }
-function stopRun(){T.running=false;lpSend({t:'mode',m:'active'});log('시험 종료');render();}
+function stopRun(){T.running=false;lsS('dj_trun','0');lpSend({t:'mode',m:'active'});log('시험 종료');render();}
 
 /* ---------- 기록 · 짝짓기 ---------- */
 function saveEv(){lsS('dj_tev',JSON.stringify(T.ev.slice(-400)));}
@@ -330,19 +331,46 @@ setInterval(()=>{if(lpUp()&&T.st&&nowE()-T.lsAt>3500&&T.st.m!=='standby')renderL
 function csv(){const P=pairs();return ['종류,시각,짝,시간차(ms)'].concat(T.ev.map(e=>{const o=e.k==='lamp'?P.pl.get(e):P.pv.get(e);return [e.k,new Date(e.t).toISOString(),o?'있음':'없음',o?Math.round(e.k==='lamp'?o.t-e.t:e.t-o.t):''].join(',');})).join('\n');}
 
 /* ---------- 내 목소리: 소리가 시작되는 순간을 센다 ---------- */
-async function micOn(){
+async function micOn(auto){
+  const M=T.mic;
   try{
-    const M=T.mic;M.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    try{clearInterval(M.t);M.stream&&M.stream.getTracks().forEach(t=>t.stop());M.ctx&&M.ctx.close()}catch(e){}
+    M.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
     M.ctx=new (window.AudioContext||window.webkitAudioContext)();if(M.ctx.state!=='running')await M.ctx.resume();
     const src=M.ctx.createMediaStreamSource(M.stream);M.an=M.ctx.createAnalyser();M.an.fftSize=1024;src.connect(M.an);M.buf=new Float32Array(M.an.fftSize);
-    M.on=true;M.hist=[];M.above=0;M.t=setInterval(micTick,25);$('bMic').textContent='🎤 마이크 끄기';
-    log('마이크 켜짐 '+Math.round(M.ctx.sampleRate)+' Hz');
-  }catch(e){setT('lvlT','⛔ 마이크 실패: '+((e&&e.name)||e)+' — 사파리 주소창의 허용 설정을 확인','bad');}
+    M.on=true;M.hist=[];M.above=0;M.flat=0;M.t=setInterval(micTick,25);$('bMic').textContent='🎤 마이크 끄기';$('bMic').classList.remove('bad');
+    lsS('dj_tmic','1');setBanner('mic');
+    M.stream.getAudioTracks().forEach(t=>{t.onended=()=>micLost('마이크 연결이 끊김(트랙 종료)');t.onmute=()=>micLost('마이크가 음소거됨(통화·다른 앱이 가져감?)');});
+    M.ctx.onstatechange=()=>{log('오디오 상태: '+M.ctx.state);if(M.ctx.state!=='running')micLost('오디오가 멈춤('+M.ctx.state+')');};
+    log('마이크 켜짐 '+Math.round(M.ctx.sampleRate)+' Hz'+(auto?' (자동 복구)':''));
+  }catch(e){
+    M.on=false;
+    if(auto){micLost('마이크 자동 복구 실패: '+((e&&e.name)||e));return;}
+    setT('lvlT','⛔ 마이크 실패: '+((e&&e.name)||e)+' — 사파리 주소창의 허용 설정을 확인','bad');
+  }
 }
-function micOff(){const M=T.mic;clearInterval(M.t);try{M.stream.getTracks().forEach(t=>t.stop())}catch(e){}try{M.ctx.close()}catch(e){}M.on=false;$('bMic').textContent='🎤 마이크 켜기';setT('lvlT','마이크 꺼짐','dim');$('lvlB').style.width='0';}
+let micRetry=0;
+function micLost(why){
+  const M=T.mic;if(!M.want)return;log('마이크 문제: '+why);
+  setBanner('mic','🎤 마이크가 끊겼습니다 — 지금은 목소리가 세어지지 않습니다. 「🎤 마이크 다시 켜기」를 누르세요 (수동 버튼은 계속 됩니다)');
+  $('bMic').textContent='🎤 마이크 다시 켜기';$('bMic').classList.add('bad');setT('lvlT','⛔ '+why,'bad');M.on=false;try{clearInterval(M.t)}catch(e){}
+  if(document.visibilityState==='visible'&&Date.now()-micRetry>3000){micRetry=Date.now();micOn(true);}   // 화면이 켜져 있으면 알아서 한 번 복구 시도
+}
+function micCheck(){   // 1초마다: 살아 있는지 점검 (절전·잠금·통화 뒤 사파리가 마이크를 끊는 경우)
+  const M=T.mic;if(!M.want)return;
+  const tr=M.stream&&M.stream.getAudioTracks()[0];
+  if(M.on){
+    if(!tr||tr.readyState!=='live'){micLost('마이크 연결이 끊김');return;}
+    if(M.ctx.state!=='running'){M.ctx.resume().catch(()=>{});if(M.ctx.state!=='running'){micLost('오디오가 멈춤('+M.ctx.state+')');return;}}
+    if(M.flat>120){micLost('입력이 3초 이상 완전 무음(마이크가 죽은 듯함)');M.flat=0;}
+  }else if(document.visibilityState==='visible'&&Date.now()-micRetry>5000){micRetry=Date.now();micOn(true);}
+}
+setInterval(micCheck,1000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&T.mic.want){micRetry=0;setTimeout(micCheck,300);}});
+function micOff(){const M=T.mic;M.want=false;lsS('dj_tmic','0');setBanner('mic');clearInterval(M.t);try{M.stream.getTracks().forEach(t=>t.stop())}catch(e){}try{M.ctx.close()}catch(e){}M.on=false;$('bMic').textContent='🎤 마이크 켜기';$('bMic').classList.remove('bad');setT('lvlT','마이크 꺼짐','dim');$('lvlB').style.width='0';}
 function micTick(){
   const M=T.mic;if(!M.on)return;M.an.getFloatTimeDomainData(M.buf);
-  let s=0;for(let i=0;i<M.buf.length;i++)s+=M.buf[i]*M.buf[i];const db=10*Math.log10(s/M.buf.length+1e-12);M.db=db;
+  let s=0;for(let i=0;i<M.buf.length;i++)s+=M.buf[i]*M.buf[i];const db=10*Math.log10(s/M.buf.length+1e-12);M.db=db;if(db<-100)M.flat++;else M.flat=0;
   M.hist.push(db);if(M.hist.length>320)M.hist.shift();
   if(M.hist.length%8===0){const a=M.hist.slice().sort((x,y)=>x-y);M.floor=a[Math.floor(a.length*0.25)];}   // 바닥 소음 = 최근 8초의 아래쪽 25% 지점
   const thr=+$('mSens').value,up=db-M.floor;
@@ -352,7 +380,7 @@ function micTick(){
   if(up>=thr){M.above++;if(M.above===2&&now-M.last>1000&&T.running){M.last=now;addEv('voice',Date.now()-50);}}
   else if(up<thr-5)M.above=0;
 }
-initT();
+initT();if(lsG('dj_tmic')==='1'){T.mic.want=true;micOn(true);}   // 새로고침 뒤에도 마이크를 쓰던 중이었으면 복구 시도 (실패하면 ‘다시 켜기’ 버튼)
 
 </script>
 </body>
