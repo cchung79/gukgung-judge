@@ -104,7 +104,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.9.1';
+const VER=qs.get('fakever')||'1.9.2';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -285,7 +285,6 @@ function onTone(d){
 
 /* ---------- 시험 시작·종료 ---------- */
 function startRun(){
-  if(!lpUp())return;
   T.running=true;lsS('dj_trun','1');T.since=Date.now();lpSend({t:'mode',m:'count'});log('시험 시작');render();
 }
 function stopRun(){T.running=false;lsS('dj_trun','0');lpSend({t:'mode',m:'active'});log('시험 종료');render();}
@@ -318,7 +317,7 @@ function pairs(){
 }
 function render(){
   const up=lpUp(),m=T.st?T.st.m:(T.hello?T.hello.mode:null),awake=up&&m&&m!=='standby';
-  $('bRun').disabled=!up;$('bRun').className=T.running?'stop':'go';$('bRunT').textContent=T.running?'⏹ 시험 종료':'▶ 시험 시작';$('bRunS').textContent=T.running?'샤오미가 램프·뻐꾸기를 세는 중':'샤오미를 깨워 램프·뻐꾸기를 셉니다';
+  $('bRun').disabled=false;$('bRun').className=T.running?'stop':'go';$('bRunT').textContent=T.running?'⏹ 시험 종료':'▶ 시험 시작';$('bRunS').textContent=(T.running?'':'')+(up?(T.running?'샤오미가 램프·뻐꾸기를 세는 중':'샤오미를 깨워 램프·뻐꾸기를 셉니다'):(T.running?'샤오미 미연결 — 내 신호만 세는 중 (연결되면 자동으로 같이 셉니다)':'샤오미 없이도 시작됩니다 — 내 신호만 셉니다'));
   $('bSleep').disabled=!up||m==='standby';$('bWake').disabled=!up||awake;
   renderLine();
   const P=pairs(),nL=P.Ls.length,nT=P.Ts.length,nG=P.G.length,nV=P.Vs.length,nVo=P.Vs.filter(e=>e.k==='voice').length,nMa=nV-nVo;
