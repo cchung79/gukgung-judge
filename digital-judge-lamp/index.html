@@ -42,7 +42,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 <div class="card" id="setupBox">
   <h2>연결 코드 (디지털 저지 컨트롤과 같은 4자리)</h2>
   <div class="row"><input id="lCode" class="code" inputmode="numeric" maxlength="4" placeholder="코드"><button id="lStart" style="margin:0">시작</button></div>
-  <div class="dim" style="margin-top:6px">이 폰(샤오미)은 사대 쪽에서 과녁의 램프를 향해 세워 둡니다. 시작하면 컨트롤에 자동으로 붙고 절전(카메라 꺼짐)으로 대기합니다. 이후 깨우기·줌·램프 지정은 모두 아이폰 컨트롤에서 합니다. 코드는 기억되어 다음부터는 이 페이지를 열면 자동으로 연결됩니다.</div>
+  <div class="dim" style="margin-top:6px">이 폰(샤오미)은 사대 쪽에서 과녁의 램프를 향해 세워 둡니다. 시작하면 컨트롤에 자동으로 붙고 절전(카메라 꺼짐)으로 대기하다가 컨트롤이 깨우면 켜집니다. 램프를 맞추고 「설정 완료」를 눌러도 절전으로 가지 않고 램프 확인 상태를 유지합니다(절전은 ⏸ 버튼으로만). 코드는 기억되어 다음부터는 이 페이지를 열면 자동으로 연결됩니다.</div>
 </div>
 
 <div class="card">
@@ -53,8 +53,8 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
   <div id="lZInfo" class="dim" style="margin-top:8px">-</div>
   <input id="lZ" type="range" min="1" max="1" step="0.1" value="1" disabled>
   <div class="g6"><button id="nL" class="sub sm">◀</button><button id="nU" class="sub sm">▲</button><button id="nD" class="sub sm">▼</button><button id="nR" class="sub sm">▶</button><button id="lSmall" class="sub sm">▢−</button><button id="lBig" class="sub sm">▢＋</button></div>
-  <button id="lDone" class="go" style="margin-top:8px">✅ 설정 완료 (절전으로)</button>
-  <button id="lReopen" class="sub sm" style="margin-top:8px">🔄 카메라 다시 열기</button>
+  <button id="lDone" class="go" style="margin-top:8px">✅ 설정 완료 (램프 확인 계속)</button>
+  <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><button id="lSleep" class="sub sm">⏸ 절전 (카메라 끔)</button><button id="lReopen" class="sub sm">🔄 카메라 다시 열기</button></div>
   <div class="dim" style="margin-top:6px">순서: ① 폰을 램프 쪽으로 향하게 세우고 두 손가락을 벌려 램프를 크게 확대 → ② 램프를 한 번 톡 → ③ ◀▲▼▶·▢−▢＋로 상자를 램프에 맞춘다(오른쪽 위 작은 화면이 상자 안 확대). 줌을 다시 바꾸면 램프 자리가 따라 움직이니 어긋나면 다시 톡 누르세요. 미세 조정은 아이폰 컨트롤에서도 됩니다.</div>
 </div>
 
@@ -99,7 +99,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.4.0';
+const VER=qs.get('fakever')||'2.4.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -199,8 +199,9 @@ function initLamp(){
   $('lRes').onchange=async()=>{P.res=$('lRes').value;lsS('dj_lres',P.res);if(P.mode!=='standby'){await openCam();sendHello();}};
   $('lExpLock').onclick=expLock;
   gwUI();$('lSpeak').onclick=()=>{GW.speak=!GW.speak;lsS('dj_lspeak',GW.speak?'1':'0');gwUI();if(GW.speak)gwSay();};
-  $('lDone').onclick=()=>{if(!P.roi){toast('먼저 램프를 톡 눌러 지정하세요');return}doMode('standby');};
-  $('lReopen').onclick=()=>{if(P.mode==='standby'){doMode('active');return}P.autoReopen=0;P.reopening=true;log('수동으로 카메라 다시 열기');openCam().then(sendHello).catch(()=>{}).finally(()=>{P.reopening=false;P.lastFrameAt=performance.now()});};
+  $('lDone').onclick=()=>{if(!P.roi){toast('먼저 램프를 톡 눌러 지정하세요');return}doMode('active',true);toast('설정 완료 — 램프 확인 중입니다 (절전은 ⏸ 절전 버튼)');};
+  $('lSleep').onclick=()=>doMode('standby',true);
+  $('lReopen').onclick=()=>{if(P.mode==='standby'){doMode('active',true);return}P.autoReopen=0;P.reopening=true;log('수동으로 카메라 다시 열기');openCam().then(sendHello).catch(()=>{}).finally(()=>{P.reopening=false;P.lastFrameAt=performance.now()});};
   const r=lsG('dj_lres');if(r){P.res=r;$('lRes').value=r;}
   ov.addEventListener('pointerdown',gDown);ov.addEventListener('pointermove',gMove);ov.addEventListener('pointerup',e=>gEnd(e,false));ov.addEventListener('pointercancel',e=>gEnd(e,true));
   new ResizeObserver(sizeOv).observe(vid);
@@ -339,21 +340,21 @@ function onCData(c,d){
   else if(d.t==='sync'){sendHello();sendBat();sendLs();}
 }
 let modeChain=Promise.resolve();
-function doMode(m){modeChain=modeChain.then(async()=>{
+function doMode(m,self){modeChain=modeChain.then(async()=>{
   if(!['standby','active','count'].includes(m))return;
   const was=P.mode;
-  if(m===was&&(m==='standby'||P.stream)){psend({t:'mode',m,ready:true});return;}   // 같은 모드를 다시 받으면 감시 상태를 건드리지 않는다
+  if(m===was&&(m==='standby'||P.stream)){psend({t:'mode',m,ready:true,self:!!self});return;}   // 같은 모드를 다시 받으면 감시 상태를 건드리지 않는다
   P.mode=m;P.autoReopen=0;if(m==='count'&&was!=='count'){P.nBlink=0;setT('lLast','시험 시작 — 0회','dim');}
   try{
     if(m==='standby'){stopCam();blkShow(true);audOff();}
     else{blkShow(false);if(!P.stream)await openCam();if(was==='standby'||m==='count')resetDet();audInit();}
-    setModeTxt();psend({t:'mode',m,ready:true});sendHello();
+    setModeTxt();psend({t:'mode',m,ready:true,self:!!self});sendHello();
   }catch(e){P.mode=was;psend({t:'mode',m,ready:false,err:(e&&e.name)||String(e)});log('모드 오류 '+e);}
 }).catch(e=>log('모드 오류 '+e));}
 function setModeTxt(){aimUI();setT('lMode',{standby:'⏸ 대기 (절전)',active:'▶ 준비 (램프 확인)',count:'🏹 발시 카운트 (점멸 감시)'}[P.mode],P.mode==='standby'?'warn':'ok');}
 function blkShow(on){const b=$('blk');b.style.display=on?'flex':'none';b.style.whiteSpace='pre-line';b.style.flexDirection='column';b.style.gap='16px';b.textContent='';
   if(on){const t=document.createElement('div');t.textContent='💡 램프 폰 · 대기 (절전)\n컨트롤이 깨우거나, 램프를 이 폰에서 먼저 맞추려면 아래 버튼';b.appendChild(t);
-    const bt=document.createElement('button');bt.textContent='▶ 이 폰에서 깨우기 (램프 지정·줌)';bt.style.cssText='width:auto;padding:0 22px;background:#344256;color:#cfd8e3';bt.onclick=()=>doMode('active');b.appendChild(bt);}}
+    const bt=document.createElement('button');bt.textContent='▶ 이 폰에서 깨우기 (램프 지정·줌)';bt.style.cssText='width:auto;padding:0 22px;background:#344256;color:#cfd8e3';bt.onclick=()=>doMode('active',true);b.appendChild(bt);}}
 /* 카메라 열기·닫기는 한 줄로 세워 하나씩만 한다 (안드로이드는 동시에 열거나 닫자마자 다시 열면 영상이 안 들어오는 일이 있다) */
 let camChain=Promise.resolve();
 const camQ=fn=>{const r=camChain.then(fn);camChain=r.catch(()=>{});return r;};

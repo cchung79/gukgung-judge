@@ -69,7 +69,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
   <button id="bRun" class="go" disabled style="min-height:80px"><span id="bRunT">▶ 시험 시작</span><br><span id="bRunS" class="bsub">샤오미를 깨워 램프·뻐꾸기를 셉니다</span></button>
   <div class="row"><button id="bSleep" class="sub" disabled>⏸ 샤오미 절전</button><button id="bWake" class="sub" disabled>💡 샤오미 깨우기</button></div>
   <button id="bRelink" class="sub">🔄 연결 다시 시도</button>
-  <div class="dim">램프 지정·줌은 샤오미 화면에서 먼저 하세요. 끝나면 샤오미의 「설정 완료 (절전으로)」 또는 여기 ⏸ 절전. 사대에 선 뒤 ▶ 시험 시작.</div>
+  <div class="dim">램프 지정·줌은 샤오미 화면에서 먼저 하세요. 끝나면 샤오미의 「설정 완료」(램프 확인 상태 유지). 절전이 필요하면 여기 ⏸ 절전. 사대에 선 뒤 ▶ 시험 시작.</div>
 </div>
 
 <div class="card">
@@ -119,7 +119,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.4.0';
+const VER=qs.get('fakever')||'2.4.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -341,7 +341,7 @@ function onData(c,d){
   else if(d.t==='tone'){onTone(d);}
   else if(d.t==='bat'){T.bat=d;setT('mBat',`${d.lvl==null?'-':Math.round(d.lvl*100)+'%'} ${d.chg?'⚡충전 중':'방전 중'} · 화면 ${d.vis==='visible'?'켜짐':'⚠ 숨김'} · 카메라 ${d.cs||'-'}${T.lver?' · v'+T.lver:''}`,d.chg?'warn':'dim');
     if(d.lvl!=null&&d.lvl<0.4&&!d.chg)setBanner('bat','🔋 샤오미 배터리 '+Math.round(d.lvl*100)+'% — 충전하면서 쓰세요');else setBanner('bat',null);}
-  else if(d.t==='mode'){if(d.ready===false){setBanner('err','⛔ 샤오미 카메라를 열지 못했습니다: '+d.err+' — 샤오미 화면을 확인하세요');}else setBanner('err',null);}
+  else if(d.t==='mode'){if(d.self&&d.ready){LK.want=null;log('샤오미에서 직접 '+d.m+' 로 바꿈');}if(d.ready===false){setBanner('err','⛔ 샤오미 카메라를 열지 못했습니다: '+d.err+' — 샤오미 화면을 확인하세요');}else setBanner('err',null);}
 }
 const sg=x=>(x>=0?'+':'−')+f1(Math.abs(x));
 const BN={};function setBanner(k,msg){if(msg)BN[k]=msg;else delete BN[k];const b=$('banner');b.innerHTML='';Object.keys(BN).forEach(x=>{const e=document.createElement('div');e.className='banner';e.textContent=BN[x];b.appendChild(e);});}
