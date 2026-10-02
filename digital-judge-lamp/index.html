@@ -38,6 +38,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 <body>
 <h1>디지털 저지 관중 폰 <span class="ver" id="verT"></span></h1>
 <div id="blk"></div>
+<button id="lAud" hidden style="position:sticky;top:0;z-index:30;width:100%;min-height:64px;font-weight:700;background:#7a2020;color:#fff">🔇 뻐꾸기 소리 감지가 멈춰 있습니다 — 여기를 한 번 톡</button>
 
 <div class="card" id="setupBox">
   <h2>연결 코드 (디지털 저지 컨트롤과 같은 4자리)</h2>
@@ -51,11 +52,11 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
   <div id="lHint" class="dim" style="margin:6px 0">-</div>
   <button id="lSpeak" class="sub sm" style="margin:2px 0 6px">🔇 관중 소리: 꺼짐</button>
   <div id="lZInfo" class="dim" style="margin-top:8px">-</div>
-  <input id="lZ" type="range" min="1" max="1" step="0.1" value="1" disabled>
+  <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center"><input id="lZ" type="range" min="1" max="1" step="0.1" value="1" disabled><button id="lZ10" class="sub sm" style="width:auto;margin:0">🔍 ×10 기본</button></div>
   <div class="g6"><button id="nL" class="sub sm">◀</button><button id="nU" class="sub sm">▲</button><button id="nD" class="sub sm">▼</button><button id="nR" class="sub sm">▶</button><button id="lSmall" class="sub sm">▢−</button><button id="lBig" class="sub sm">▢＋</button></div>
   <button id="lDone" class="go" style="margin-top:8px">✅ 설정 완료 (램프 확인 계속)</button>
   <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><button id="lSleep" class="sub sm">⏸ 절전 (카메라 끔)</button><button id="lReopen" class="sub sm">🔄 카메라 다시 열기</button></div>
-  <div class="dim" style="margin-top:6px">순서: ① 폰을 램프 쪽으로 향하게 세우고 두 손가락을 벌려 램프를 크게 확대 → ② 램프를 한 번 톡 → ③ ◀▲▼▶·▢−▢＋로 상자를 램프에 맞춘다(오른쪽 위 작은 화면이 상자 안 확대). 줌을 다시 바꾸면 램프 자리가 따라 움직이니 어긋나면 다시 톡 누르세요. 미세 조정은 아이폰 컨트롤에서도 됩니다.</div>
+  <div class="dim" style="margin-top:6px">순서: ① 카메라는 처음부터 10배 줌 — 폰의 방향·각도를 손으로 맞춰 램프가 화면에 들어오게 → ② 램프를 한 번 톡 → ③ ◀▲▼▶·▢−▢＋로 상자를 램프에 맞춘다(오른쪽 위 작은 화면이 상자 안 확대). 줌을 다시 바꾸면 램프 자리가 따라 움직이니 어긋나면 다시 톡 누르세요. 미세 조정은 아이폰 컨트롤에서도 됩니다.</div>
 </div>
 
 <div class="card">
@@ -99,7 +100,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.4.1';
+const VER=qs.get('fakever')||'2.5.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -180,7 +181,7 @@ const CODE=()=>P.code||($('lCode')?$('lCode').value.trim():'');
 const P={peer:null,conn:null,code:'',retry:null,mode:'standby',stream:null,track:null,tapMode:false,
   roi:null,roiScale:1,trk:null,bg:null,devAbs:[],lampMed:0,sigma:3,edges:[],wasOn:false,warm:null,lastT:null,lastFlash:-1e9,weak:null,epos:[],rrs:[],sg:null,sig:null,sigA:[],rej:0,relocks:0,relockT:[],anchor:null,
   col:[],ring:[],dev:0,thr:0,fps:{n:0,t0:0,v:0},nBlink:0,lastBlink:null,tx:0,res:'fhd',trkBad:0,loopGen:0,caps:null,zoomV:null,exp:null};
-const LAMP_MIN_RISE=40,TK=2,TR=8;
+const LAMP_MIN_RISE=40,TK=2,TR=8,DEF_ZOOM=10;   // 카메라를 켜면 처음부터 10배 줌 (폰 최대가 더 작으면 최대) — 폰 방향을 손으로 맞춰 램프를 화면에 넣고 톡
 const LSENS={h:{rise:28,k:3.0},n:{rise:40,k:3.5},l:{rise:65,k:4.5}};let lsens=lsG('dj_llsens')||'n';if(!LSENS[lsens])lsens='n';   // 램프 감도: 문턱(밝기 상승 최소값·σ 배수)
 const hueDiff=(a,b)=>{const d=Math.abs(a-b)%360;return d>180?360-d:d;};
 const median=a=>{const b=a.slice().sort((x,y)=>x-y);return b.length?b[b.length>>1]:0;};
@@ -199,13 +200,20 @@ function initLamp(){
   $('lRes').onchange=async()=>{P.res=$('lRes').value;lsS('dj_lres',P.res);if(P.mode!=='standby'){await openCam();sendHello();}};
   $('lExpLock').onclick=expLock;
   gwUI();$('lSpeak').onclick=()=>{GW.speak=!GW.speak;lsS('dj_lspeak',GW.speak?'1':'0');gwUI();if(GW.speak)gwSay();};
-  $('lDone').onclick=()=>{if(!P.roi){toast('먼저 램프를 톡 눌러 지정하세요');return}doMode('active',true);toast('설정 완료 — 램프 확인 중입니다 (절전은 ⏸ 절전 버튼)');};
-  $('lSleep').onclick=()=>doMode('standby',true);
+  $('lDone').onclick=()=>{if(!P.roi){toast('먼저 램프를 톡 눌러 지정하세요');return}
+    if(P.mode==='count'){toast('발시 카운트 중 — 그대로 셉니다');return}            // 카운트 중에 누르면 세던 것을 끊지 않는다
+    doMode('active',true);toast('설정 완료 — 램프 확인 중 (절전은 ⏸ 버튼)');};
+  let slp=0;$('lSleep').onclick=()=>{
+    if(P.mode==='count'&&Date.now()-slp>3000){slp=Date.now();$('lSleep').textContent='시험 중 — 한 번 더 누르면 절전';setTimeout(()=>{$('lSleep').textContent='⏸ 절전 (카메라 끔)'},3000);return}
+    slp=0;$('lSleep').textContent='⏸ 절전 (카메라 끔)';doMode('standby',true);};
+  $('lAud').onclick=audWake;
+  $('lZ10').onclick=()=>{const c=P.caps&&P.caps.zoom;if(!c){toast('이 카메라는 줌 제어 없음');return}applyZoom(Math.max(c.min,Math.min(c.max,DEF_ZOOM)));};document.addEventListener('pointerdown',()=>{if(AU.ctx&&AU.ctx.state!=='running')AU.ctx.resume().catch(()=>{})},true);
   $('lReopen').onclick=()=>{if(P.mode==='standby'){doMode('active',true);return}P.autoReopen=0;P.reopening=true;log('수동으로 카메라 다시 열기');openCam().then(sendHello).catch(()=>{}).finally(()=>{P.reopening=false;P.lastFrameAt=performance.now()});};
   const r=lsG('dj_lres');if(r){P.res=r;$('lRes').value=r;}
   ov.addEventListener('pointerdown',gDown);ov.addEventListener('pointermove',gMove);ov.addEventListener('pointerup',e=>gEnd(e,false));ov.addEventListener('pointercancel',e=>gEnd(e,true));
   new ResizeObserver(sizeOv).observe(vid);
-  const sr=jparse(lsG('dj_lroi'),null);if(sr&&sr.fx!=null){P.savedRoi=sr;if(sr.z)P.zoomV=sr.z;}   // 줌도 함께 기억 → 새로고침·절전 뒤에도 같은 화면에서 같은 램프 자리
+  const sr=jparse(lsG('dj_lroi'),null);if(sr&&sr.fx!=null){P.savedRoi=sr;}   // 램프 자리는 그때의 줌과 함께 기억 — 같은 줌으로 열렸을 때만 되살린다
+  P.boot=lsG('dj_lmode')==='standby'?'standby':'active';   // 마지막으로 지정한 모드(절전/작동)를 기억 — 새로고침·자동 갱신 뒤에도 그대로
   aimUI();
   setModeTxt();blkShow(true);
   if(!qs.get('setup')&&/^\d{4}$/.test($('lCode').value))startLamp();   // 저장된 코드가 있으면 열자마자 자동 연결 (코드를 바꾸려면 주소 뒤에 ?setup=1)
@@ -239,8 +247,20 @@ function dropConn(why){
   log('연결 끊김: '+why);setT('lSt','연결 끊김 ('+why+') — 다시 연결 중 · 감시는 계속됩니다','bad');
   try{if(c)c.close()}catch(e){}
 }
+const ME=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function claimTab(){const b=jparse(lsG('dj_lamp_beat'),null),prev=!!(b&&b.id!==ME&&Date.now()-b.t<3500);lsS('dj_lamp_owner',ME);lsS('dj_lamp_beat',JSON.stringify({id:ME,t:Date.now()}));return prev;}   // 직전까지 살아 있던 다른 탭이 있었나
+function yieldTab(){   // 같은 폰에서 관중 폰을 새 탭으로 다시 열었다 → 이 탭은 연결·카메라·마이크를 모두 놓는다 (두 탭이 컨트롤 연결을 서로 빼앗지 않게)
+  if(P.yielded)return;P.yielded=true;P.code='';log('다른 탭에서 관중 폰이 새로 열려 이 탭은 쉽니다');
+  const pr=P.peer,c=P.conn;P.peer=null;P.conn=null;try{if(c)c.close()}catch(e){}try{if(pr)pr.destroy()}catch(e){}
+  P.mode='standby';stopCam();audOff();
+  const b=$('blk');b.style.display='flex';b.style.whiteSpace='pre-line';b.style.flexDirection='column';b.style.gap='16px';b.textContent='';const t=document.createElement('div');t.textContent='이 탭은 쉬는 중입니다\n같은 폰에서 관중 폰을 새 탭으로 열었습니다.\n이 탭은 닫으세요.';b.appendChild(t);
+  const bt=document.createElement('button');bt.textContent='이 탭에서 다시 쓰기';bt.style.cssText='width:auto;padding:0 22px;background:#344256;color:#cfd8e3';bt.onclick=()=>location.reload();b.appendChild(bt);
+  setT('lSt','쉬는 탭 (다른 탭이 사용 중)','warn');
+}
 function superviseLink(){
   const now=Date.now(),pr=P.peer;if(!P.code)return;
+  if(lsG('dj_lamp_owner')!==ME){yieldTab();return;}
+  lsS('dj_lamp_beat',JSON.stringify({id:ME,t:now}));
   if(!pr||pr.destroyed){if(now-LK.peerAt>2500)newPeer('peer 소멸');return;}
   if(pr.disconnected){
     if(now-LK.discAt>3000){LK.discAt=now;if(++LK.discN>=5){newPeer('시그널링 복구 실패');return;}try{pr.reconnect()}catch(e){}}
@@ -264,8 +284,13 @@ async function startLamp(){
   const code=$('lCode').value.trim();if(!/^\d{4}$/.test(code)){setT('lSt','코드는 숫자 4자리','bad');return;}
   P.code=code;lsS('dj_lcode',code);$('lStart').disabled=true;$('lCode').disabled=true;$('setupBox').hidden=true;
   keepAwake((t,c)=>setT('lWake',t,c));
+  const prevTab=claimTab();
   newPeer('시작');
-  probeCam();
+  if(P.boot==='active'){   // 예전 탭이 카메라를 놓을 시간을 준 뒤 켠다. 카메라가 안 열리면 몇 번 더 시도
+    log('시작 → 램프 확인 모드 (절전으로 지정한 적 없음)'+(prevTab?' · 예전 탭이 카메라를 놓길 2초 기다림':''));
+    let n=0;const go=()=>{if(P.yielded||lsG('dj_lmode')==='standby'||(P.mode!=='standby'&&P.stream))return;doMode('active');if(++n<4)setTimeout(go,6000);};
+    setTimeout(go,prevTab?2000:0);
+  }else probeCam();
   checkLatest((x,k)=>setT('lSt',x,k));
   setInterval(superviseLink,1000);
   const poke=()=>{LK.discAt=0;LK.next=0;superviseLink();};
@@ -273,7 +298,7 @@ async function startLamp(){
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')poke();});
   window.addEventListener('pageshow',poke);
   $('lRelink').onclick=()=>newPeer('수동 다시 연결');
-  setInterval(()=>{if(P.mode!=='count')checkLatest((x,k)=>setT('lSt',x,k))},600000);
+  setInterval(()=>{if(P.mode!=='count'&&!P.yielded)checkLatest((x,k)=>setT('lSt',x,k))},600000);
 }
 function tryConnect(){
   const pr=P.peer;if(!pr||!pr.open)return;
@@ -293,8 +318,8 @@ function tryConnect(){
 }
 /* 램프·뻐꾸기 이벤트는 최근 2분치를 보관했다가, 연결이 (다시) 열리면 재전송한다 → 컨트롤이 중복은 걸러냄. 끊긴 사이의 신호도 살린다 */
 const RECENT=[];
-function evsend(d){const n=Date.now();RECENT.push({at:n,d});while(RECENT.length&&n-RECENT[0].at>120000)RECENT.shift();psend(d);}
-function resendRecent(){const n=Date.now();let k=0;RECENT.forEach(r=>{if(n-r.at<=90000){psend(Object.assign({},r.d,{re:1}));k++;}});if(k)log('최근 신호 '+k+'건 재전송');}
+function evsend(d){const n=Date.now();RECENT.push({at:n,d});while(RECENT.length&&(n-RECENT[0].at>7200000||RECENT.length>600))RECENT.shift();psend(d);}
+function resendRecent(){let k=0;RECENT.forEach(r=>{psend(Object.assign({},r.d,{re:1}));k++;});if(k)log('보관 신호 '+k+'건 재전송 (컨트롤이 중복은 거름)');}
 const psend=d=>{const c=P.conn;if(c&&c.open){try{c.send(d);return true}catch(e){}}return false;};
 function camInfo(){
   const tr=P.track;if(!tr)return null;const s=tr.getSettings?tr.getSettings():{},c=P.caps||{};
@@ -344,7 +369,8 @@ function doMode(m,self){modeChain=modeChain.then(async()=>{
   if(!['standby','active','count'].includes(m))return;
   const was=P.mode;
   if(m===was&&(m==='standby'||P.stream)){psend({t:'mode',m,ready:true,self:!!self});return;}   // 같은 모드를 다시 받으면 감시 상태를 건드리지 않는다
-  P.mode=m;P.autoReopen=0;if(m==='count'&&was!=='count'){P.nBlink=0;setT('lLast','시험 시작 — 0회','dim');}
+  P.mode=m;P.autoReopen=0;lsS('dj_lmode',m==='standby'?'standby':'active');   // 지정한 모드를 바로 기억 (카메라가 다 켜지기 전에 새로고침돼도)
+  if(m==='count'&&was!=='count'){P.nBlink=0;setT('lLast','시험 시작 — 0회','dim');}
   try{
     if(m==='standby'){stopCam();blkShow(true);audOff();}
     else{blkShow(false);if(!P.stream)await openCam();if(was==='standby'||m==='count')resetDet();audInit();}
@@ -392,14 +418,20 @@ async function openCamInner(){
   }
   if(!P.stream){setT('lCam','⛔ 카메라를 열지 못했습니다: '+((lastErr&&(lastErr.name||lastErr.message))||'?'),'bad');throw lastErr||new Error('카메라 없음');}
   P.lastFrameAt=performance.now();log(`첫 영상 ${vid.videoWidth}×${vid.videoHeight} (${Math.round(performance.now()-T0c)} ms)`);
-  if(P.zoomV!=null&&P.caps.zoom){try{await P.track.applyConstraints({advanced:[{zoom:P.zoomV}]})}catch(e){}}
+  if(P.caps.zoom){const zc=P.caps.zoom,zt=Math.max(zc.min,Math.min(zc.max,P.zoomV!=null?P.zoomV:DEF_ZOOM));   // 이번 실행에서 손으로 바꾼 줌이 없으면 기본 10배
+    try{await P.track.applyConstraints({advanced:[{zoom:zt}]});P.zoomV=zt;log('줌 '+f1(zt)+'배로 시작'+(zt<DEF_ZOOM&&P.zoomV===zc.max?' (이 폰 최대)':''))}catch(e){log('줌 적용 실패 '+((e&&e.name)||e))}}
   P.track.addEventListener('ended',()=>{log('카메라 스트림 종료');setT('lCam','⚠ 카메라가 멈췄습니다 (다른 앱이 쓰는 중?)','bad')});
   const ci=camInfo();setT('lCam',`${ci.label} · ${ci.w}×${ci.h}${ci.fps?' @'+Math.round(ci.fps)+'fps':''}${ci.zoom?` · 줌 ${ci.zoom[0]}~${ci.zoom[1]}`:' · 줌 제어 없음'}`,'ok');
   setupCtl();
-  if(P.savedRoi&&!P.roi&&vid.videoWidth)setROI(P.savedRoi.fx*vid.videoWidth,P.savedRoi.fy*vid.videoHeight,P.savedRoi.sc);
+  if(P.savedRoi&&!P.roi&&vid.videoWidth){const sz=P.savedRoi.z,zn=zoomNow();
+    if(!P.caps.zoom||!sz||Math.abs(sz-zn)<=0.03*zn)setROI(P.savedRoi.fx*vid.videoWidth,P.savedRoi.fy*vid.videoHeight,P.savedRoi.sc);
+    else log('저장된 램프 자리는 다른 줌(×'+f1(sz)+')에서 잡은 것이라 쓰지 않음 — 램프를 다시 톡 눌러 주세요');}
   else if(P.roi)setROI(P.roi.x+P.roi.w/2,P.roi.y+P.roi.h/2);   // 해상도가 바뀌면 같은 자리를 다시 잡는다(비율 유지)
   startLoop();sizeOv();
+  const lg=P.loopGen;setTimeout(()=>{if(lg!==P.loopGen||!P.roi||!vid.videoWidth)return;settleRoi();},2500);
 }
+/* 카메라를 막 연 직후에는 줌(×10)이 몇 프레임 늦게 걸리고 노출·초점도 움직인다. 그 첫 화면으로 만든 기준 무늬는 엉뚱하므로, 자리 잡은 뒤 같은 램프 자리에서 다시 만든다 */
+function settleRoi(){const r=eff();if(!r)return;P.roi={x:r.x,y:r.y,w:r.w,h:r.h};resetDet();buildTemplate();imBuild();log('카메라 안정 후 램프 기준 무늬 다시 저장 (줌 '+f1(zoomNow())+'배)');}
 /* 프레임 콜백이 안 오는 브라우저를 위한 보조: 영상 시각이 움직이면 직접 한 프레임 처리 */
 setInterval(()=>{if(P.stream&&vid.videoWidth&&performance.now()-(P.lastFrameAt||0)>250&&vid.currentTime!==P.lastCT){P.lastCT=vid.currentTime;onFrame(performance.now()/1000)}},80);
 /* 깨어 있는데 6초 넘게 프레임이 없으면 카메라를 다시 연다 (한 번 깨울 때 최대 2번) */
@@ -495,7 +527,7 @@ function tapAt(cx,cy){
 }
 function toast(t){G.msg=t;G.label=performance.now()+2500;}
 function aimUI(){
-  $('lHint').textContent=P.mode==='count'?'🏹 발시 카운트 중 — 램프 지정은 잠겨 있습니다.':(P.roi?'흰 상자가 램프 자리입니다. 램프가 켜지면 노란 상자가 됩니다. 다시 지정하려면 램프를 톡 누르세요. ◀▲▼▶로 미세 조정.':'두 손가락을 벌려 램프를 크게 확대한 뒤, 램프를 한 번 톡 누르세요.');
+  $('lHint').textContent=P.mode==='count'?'🏹 발시 카운트 중 — 램프 지정은 잠겨 있습니다.':(P.roi?'흰 상자가 램프 자리입니다. 램프가 켜지면 노란 상자가 됩니다. 다시 지정하려면 램프를 톡 누르세요. ◀▲▼▶로 미세 조정.':((P.caps&&P.caps.zoom)?f1(zoomNow())+'배 줌 화면입니다. ':'')+'폰의 방향·각도를 맞춰 램프가 화면에 들어오면 램프를 한 번 톡 누르세요. (두 손가락으로 줌 조절 가능)');
 }
 function setROI(cxp,cyp,scale){
   if(scale)P.roiScale=scale;const W=vid.videoWidth,H=vid.videoHeight;if(!W)return;
@@ -785,7 +817,9 @@ this.acc+=x;if(++this.k>=this.D){if(this.pi<this.pb.length){this.pb[this.pi++]=t
 if(++this.n>=this.hop){const n=this.n;this.port.postMessage([Math.sqrt(this.s2/n),Math.sqrt(this.d2/n),Math.sqrt(this.l2/n),this.pb.slice(0,this.pi),currentTime]);this.pi=0;this.n=0;this.s2=0;this.d2=0;this.l2=0}}return true}}
 registerProcessor('feat',F);`;
 const AU={ctx:null,node:null,st:null,src:null,err:null,rate:16000,ring:[],abuf:{rms:[],hf:[]},med:{rms:1e-4,hf:1e-4},cnt:0,cand:null,lastTone:-1e9,tones:[],db:-120,fl:-120,n:0,busy:false};
-function audState(){return AU.st&&AU.ctx&&AU.ctx.state==='running'?1:(AU.err?-1:0);}
+function audState(){if(AU.st&&AU.ctx&&AU.ctx.state==='running')return 1;if(AU.err)return -1;if(AU.st&&AU.ctx&&AU.susp&&Date.now()-AU.susp>4000)return -2;return 0;}
+function audWake(){try{AU.ctx&&AU.ctx.resume().then(()=>{AU.susp=0;audUI();sendHello();log('소리 감지 켜짐 (화면 터치)')}).catch(()=>{})}catch(e){}if(GW.speak)try{speechSynthesis.speak(new SpeechSynthesisUtterance(''))}catch(e){}}
+function audUI(){const b=$('lAud');if(!b)return;b.hidden=!(P.mode!=='standby'&&audState()===-2);}
 async function audEnsure(){
   if(AU.ctx)return AU.ctx;
   const AC=window.AudioContext||window.webkitAudioContext;const c=new AC({latencyHint:'interactive'});AU.ctx=c;
@@ -811,9 +845,10 @@ async function audInit(){
 }
 function audOff(){
   try{if(AU.src){AU.src.disconnect();AU.src=null}if(AU.st)AU.st.getTracks().forEach(t=>{t.onended=null;t.stop()})}catch(e){}
-  AU.st=null;AU.ring=[];AU.tones=[];AU.cand=null;try{AU.ctx&&AU.ctx.suspend()}catch(e){}
+  AU.st=null;AU.ring=[];AU.tones=[];AU.cand=null;AU.susp=0;try{AU.ctx&&AU.ctx.suspend()}catch(e){}
 }
-setInterval(()=>{if(P.mode!=='standby'&&AU.ctx&&AU.st&&AU.ctx.state==='suspended')AU.ctx.resume().catch(()=>{});
+setInterval(()=>{if(P.mode!=='standby'&&AU.ctx&&AU.st&&AU.ctx.state!=='running'){AU.ctx.resume().catch(()=>{});if(!AU.susp)AU.susp=Date.now();}else AU.susp=0;
+  audUI();
   if(P.mode!=='standby'&&!AU.st&&!AU.busy&&!AU.err)audInit();},2000);
 function audRing(t,pcm){AU.ring.push({t,m:pcm});let tot=0;for(const r of AU.ring)tot+=r.m.length;while(tot>AU.rate*5&&AU.ring.length>1){tot-=AU.ring[0].m.length;AU.ring.shift()}}
 function audOn(rms,hf,lf,pcm,ct){

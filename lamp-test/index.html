@@ -119,7 +119,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.4.1';
+const VER=qs.get('fakever')||'2.5.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -197,11 +197,14 @@ const fmtB=b=>b<1024?b+' B':(b<1048576?Math.round(b/102.4)/10+' KB':Math.round(b
    오늘의 시험용 최소 컨트롤: 샤오미(램프 폰)만 연결해 램프 점멸 횟수를 세고,
    내가 이어폰 마이크로 램프가 켜질 때마다 「관중」이라고 말한 횟수(또는 수동 버튼)와 비교한다. */
 const CODE=()=>$('tCode').value.trim();
-const T={peer:null,lc:null,off:null,offErr:null,rtt:null,pr:[],hello:null,st:null,lsAt:0,running:lsG('dj_trun')==='1',ev:[],startTries:0,bat:null,
+const RUN_STALE=30*60000;   // 이 시간 넘게 아무 신호도 없던 '시험 중' 상태는 다시 열 때 이어받지 않는다
+const T={peer:null,lc:null,off:null,offErr:null,rtt:null,pr:[],hello:null,st:null,lsAt:0,running:lsG('dj_trun')==='1'&&(lsG('dj_trunAt')==null||Date.now()-(+lsG('dj_trunAt'))<RUN_STALE),since:+lsG('dj_tsince')||0,lq:+lsG('dj_tlq')||0,tq:+lsG('dj_ttq')||0,ev:[],startTries:0,bat:null,
   mic:{want:false,flat:0,on:false,ctx:null,stream:null,an:null,buf:null,hist:[],last:-1e9,above:0,t:null,db:-120,floor:-80}};
 const PAIR_LO=-0.8,PAIR_HI=3.5;     // 램프 대비 내 신호가 이 범위(초) 안에 있으면 한 쌍
 $('verT').textContent='v'+VER+' · 아이폰';
 const lpUp=()=>!!(T.lc&&T.lc.open);
+function saveQ(){lsS('dj_tlq',String(T.lq||0));lsS('dj_ttq',String(T.tq||0));}
+setInterval(()=>{if(T.running)lsS('dj_trunAt',String(Date.now()));},20000);
 const lpSend=d=>{if(lpUp()){try{T.lc.send(d);return true}catch(e){}}return false;};
 
 /* ---------- 시작 · 연결 ---------- */
@@ -209,6 +212,8 @@ function initT(){
   $('tCode').value=qs.get('code')||lsG('dj_tcode')||lsG('dj_ccode')||'2580';if(qs.get('code'))lsS('dj_tcode',qs.get('code'));
   $('tStart').onclick=startT;
   const ev=jparse(lsG('dj_tev'),[]);if(Array.isArray(ev))T.ev=ev;
+  if(lsG('dj_trun')==='1'&&!T.running){lsS('dj_trun','0');log('지난 시험이 30분 넘게 멈춰 있어 「시험 중」을 이어받지 않음 (기록은 그대로)');}
+  if(T.running&&!T.since)T.since=Date.now();
   $('bRun').onclick=()=>T.running?stopRun():startRun();
   $('bSleep').onclick=()=>{T.running=false;lsS('dj_trun','0');wantMode('standby');sendMode('standby');render();};
   $('bWake').onclick=()=>{wantMode('active');sendMode('active');};
@@ -220,7 +225,7 @@ function initT(){
   $('bReg').onclick=regToggle;$('bRegClr').onclick=regClear;try{const tp=jparse(lsG('dj_ptpl'),[]);if(Array.isArray(tp))PT.tpl=tp.map(m=>({m,f:(patInit(),patFeat(m.map(r=>Float32Array.from(r))))}));patCalib();}catch(e){}patUI();
   $('mSens').onchange=()=>lsS('dj_tsens',$('mSens').value);const sv=lsG('dj_tsens');if(sv)$('mSens').value=sv;
   $('bCopy').onclick=()=>copyText(csv());
-  let clr=0;$('bClr').onclick=()=>{if(Date.now()-clr>4000){clr=Date.now();$('bClr').textContent='정말 지우려면 한 번 더';setTimeout(()=>{$('bClr').textContent='기록 지우기';clr=0},4000);return;}clr=0;$('bClr').textContent='기록 지우기';T.ev=[];T.tq=0;T.lq=0;saveEv();render();};
+  let clr=0;$('bClr').onclick=()=>{if(Date.now()-clr>4000){clr=Date.now();$('bClr').textContent='정말 지우려면 한 번 더';setTimeout(()=>{$('bClr').textContent='기록 지우기';clr=0},4000);return;}clr=0;$('bClr').textContent='기록 지우기';T.ev=[];T.tq=0;T.lq=0;saveQ();saveEv();render();};
   T.lonly=lsG('dj_tlonly')||'count';$('lOnly').value=T.lonly;$('lOnly').onchange=()=>{T.lonly=$('lOnly').value;lsS('dj_tlonly',T.lonly);render();};
   $('lSens').value=lsG('dj_tlsens')||'n';$('lSens').onchange=()=>{lsS('dj_tlsens',$('lSens').value);lpSend({t:'lsens',v:$('lSens').value});};
   $('tSens').value=lsG('dj_ttsens')||'n';$('tSens').onchange=()=>{lsS('dj_ttsens',$('tSens').value);lpSend({t:'tsens',v:$('tSens').value});};
@@ -250,7 +255,9 @@ function ctlPeer(why){
   peer.on('connection',c=>{
     if(g!==LK.gen)return;
     if(!(((c.peer||'').indexOf('-l-')>=0)||(c.metadata&&c.metadata.role==='lamp'))){log('램프 폰이 아닌 접속은 무시: '+c.peer);try{c.close()}catch(e){}return;}
-    const prev=T.lc;T.lc=c;if(prev&&prev!==c){try{prev.close()}catch(e){}}
+    const prev=T.lc;T.lc=c;if(prev&&prev!==c){try{prev.close()}catch(e){}
+      const n=Date.now();LK.swapN=(LK.swapN||0)+1;LK.swapN=(LK.swapN||0)+1;LK.swaps=(LK.swaps||[]).filter(v=>n-v<60000);LK.swaps.push(n);
+      if(LK.swaps.length>=3)setBanner('dup','⚠ 샤오미 접속이 1분에 '+LK.swaps.length+'번 바뀜 — 같은 코드의 관중 폰 페이지가 두 곳(다른 폰·다른 탭)에 열려 있는지 확인하세요');}
     log('샤오미 접속 시도');
     c.on('open',()=>{if(T.lc!==c)return;LK.rx=Date.now();onOpen(c);
       try{const pc=c.peerConnection;pc.addEventListener('iceconnectionstatechange',()=>{const st=pc.iceConnectionState;log('ICE '+st);if(st==='failed'&&T.lc===c)dropLc('ICE 실패');});}catch(e){}});
@@ -271,8 +278,16 @@ function dropLc(why){
   const c=T.lc;T.lc=null;T.st=null;LK.drops++;LK.lastDrop=why;LK.lastDropAt=Date.now();
   log('연결 끊김: '+why);setT('mSt','연결 끊김 ('+why+') — 샤오미가 다시 접속하길 기다립니다','bad');try{if(c)c.close()}catch(e){}render();
 }
+const ME=Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function yieldTab(){   // 같은 아이폰에서 컨트롤을 새 탭으로 다시 열었다 → 이 탭은 물러난다 (같은 코드를 두 탭이 다투지 않게)
+  if(T.yielded)return;T.yielded=true;T.started=false;log('다른 탭에서 컨트롤이 새로 열려 이 탭은 쉽니다');
+  const pr=T.peer,c=T.lc;T.peer=null;T.lc=null;try{if(c)c.close()}catch(e){}try{if(pr)pr.destroy()}catch(e){}
+  try{if(listening())listenOff()}catch(e){}
+  setBanner('tab','이 탭은 쉬는 중 — 같은 아이폰에서 컨트롤을 새 탭으로 열었습니다. 이 탭은 닫으세요. (다시 쓰려면 새로고침)');render();
+}
 function superviseCtl(){
   const now=Date.now(),pr=T.peer;if(!T.started)return;
+  if(lsG('dj_ctl_owner')!==ME){yieldTab();return;}
   if(!pr||pr.destroyed){if(now>=(LK.idWait||0)&&now-LK.peerAt>2500){LK.idWait=0;ctlPeer(pr?'peer 소멸':'재시작');}return;}
   if(pr.disconnected){if(now-LK.discAt>3000){LK.discAt=now;if(++LK.discN>=5){ctlPeer('시그널링 복구 실패');return;}try{pr.reconnect()}catch(e){}}return;}
   if(!pr.open){if(now-LK.peerAt>15000)ctlPeer('시그널링 15초 응답 없음');return;}
@@ -290,8 +305,8 @@ function linkInfo(){
 function startT(){
   const code=CODE();if(!/^\d{4}$/.test(code)){setT('mSt','코드는 숫자 4자리','bad');$('startBox').hidden=false;return;}
   lsS('dj_tcode',code);$('verT').textContent='v'+VER+' · 아이폰 · 코드 '+code;$('tStart').disabled=true;$('tCode').disabled=true;$('startBox').hidden=true;
-  T.started=true;
-  checkLatest((x,k)=>setT('mSt',x,k));setInterval(()=>{if(!T.running)checkLatest((x,k)=>setT('mSt',x,k))},600000);
+  T.started=true;lsS('dj_ctl_owner',ME);
+  checkLatest((x,k)=>setT('mSt',x,k));setInterval(()=>{if(!T.running&&!T.yielded)checkLatest((x,k)=>setT('mSt',x,k))},600000);
   keepAwake((t,c)=>setT('mWake',t,c));
   const poke=()=>{LK.discAt=0;LK.idWait=0;superviseCtl();};
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){poke();lpSend({t:'sync'});}});
@@ -331,7 +346,7 @@ function onData(c,d){
     T.hello=d;if(T.st&&d.mode)T.st.m=d.mode;
     if(d.cam)setT('mCam',`${d.cam.label} · ${d.cam.w}×${d.cam.h}${d.cam.zoom?' · 줌 '+f1(d.cam.zoom[3])+'배':''}`,'ok');else setT('mCam','꺼짐 (대기)','dim');
     if(d.ver){const k=cmpVer(d.ver,VER);T.lver=d.ver;setT('mBat','v'+d.ver+(k===0?' · 같은 버전':(k<0?' · 구버전 → 갱신 요청함':' · 이 화면이 구버전')),k===0?'ok':'warn');
-      if(k<0)c.send({t:'ver',v:VER});else if(k>0)tryUpdate(d.ver,(x,kk)=>setT('mSt',x,kk));}
+      if(k<0)c.send({t:'ver',v:VER});else if(k>0){if(T.running){if(T.pendUpd!==d.ver)log('새 버전 v'+d.ver+' — 시험 중이라 종료 후 갱신');T.pendUpd=d.ver;}else tryUpdate(d.ver,(x,kk)=>setT('mSt',x,kk));}}
     render();
   }
   else if(d.t==='clip'){onClip(d);}
@@ -341,16 +356,20 @@ function onData(c,d){
   else if(d.t==='tone'){onTone(d);}
   else if(d.t==='bat'){T.bat=d;setT('mBat',`${d.lvl==null?'-':Math.round(d.lvl*100)+'%'} ${d.chg?'⚡충전 중':'방전 중'} · 화면 ${d.vis==='visible'?'켜짐':'⚠ 숨김'} · 카메라 ${d.cs||'-'}${T.lver?' · v'+T.lver:''}`,d.chg?'warn':'dim');
     if(d.lvl!=null&&d.lvl<0.4&&!d.chg)setBanner('bat','🔋 샤오미 배터리 '+Math.round(d.lvl*100)+'% — 충전하면서 쓰세요');else setBanner('bat',null);}
-  else if(d.t==='mode'){if(d.self&&d.ready){LK.want=null;log('샤오미에서 직접 '+d.m+' 로 바꿈');}if(d.ready===false){setBanner('err','⛔ 샤오미 카메라를 열지 못했습니다: '+d.err+' — 샤오미 화면을 확인하세요');}else setBanner('err',null);}
+  else if(d.t==='mode'){if(d.self&&d.ready){LK.want=null;log('샤오미에서 직접 '+d.m+' 로 바꿈');if(d.m==='standby'&&T.running){T.running=false;lsS('dj_trun','0');log('샤오미가 절전으로 바뀌어 시험 종료');render();}}if(d.ready===false){setBanner('err','⛔ 샤오미 카메라를 열지 못했습니다: '+d.err+' — 샤오미 화면을 확인하세요');}else setBanner('err',null);}
 }
 const sg=x=>(x>=0?'+':'−')+f1(Math.abs(x));
 const BN={};function setBanner(k,msg){if(msg)BN[k]=msg;else delete BN[k];const b=$('banner');b.innerHTML='';Object.keys(BN).forEach(x=>{const e=document.createElement('div');e.className='banner';e.textContent=BN[x];b.appendChild(e);});}
-function dupEv(d){const sid=d.t+(d.k||'')+d.id;if(LK.seen.has(sid))return true;LK.seen.add(sid);if(LK.seen.size>600)LK.seen.clear();return T.ev.some(e=>e.sid===sid);}
+LK.seen=new Set(jparse(lsG('dj_tseen'),[]));let seenT=0;
+function dupEv(d){const sid=d.t+(d.k||'')+d.id;if(LK.seen.has(sid))return true;LK.seen.add(sid);
+  if(LK.seen.size>800)LK.seen=new Set([...LK.seen].slice(-500));clearTimeout(seenT);seenT=setTimeout(()=>lsS('dj_tseen',JSON.stringify([...LK.seen].slice(-500))),500);
+  return T.ev.some(e=>e.sid===sid);}
+const inRun=tc=>T.running&&tc>=T.since-300;   // 시험 중이고, 시험 시작 뒤에 생긴 신호만 센다 (재전송된 예전 신호 제외)
 function onLamp(d){
   if(dupEv(d))return;
-  if(d.k==='rej'){if(T.running){T.lq=(T.lq||0)+1;render();}log('램프처럼 보였지만 제외: '+d.why);return;}
   const tc=T.off!=null?d.w-T.off:Date.now()-(d.lat||0);
-  if(d.k==='blink'){if(!T.running){log('램프 점멸 (시험 중 아님 · 세지 않음)');return;}addEv('lamp',tc,{n:d.n,lat:d.lat,col:d.col||null,pk:d.pk,rr:d.rr,sp:d.sp,sid:d.t+(d.k||'')+d.id});}
+  if(d.k==='rej'){if(inRun(tc)){T.lq=(T.lq||0)+1;saveQ();render();}log('램프처럼 보였지만 제외: '+d.why);return;}
+  if(d.k==='blink'){if(!inRun(tc)){log('램프 점멸 '+hms(tc)+(T.running?' (시험 시작 전 신호 · 세지 않음)':' (시험 중 아님 · 세지 않음)'));return;}addEv('lamp',tc,{n:d.n,lat:d.lat,col:d.col||null,pk:d.pk,rr:d.rr,sp:d.sp,sid:d.t+(d.k||'')+d.id});}
   else log('램프 불규칙 깜박임 '+d.n+'회 (세지 않음)');
 }
 /* ---------- 소리 조각 (뻐꾸기 후보) ---------- */
@@ -388,16 +407,17 @@ function renderClips(){
 function onTone(d){
   if(dupEv(d))return;
   const tc=T.off!=null?d.w-T.off:Date.now()-(d.lat||0);
-  if(!T.running){log('뻐꾸기 '+d.k+' (시험 중 아님 · 세지 않음)');return;}
-  if(d.k!=='A'&&d.k!=='B'){T.tq=(T.tq||0)+1;log(`소리 ${hms(tc)} 종류 불명(A창 ${d.nA}·B창 ${d.nB} · 주파수 ${pkTxt(d.pk)}) → 뻐꾸기로 안 셈`);render();return;}   // 주파수 패턴이 A·B 형이 아닌 소리는 잡음
+  if(!inRun(tc)){log('뻐꾸기 '+d.k+' '+hms(tc)+' (시험 중 아님 · 세지 않음)');return;}
+  if(d.k!=='A'&&d.k!=='B'){T.tq=(T.tq||0)+1;saveQ();log(`소리 ${hms(tc)} 종류 불명(A창 ${d.nA}·B창 ${d.nB} · 주파수 ${pkTxt(d.pk)}) → 뻐꾸기로 안 셈`);render();return;}   // 주파수 패턴이 A·B 형이 아닌 소리는 잡음
   addEv('tone',tc,{cl:d.k,nA:d.nA,nB:d.nB,lat:d.lat,sid:d.t+(d.k||'')+d.id});
 }
 
 /* ---------- 시험 시작·종료 ---------- */
 function startRun(){
-  T.running=true;T.tq=0;lsS('dj_trun','1');T.lq=0;T.since=Date.now();LK.cmdN=0;lpSend({t:'mode',m:'count'});log('시험 시작');render();
+  T.running=true;T.tq=0;lsS('dj_trun','1');T.lq=0;T.since=Date.now();lsS('dj_tsince',String(T.since));lsS('dj_trunAt',String(Date.now()));saveQ();LK.cmdN=0;lpSend({t:'mode',m:'count'});log('시험 시작');render();
 }
-function stopRun(){T.running=false;lsS('dj_trun','0');wantMode('active',30000);lpSend({t:'mode',m:'active'});log('시험 종료');render();}
+function stopRun(){T.running=false;lsS('dj_trun','0');wantMode('active',30000);lpSend({t:'mode',m:'active'});log('시험 종료');render();
+  if(T.pendUpd){const v=T.pendUpd;T.pendUpd=null;setTimeout(()=>tryUpdate(v,(x,kk)=>setT('mSt',x,kk)),1500);}}
 
 /* ---------- 기록 · 짝짓기 ---------- */
 function saveEv(){lsS('dj_tev',JSON.stringify(T.ev.slice(-400)));}
@@ -470,7 +490,7 @@ function renderLine(){
   if(!st){setT('lpSt',hm==='standby'?'⏸ 연결됨 · 대기 (카메라 꺼짐)':'연결됨 — 상태 수신 대기',hm==='standby'?'huge warn':'huge dim');setT('lpLine','','dim');return;}
   const m=st.m,roi=!!st.roi;
   setT('lpSt',m==='standby'?'⏸ 대기 (카메라 꺼짐)':(!roi?'⚠ 램프 미지정':(m==='count'?'🟢 점멸 세는 중':'▶ 준비 (램프 확인 중)')),'huge '+(m==='standby'?'warn':(!roi?'bad':'ok')));
-  setT('lpLine',(LK.rtt!=null?'🔗 '+LK.rtt+'ms'+(LK.drops?' · 끊김 '+LK.drops+'회':'')+' · ':'')+(m==='standby'?'':(!roi?'샤오미 화면에서 램프를 눌러 지정하세요. ':'')+(st.cam===0?'⚠ 카메라 영상 없음 · ':'')+`램프 ${st.on?'🟡 켜짐':'꺼짐'}${st.rl?' · 🎯 자리 자동 조정 '+st.rl+'회':''}${st.pm!=null?' · 패턴 '+st.pm:''}${st.rj?' · 반사 의심 제외 '+st.rj:''} · 샤오미 집계 램프 ${st.n}회·뻐꾸기 ${st.nt||0}회 · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''} · ${st.mic===1?'🎤 '+st.mdb+'dB(바닥 '+st.mfl+')':(st.mic===-1?'⛔ 샤오미 마이크 실패(뻐꾸기 못 셈)':'🎤 켜는 중')}`),'dim');
+  setT('lpLine',(LK.rtt!=null?'🔗 '+LK.rtt+'ms'+(LK.drops?' · 끊김 '+LK.drops+'회':'')+' · ':'')+(m==='standby'?'':(!roi?'샤오미 화면에서 램프를 눌러 지정하세요. ':'')+(st.cam===0?'⚠ 카메라 영상 없음 · ':'')+`램프 ${st.on?'🟡 켜짐':'꺼짐'}${st.rl?' · 🎯 자리 자동 조정 '+st.rl+'회':''}${st.pm!=null?' · 패턴 '+st.pm:''}${st.rj?' · 반사 의심 제외 '+st.rj:''} · 샤오미 집계 램프 ${st.n}회·뻐꾸기 ${st.nt||0}회 · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''} · ${st.mic===1?'🎤 '+st.mdb+'dB(바닥 '+st.mfl+')':(st.mic===-1?'⛔ 샤오미 마이크 실패(뻐꾸기 못 셈)':(st.mic===-2?'⛔ 샤오미 소리 감지 멈춤 — 샤오미 화면 위쪽 빨간 줄을 한 번 톡':'🎤 켜는 중'))}`),'dim');
 }
 setInterval(()=>{if(lpUp()&&T.st&&nowE()-T.lsAt>3500&&T.st.m!=='standby')renderLine();},1000);
 function csv(){const P=pairs();return ['종류,시각,색_종류,색상각,채도,묶인신호,내신호시차(ms),램프신호최대,주변상승,자리흩어짐'].concat(T.ev.map(e=>{
