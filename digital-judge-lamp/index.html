@@ -24,7 +24,7 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:10px}
 #blk.peek{color:#bbb}
 video.pv{width:100%;border-radius:8px;background:#000;display:block}
 .vw{position:relative;background:#000;border-radius:8px;overflow:hidden}.vw video{display:block;width:100%;height:46vh;object-fit:contain;background:#000}.vw canvas{position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none}
-button.sm{min-height:42px;font-size:13px;padding:0 8px}button.on{background:#e0a030;color:#1a1a1a}
+button.sm{min-height:42px;font-size:13px;padding:0 8px}button.go{background:#1e9e66}button.on{background:#e0a030;color:#1a1a1a}
 input[type=range]{padding:0;min-height:36px}
 .g6{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:8px}.g6 button{margin:0;padding:0;min-height:44px;font-size:16px}
 .sig{display:flex;gap:10px;align-items:stretch}.sig canvas{background:#0d1218;border-radius:8px}
@@ -48,6 +48,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
   <div id="lZInfo" class="dim" style="margin-top:8px">-</div>
   <input id="lZ" type="range" min="1" max="1" step="0.1" value="1" disabled>
   <div class="g6"><button id="nL" class="sub sm">◀</button><button id="nU" class="sub sm">▲</button><button id="nD" class="sub sm">▼</button><button id="nR" class="sub sm">▶</button><button id="lSmall" class="sub sm">▢−</button><button id="lBig" class="sub sm">▢＋</button></div>
+  <button id="lDone" class="go" style="margin-top:8px">✅ 설정 완료 (절전으로)</button>
   <button id="lReopen" class="sub sm" style="margin-top:8px">🔄 카메라 다시 열기</button>
   <div class="dim" style="margin-top:6px">순서: ① 폰을 램프 쪽으로 향하게 세우고 두 손가락을 벌려 램프를 크게 확대 → ② 램프를 한 번 톡 → ③ ◀▲▼▶·▢−▢＋로 상자를 램프에 맞춘다(오른쪽 위 작은 화면이 상자 안 확대). 줌을 다시 바꾸면 램프 자리가 따라 움직이니 어긋나면 다시 톡 누르세요. 미세 조정은 아이폰 컨트롤에서도 됩니다.</div>
 </div>
@@ -91,7 +92,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.7.5';
+const VER=qs.get('fakever')||'1.8.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -188,11 +189,12 @@ function initLamp(){
   $('nU').onclick=()=>nud(0,-2);$('nD').onclick=()=>nud(0,2);$('nL').onclick=()=>nud(-2,0);$('nR').onclick=()=>nud(2,0);
   $('lRes').onchange=async()=>{P.res=$('lRes').value;lsS('dj_lres',P.res);if(P.mode!=='standby'){await openCam();sendHello();}};
   $('lExpLock').onclick=expLock;
+  $('lDone').onclick=()=>{if(!P.roi){toast('먼저 램프를 톡 눌러 지정하세요');return}doMode('standby');};
   $('lReopen').onclick=()=>{if(P.mode==='standby'){doMode('active');return}P.autoReopen=0;P.reopening=true;log('수동으로 카메라 다시 열기');openCam().then(sendHello).catch(()=>{}).finally(()=>{P.reopening=false;P.lastFrameAt=performance.now()});};
   const r=lsG('dj_lres');if(r){P.res=r;$('lRes').value=r;}
   ov.addEventListener('pointerdown',gDown);ov.addEventListener('pointermove',gMove);ov.addEventListener('pointerup',e=>gEnd(e,false));ov.addEventListener('pointercancel',e=>gEnd(e,true));
   new ResizeObserver(sizeOv).observe(vid);
-  const sr=jparse(lsG('dj_lroi'),null);if(sr&&sr.fx!=null)P.savedRoi=sr;
+  const sr=jparse(lsG('dj_lroi'),null);if(sr&&sr.fx!=null){P.savedRoi=sr;if(sr.z)P.zoomV=sr.z;}   // 줌도 함께 기억 → 새로고침·절전 뒤에도 같은 화면에서 같은 램프 자리
   aimUI();
   setModeTxt();blkShow(true);
   if(!qs.get('setup')&&/^\d{4}$/.test($('lCode').value))startLamp();   // 저장된 코드가 있으면 열자마자 자동 연결 (코드를 바꾸려면 주소 뒤에 ?setup=1)
@@ -273,7 +275,7 @@ function doMode(m){modeChain=modeChain.then(async()=>{
   if(!['standby','active','count'].includes(m))return;
   const was=P.mode;
   if(m===was&&(m==='standby'||P.stream)){psend({t:'mode',m,ready:true});return;}   // 같은 모드를 다시 받으면 감시 상태를 건드리지 않는다
-  P.mode=m;P.autoReopen=0;
+  P.mode=m;P.autoReopen=0;if(m==='count'&&was!=='count'){P.nBlink=0;setT('lLast','시험 시작 — 0회','dim');}
   try{
     if(m==='standby'){stopCam();blkShow(true);}
     else{blkShow(false);if(!P.stream)await openCam();if(was==='standby'||m==='count')resetDet();}
@@ -432,7 +434,7 @@ function setROI(cxp,cyp,scale){
   P.roi={x:Math.round(Math.min(W-w,Math.max(0,cxp-w/2))),y:Math.round(Math.min(H-h,Math.max(0,cyp-h/2))),w,h};
   P.trk=null;P.bg=null;P.weak=null;P.devAbs=[];P.lampMed=0;P.sigma=3;P.edges=[];P.ring=[];P.wasOn=false;P.warm=null;P.trkBad=0;
   buildTemplate();aimUI();
-  const r=P.roi;lsS('dj_lroi',JSON.stringify({fx:(r.x+r.w/2)/W,fy:(r.y+r.h/2)/H,sc:P.roiScale}));P.savedRoi=jparse(lsG('dj_lroi'),null);
+  const r=P.roi;lsS('dj_lroi',JSON.stringify({fx:(r.x+r.w/2)/W,fy:(r.y+r.h/2)/H,sc:P.roiScale,z:zoomNow()}));P.savedRoi=jparse(lsG('dj_lroi'),null);
   sendHello();
 }
 function roiScaleBy(k){if(!P.roi)return;const r=eff();setROI(r.x+r.w/2,r.y+r.h/2,Math.max(0.4,Math.min(4,P.roiScale*k)));}
@@ -529,7 +531,7 @@ function onFrame(t){
 }
 function fire(tf,k,n){
   const w=T0+tf*1000,lat=Math.round(nowE()-w);
-  if(k==='blink'){P.nBlink++;P.lastBlink=Math.round(w);setT('lLast',`${hms(w)} · 점멸 ${n}회 (감지 지연 ${lat} ms)`,'ok');log(`점멸 감지 ${n}회 (${lat} ms 늦게 확인)`);}
+  if(k==='blink'){P.nBlink++;P.lastBlink=Math.round(w);setT('lLast',`총 ${P.nBlink}회 · 최근 ${hms(w)} (감지 지연 ${lat} ms)`,'ok');log(`점멸 감지 ${n}회 (${lat} ms 늦게 확인)`);}
   else log(`불규칙한 깜박임 ${n}회 (판정에는 안 씀)`);
   psend({t:'lamp',k,n,w,lat,id:Date.now()});
 }
