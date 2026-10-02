@@ -74,6 +74,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 <div class="card">
   <h2>관중 신호(램프·뻐꾸기) ↔ 내 신호</h2>
   <div class="cnt3"><div><div class="num" id="nL">0</div><div class="dim" id="nLt">램프</div></div><div><div class="num" id="nT">0</div><div class="dim" id="nTt">뻐꾸기 감지</div></div><div><div class="num" id="nV">0</div><div class="dim" id="nVt">내 신호</div></div></div>
+  <div class="row" style="align-items:center"><span class="dim" style="flex:0 0 auto">램프만 울린 신호</span><select id="lOnly"><option value="hold" selected>의심 → 합산 제외</option><option value="count">그대로 셈</option></select></div>
   <div class="row" style="align-items:center"><span class="dim" style="flex:0 0 auto">샤오미 램프 감도</span><select id="lSens"><option value="h">높음 (약한 불빛도)</option><option value="n" selected>보통</option><option value="l">낮음 (확실한 불빛만)</option></select></div>
   <div class="row" style="align-items:center"><span class="dim" style="flex:0 0 auto">샤오미 뻐꾸기 감도</span><select id="tSens"><option value="h">높음 (잘 잡음)</option><option value="n" selected>보통</option><option value="l">낮음 (확실한 것만)</option></select></div>
   <table class="kv" id="cmpT"></table>
@@ -112,7 +113,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.1.0';
+const VER=qs.get('fakever')||'2.1.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -214,6 +215,7 @@ function initT(){
   $('mSens').onchange=()=>lsS('dj_tsens',$('mSens').value);const sv=lsG('dj_tsens');if(sv)$('mSens').value=sv;
   $('bCopy').onclick=()=>copyText(csv());
   let clr=0;$('bClr').onclick=()=>{if(Date.now()-clr>4000){clr=Date.now();$('bClr').textContent='정말 지우려면 한 번 더';setTimeout(()=>{$('bClr').textContent='기록 지우기';clr=0},4000);return;}clr=0;$('bClr').textContent='기록 지우기';T.ev=[];T.tq=0;T.lq=0;saveEv();render();};
+  T.lonly=lsG('dj_tlonly')||'hold';$('lOnly').value=T.lonly;$('lOnly').onchange=()=>{T.lonly=$('lOnly').value;lsS('dj_tlonly',T.lonly);render();};
   $('lSens').value=lsG('dj_tlsens')||'n';$('lSens').onchange=()=>{lsS('dj_tlsens',$('lSens').value);lpSend({t:'lsens',v:$('lSens').value});};
   $('tSens').value=lsG('dj_ttsens')||'n';$('tSens').onchange=()=>{lsS('dj_ttsens',$('tSens').value);lpSend({t:'tsens',v:$('tSens').value});};
   $('mReload').onclick=()=>{lpSend({t:'reload'});log('샤오미 새로고침 요청');};
@@ -341,7 +343,7 @@ function onLamp(d){
   if(dupEv(d))return;
   if(d.k==='rej'){if(T.running){T.lq=(T.lq||0)+1;render();}log('램프처럼 보였지만 제외: '+d.why);return;}
   const tc=T.off!=null?d.w-T.off:Date.now()-(d.lat||0);
-  if(d.k==='blink'){if(!T.running){log('램프 점멸 (시험 중 아님 · 세지 않음)');return;}addEv('lamp',tc,{n:d.n,lat:d.lat,col:d.col||null,sid:d.t+(d.k||'')+d.id});}
+  if(d.k==='blink'){if(!T.running){log('램프 점멸 (시험 중 아님 · 세지 않음)');return;}addEv('lamp',tc,{n:d.n,lat:d.lat,col:d.col||null,pk:d.pk,rr:d.rr,sp:d.sp,sid:d.t+(d.k||'')+d.id});}
   else log('램프 불규칙 깜박임 '+d.n+'회 (세지 않음)');
 }
 function onTone(d){
@@ -376,13 +378,15 @@ function pairs(){
     if(best)usedT.add(best);G.push({t:l.t,l,tn:best,type:best?'both':'lamp'});}
   for(const t of Ts)if(!usedT.has(t))G.push({t:t.t,l:null,tn:t,type:'tone'});
   G.sort((a,b)=>a.t-b.t);
+  // 램프만 울린 신호는 반사광 같은 오검출일 수 있다 — 뻐꾸기가 있는 활터에서는 '의심'으로 따로 두고 합산에서 뺀다
+  const hold=T.lonly!=='count',Gc=G.filter(g=>!(hold&&g.type==='lamp')),Gs=G.filter(g=>hold&&g.type==='lamp');
   // 2) 관중 신호 ↔ 내 신호
   const used=new Set(),pr=[];
-  for(const g of G){let best=null,bd=1e9;
+  for(const g of Gc){let best=null,bd=1e9;
     for(const v of Vs){if(used.has(v))continue;const d=(v.t-g.t)/1000;if(d<PAIR_LO||d>PAIR_HI)continue;const sc=Math.abs(d-0.7);if(sc<bd){bd=sc;best=v}}
     if(best){used.add(best);pr.push([g,best]);}}
   const pg=new Map(),pv=new Map(),ge=new Map();pr.forEach(([g,v])=>{pg.set(g,v);pv.set(v,g);});G.forEach(g=>{if(g.l)ge.set(g.l,g);if(g.tn)ge.set(g.tn,g);});
-  return{Ls,Ts,Vs,G,pr,pg,pv,ge};
+  return{Ls,Ts,Vs,G:Gc,Gs,pr,pg,pv,ge};
 }
 function render(){
   const up=lpUp(),m=T.st?T.st.m:(T.hello?T.hello.mode:null),awake=up&&m&&m!=='standby';
@@ -396,7 +400,7 @@ function render(){
   const nBoth=P.G.filter(g=>g.type==='both').length,nLo=P.G.filter(g=>g.type==='lamp').length,nTo=P.G.filter(g=>g.type==='tone').length;
   const cmp=(n)=>n===nV?`<b class="ok">✅ ${n} = ${nV}</b>`:`<b class="warn">⚠ ${n} ≠ ${nV} (${n>nV?'+':'−'}${Math.abs(n-nV)})</b>`;
   $('cmpT').innerHTML=nL||nT||nV?`<tr><td>램프</td><td>${nL}회</td><td>${cmp(nL)}</td></tr><tr><td>뻐꾸기</td><td>${nT}회</td><td>${cmp(nT)}</td></tr><tr><td>관중 합산</td><td>${nG}회</td><td>${cmp(nG)}</td></tr>`:'';
-  $('grpT').textContent=nG?`합산 ${nG}회 = 램프+뻐꾸기 ${nBoth} · 램프만 ${nLo} · 뻐꾸기만 ${nTo}`:'';
+  $('grpT').textContent=(nG||P.Gs.length)?`합산 ${nG}회 = 램프+뻐꾸기 ${nBoth}${T.lonly==='count'?' · 램프만 '+nLo:''} · 뻐꾸기만 ${nTo}`+(P.Gs.length?` · ⚠ 램프만 ${P.Gs.length}회는 의심이라 합산에서 뺌`:''):'';
   const uG=nG-P.pr.length,uV=nV-P.pr.length;
   let vt,vc;
   if(!nG&&!nV){vt=T.running?'시험 중 — 램프가 켜지거나 뻐꾸기가 울리면 셉니다':'시험 시작 전';vc='big dim';}
@@ -411,8 +415,8 @@ function render(){
     const k=document.createElement('span');k.className='k '+(e.k==='lamp'?'L':e.k==='tone'?'C':'V');k.textContent=kn(e);
     const x=document.createElement('span');let txt,cls='dim';
     if(isSrc(e)){const g=P.ge.get(e),v=g&&P.pg.get(g),other=g&&(e.k==='lamp'?g.tn:g.l);
-      txt=(lab(e)?lab(e)+' · ':'')+(other?`↔ ${kn(other)} ${sg((other.t-e.t))} ms`:`${e.k==='lamp'?'램프만':'뻐꾸기만'}`)+(v?` · ${kn(v)} ${sg(v.t-g.t)} ms`:' · 내 신호 없음');
-      if(!v)cls='warn';}
+      txt=(lab(e)?lab(e)+' · ':'')+(other?`↔ ${kn(other)} ${sg((other.t-e.t))} ms`:`${e.k==='lamp'?(T.lonly!=='count'?'램프만 — 의심(합산 제외)':'램프만'):'뻐꾸기만'}`)+(v?` · ${kn(v)} ${sg(v.t-g.t)} ms`:' · 내 신호 없음');
+      if(!v)cls=(e.k==='lamp'&&!other&&T.lonly!=='count')?'bad':'warn';}
     else{const g=P.pv.get(e);txt=g?`↔ ${g.type==='both'?'램프+뻐꾸기':g.type==='lamp'?'램프':'뻐꾸기'} ${sg(e.t-g.t)} ms (기계 기준)`:'짝 없음 (내 신호만)';if(!g)cls='warn';}
     x.textContent=txt;x.className=cls;
     row.appendChild(t);row.appendChild(k);row.appendChild(x);box.appendChild(row);});
@@ -427,11 +431,11 @@ function renderLine(){
   setT('lpLine',(LK.rtt!=null?'🔗 '+LK.rtt+'ms'+(LK.drops?' · 끊김 '+LK.drops+'회':'')+' · ':'')+(m==='standby'?'':(!roi?'샤오미 화면에서 램프를 눌러 지정하세요. ':'')+(st.cam===0?'⚠ 카메라 영상 없음 · ':'')+`램프 ${st.on?'🟡 켜짐':'꺼짐'}${st.rl?' · 🎯 자리 자동 조정 '+st.rl+'회':''}${st.rj?' · 반사 의심 제외 '+st.rj:''} · 샤오미 집계 램프 ${st.n}회·뻐꾸기 ${st.nt||0}회 · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''} · ${st.mic===1?'🎤 '+st.mdb+'dB(바닥 '+st.mfl+')':(st.mic===-1?'⛔ 샤오미 마이크 실패(뻐꾸기 못 셈)':'🎤 켜는 중')}`),'dim');
 }
 setInterval(()=>{if(lpUp()&&T.st&&nowE()-T.lsAt>3500&&T.st.m!=='standby')renderLine();},1000);
-function csv(){const P=pairs();return ['종류,시각,색_종류,색상각,채도,묶인신호,내신호시차(ms)'].concat(T.ev.map(e=>{
+function csv(){const P=pairs();return ['종류,시각,색_종류,색상각,채도,묶인신호,내신호시차(ms),램프신호최대,주변상승,자리흩어짐'].concat(T.ev.map(e=>{
   const g=isSrc(e)?P.ge.get(e):P.pv.get(e),v=isSrc(e)?(g&&P.pg.get(g)):null,other=isSrc(e)?(g&&(e.k==='lamp'?g.tn:g.l)):null;
   const c=e.k==='lamp'&&e.col?[e.col.name,e.col.h,e.col.s]:(e.k==='tone'?[e.cl,'','']:['','','']);
   const dv=isSrc(e)?(v?Math.round(v.t-g.t):''):(g?Math.round(e.t-g.t):'');
-  return [e.k,new Date(e.t).toISOString(),...c,other?other.k:(isSrc(e)?'없음':''),dv].join(',');})).join('\n');}
+  return [e.k,new Date(e.t).toISOString(),...c,other?other.k:(isSrc(e)?'없음':''),dv,e.k==='lamp'?(e.pk!=null?e.pk:''):'',e.k==='lamp'?(e.rr!=null?e.rr:''):'',e.k==='lamp'?(e.sp!=null?e.sp:''):''].join(',');})).join('\n');}
 
 /* ---------- 내 목소리: 소리가 시작되는 순간을 센다 ---------- */
 async function micOn(auto){

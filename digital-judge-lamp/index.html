@@ -93,7 +93,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.1.0';
+const VER=qs.get('fakever')||'2.1.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -495,7 +495,7 @@ function setROI(cxp,cyp,scale){
   const w=Math.max(8,Math.round(Math.min(W,H)*0.034*P.roiScale)),h=Math.max(6,Math.round(w*0.62));
   P.roi={x:Math.round(Math.min(W-w,Math.max(0,cxp-w/2))),y:Math.round(Math.min(H-h,Math.max(0,cyp-h/2))),w,h};
   P.trk=null;P.bg=null;P.weak=null;P.devAbs=[];P.lampMed=0;P.sigma=3;P.edges=[];P.ring=[];P.wasOn=false;P.warm=null;P.trkBad=0;
-  P.epos=[];P.sg=null;P.sig=null;P.sigA=[];P.relocks=0;P.relockT=[];P.rej=0;buildTemplate();aimUI();
+  P.epos=[];P.sg=null;P.sig=null;P.sigA=[];P.pendRL=null;P.relocks=0;P.relockT=[];P.rej=0;buildTemplate();aimUI();
   const r=P.roi;P.anchor={x:r.x+r.w/2,y:r.y+r.h/2};lsS('dj_lroi',JSON.stringify({fx:(r.x+r.w/2)/W,fy:(r.y+r.h/2)/H,sc:P.roiScale,z:zoomNow()}));P.savedRoi=jparse(lsG('dj_lroi'),null);
   sendHello();
 }
@@ -591,9 +591,9 @@ function onFrame(t){
   if(P.edges.length>=3&&t-P.lastFlash>3){
     const st=regularStart(P.edges);
     if(st>=0){P.lastFlash=P.edges[st];P.weak=null;
-      const why=gateBlink(P.edges,st,r);
-      if(why){P.rej++;fire(P.edges[st],'rej',P.edges.length-st,null,{why});}
-      else{const g_=P.edges.slice(st),iv=median(g_.slice(1).map((v,i)=>v-g_[i]));const col=colorOf(g_[0]);sigAdd(col,iv);fire(P.edges[st],'blink',g_.length,col,{iv:+iv.toFixed(2)});}}
+      const gm=gateBlink(P.edges,st,r),ex={rr:gm.rr,sp:gm.sp,pk:gm.pk};
+      if(gm.why){P.rej++;ex.why=gm.why;fire(P.edges[st],'rej',P.edges.length-st,null,ex);}
+      else{const g_=P.edges.slice(st),iv=median(g_.slice(1).map((v,i)=>v-g_[i]));const col=colorOf(g_[0]);sigAdd(col,iv);ex.iv=+iv.toFixed(2);fire(P.edges[st],'blink',g_.length,col,ex);}}
   }
   if(P.edges.length>=2&&t-P.lastFlash>3&&(!P.weak||P.weak.t!==P.edges[0]))P.weak={t:P.edges[0],n:P.edges.length};
   if(P.weak&&t-P.weak.t>2.0){const w=P.weak;P.weak=null;if(t-P.lastFlash>3)fire(w.t,'weak',w.n)}
@@ -609,22 +609,23 @@ function sigAdd(col,iv){
   P.sig={n:P.sigA.length,h,s:median(P.sigA.map(a=>a.s)),iv:median(P.sigA.map(a=>a.iv).filter(v=>v>0))};
 }
 function gateBlink(E,st,r){
-  const g=E.slice(st),t0=g[0],t1=g[g.length-1];
+  const m={why:null,rr:0,sp:0,pk:0},g=E.slice(st),t0=g[0],t1=g[g.length-1];
   const iv=median(g.slice(1).map((v,i)=>v-g[i])),col=colorOf(t0);
   // 1) 램프 둘레까지 함께 밝아지면 햇빛·구름·노출 변화 (램프만 밝아지는 게 아님)
-  let rr=0;for(const p of P.rrs)if(p.t>=t0-0.15&&p.t<=t1+0.15)rr=Math.max(rr,p.rr);
-  if(rr>8)return `주변 전체가 같이 밝아짐(+${Math.round(rr)})`;
+  let rr=0;for(const p of P.rrs)if(p.t>=t0-0.15&&p.t<=t1+0.15)rr=Math.max(rr,p.rr);m.rr=Math.round(rr);
+  for(const p of P.ring)if(p.t>=t0-0.15&&p.t<=t1+0.15)m.pk=Math.max(m.pk,Math.round(p.dev));
+  if(rr>8){m.why=`주변 전체가 같이 밝아짐(+${Math.round(rr)})`;return m;}
   // 2) 밝아진 자리가 켜질 때마다 같은 곳이어야 한다 (램프는 한자리, 반짝이는 반사는 떠돈다)
   const ps=P.epos.filter(e=>e.t>=t0-1e-3);
   if(ps.length>=3){const mx=median(ps.map(e=>e.x)),my=median(ps.map(e=>e.y));let sp=0;for(const e of ps)sp=Math.max(sp,Math.hypot((e.x-mx)*r.w,(e.y-my)*r.h)/r.w);
-    if(sp>0.45)return `밝아진 자리가 흩어짐(${sp.toFixed(2)})`;}
+    m.sp=+sp.toFixed(2);if(sp>0.45){m.why=`밝아진 자리가 흩어짐(${sp.toFixed(2)})`;return m;}}
   // 3) 이미 확인된 램프의 색·리듬과 다르면 제외 (처음 몇 번은 서명을 배우는 중이라 통과)
   const sg=P.sig;
   if(sg&&sg.n>=3){
-    if(sg.h!=null&&sg.s>=0.3&&col){if(col.s<0.15)return '흰빛 — 반사광 의심';if(col.s>=0.3&&hueDiff(col.h,sg.h)>55)return `색이 다름(${col.name} ↔ ${hueName(sg.h,sg.s)})`;}
-    if(iv>0&&sg.iv>0){const q=iv/sg.iv;if(q<0.55||q>1.8)return `깜박임 간격이 다름(${iv.toFixed(2)}초 ↔ ${sg.iv.toFixed(2)}초)`;}
+    if(sg.h!=null&&sg.s>=0.3&&col){if(col.s<0.15){m.why='흰빛 — 반사광 의심';return m;}if(col.s>=0.3&&hueDiff(col.h,sg.h)>55){m.why=`색이 다름(${col.name} ↔ ${hueName(sg.h,sg.s)})`;return m;}}
+    if(iv>0&&sg.iv>0){const q=iv/sg.iv;if(q<0.55||q>1.8){m.why=`깜박임 간격이 다름(${iv.toFixed(2)}초 ↔ ${sg.iv.toFixed(2)}초)`;return m;}}
   }
-  return null;
+  return m;
 }
 /* ---------- 자동 재잠금: 램프 상자 둘레 넓은 범위에서 점멸 패턴을 찾아 상자를 그 자리로 옮긴다 ---------- */
 const SGC=document.createElement('canvas'),sgx=SGC.getContext('2d',{willReadFrequently:true});
@@ -669,25 +670,39 @@ function relockCheck(S,t,r){
   if(g.some(e=>Math.hypot(e.x-mx,e.y-my)>rho))return;                     // 켜질 때마다 같은 자리여야 한다
   const rc={x:r.x+r.w/2,y:r.y+r.h/2},dist=Math.hypot(mx-rc.x,my-rc.y);
   if(dist<Math.max(r.w*0.7,8))return;                                     // 이미 상자 안 — 평소 감지가 처리
-  const iv=median(g.slice(1).map((e,i)=>e.t-g[i].t)),hs=g.filter(e=>e.s>=0.25);
+  const iv=median(g.slice(1).map((e,i)=>e.t-g[i].t));
   let x=0,y=0,ss=0;for(const e of g){x+=Math.cos(e.h*Math.PI/180)*e.s;y+=Math.sin(e.h*Math.PI/180)*e.s;ss+=e.s}
   let h=Math.atan2(y,x)*180/Math.PI;if(h<0)h+=360;const sat=ss/g.length;
   const reject=m=>{S.lastFire=t;log('상자 밖 점멸 무시: '+m);};
-  if(sat<0.25){reject('색이 거의 없음(흰빛) · 위치 '+Math.round(mx)+','+Math.round(my));return;}
-  const sg=P.sig;
+  const sg=P.sig,whiteLamp=sg&&sg.n>=3&&sg.s<0.25;                      // 이 카메라에서 실제 램프가 흰색으로 찍히면(현장에서 확인됨) 흰빛도 인정
   if(sg&&sg.n>=3){
-    if(sg.h!=null&&hueDiff(h,sg.h)>45){reject(`색이 다름(${hueName(h,sat)})`);return;}
+    if(!whiteLamp&&sg.h!=null&&hueDiff(h,sg.h)>45){reject(`색이 다름(${hueName(h,sat)})`);return;}
     if(sg.iv>0){const q=iv/sg.iv;if(q<0.55||q>1.8){reject('깜박임 간격이 다름');return;}}
   }
   const A=P.anchor||rc,lim=1.5*Math.max(r.w*SW,120)/2;
   if(Math.hypot(mx-A.x,my-A.y)>lim){reject('처음 지정한 자리에서 너무 멂');return;}
   const now=Date.now();P.relockT=P.relockT.filter(v=>now-v<120000);
   if(P.relockT.length>=4){reject('2분에 4번 넘게 옮기게 됨 — 자리가 불안정');return;}
-  if(P.relockT.length&&now-P.relockT[P.relockT.length-1]<6000){return;}
-  // 통과: 상자를 그 자리로 옮기고, 이 점멸도 센다
-  S.lastFire=t;P.relockT.push(now);P.relocks++;
-  const dx=Math.round(mx-rc.x),dy=Math.round(my-rc.y);
-  const W=vid.videoWidth,H=vid.videoHeight;
+  if(P.relockT.length&&now-P.relockT[P.relockT.length-1]<6000)return;
+  const c={mx,my,g,iv,h,sat,t0:g[0].t};
+  S.lastFire=t;
+  if(sat<0.25&&!whiteLamp){
+    // 흰빛이고 램프 서명도 아직 없으면 반사광과 구별이 안 된다 → 뻐꾸기 소리가 곧 같이 울려야(진짜 발시) 옮긴다
+    P.pendRL=Object.assign(c,{at:now});log(`상자 밖 흰빛 점멸(${Math.round(mx)},${Math.round(my)}) — 뻐꾸기가 같이 울리면 램프로 보고 옮깁니다`);return;
+  }
+  doRelock(c);
+}
+function confirmPendRL(wTone){
+  const c=P.pendRL;if(!c)return;const now=Date.now();
+  if(now-c.at>5000){P.pendRL=null;return;}
+  const wl=T0+c.t0*1000;if(wTone-wl<-500||wTone-wl>2000)return;
+  P.pendRL=null;log('뻐꾸기와 함께 울림 → 램프로 확인');doRelock(c);
+}
+function doRelock(c){
+  const r=eff(),W=vid.videoWidth,H=vid.videoHeight;if(!r||!W)return;
+  const {mx,my,g,iv,h,sat}=c,now=Date.now();
+  P.relockT.push(now);P.relocks++;
+  const dx=Math.round(mx-(r.x+r.w/2)),dy=Math.round(my-(r.y+r.h/2));
   P.roi={x:Math.round(Math.min(W-r.w,Math.max(0,mx-r.w/2))),y:Math.round(Math.min(H-r.h,Math.max(0,my-r.h/2))),w:r.w,h:r.h};
   P.trk=null;P.bg=null;P.weak=null;P.edges=[];P.epos=[];P.wasOn=false;P.rrs=[];buildTemplate();
   lsS('dj_lroi',JSON.stringify({fx:(P.roi.x+r.w/2)/W,fy:(P.roi.y+r.h/2)/H,sc:P.roiScale,z:zoomNow()}));P.savedRoi=jparse(lsG('dj_lroi'),null);
@@ -785,7 +800,7 @@ function audOn(rms,hf,lf,pcm,ct){
 setInterval(()=>{const t=nowS();
   for(const e of AU.tones){if(e.done||t<e.t+TONE_WAIT)continue;e.done=true;const r=classify(e.t),w=T0+e.t*1000;AU.n++;
     log(`뻐꾸기 ${r.k==='?'?'종류 불명':r.k+'형'} ${r.why||`(A${r.nA}/B${r.nB})`}`);
-    evsend({t:'tone',k:r.k,nA:r.nA,nB:r.nB,pk:r.pk,w,lat:Math.round(nowE()-w),id:Date.now()});}
+    evsend({t:'tone',k:r.k,nA:r.nA,nB:r.nB,pk:r.pk,w,lat:Math.round(nowE()-w),id:Date.now()});if(r.k==='A'||r.k==='B')confirmPendRL(w);}
   while(AU.tones.length&&AU.tones[0].done&&t-AU.tones[0].t>10)AU.tones.shift();},100);
 function segment(t0,t1){
   const R=AU.rate,out=[];
