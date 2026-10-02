@@ -81,6 +81,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
   <div class="row"><select id="mSens"><option value="10">감도 높음</option><option value="14" selected>감도 보통</option><option value="20">감도 낮음</option></select></div>
   <div class="lvl" id="lvlBox"><div id="lvlB"></div></div>
   <div id="lvlT" class="dim">마이크 꺼짐</div>
+  <div id="lastT" class="dim"></div><div id="cntT" class="dim"></div>
   <div class="row" id="strictRow"><select id="mStrict"><option value="1.3">엄격 (닮은 것만)</option><option value="1.6" selected>보통</option><option value="2.2">관대 (놓치지 않게)</option></select></div>
   <div id="patBox"><div class="row"><button id="bReg" class="sub">🎓 내 목소리 등록 (관중 ×5)</button><button id="bRegClr" class="sub sm">등록 지우기</button></div>
     <div id="patT" class="dim"></div></div>
@@ -108,7 +109,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.9.6';
+const VER=qs.get('fakever')||'1.9.7';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -442,11 +443,11 @@ function patFrame(x,off){
   const le=new Float64Array(NMEL);for(let m=0;m<NMEL;m++){let a=0;const f=PT.mel[m];for(let k=0;k<f.length;k++)if(f[k])a+=f[k]*ps[k];le[m]=Math.log(a+1e-9)}
   const mf=new Float32Array(NCEP);for(let c=0;c<NCEP;c=c+1){let a=0;const r=PT.dct[c];for(let m=0;m<NMEL;m++)a+=r[m]*le[m];mf[c]=a}
   // 구호 패턴용: 저음대(100~1500 Hz)·고음대(1500~4500 Hz) 에너지, 스펙트럼 무게중심, 유성음(주기성) 정도
-  const bw=PR/NFFT;let lo=1e-9,hi=1e-9,cs=0,ct=1e-9;
-  for(let k=Math.ceil(100/bw);k<=Math.floor(4500/bw);k++){const f=k*bw;if(f<1500)lo+=ps[k];else hi+=ps[k];if(f>=200&&f<=3500){cs+=f*ps[k];ct+=ps[k]}}
+  const bw=PR/NFFT;let lo=1e-9,hi=1e-9,cs=0,ct=1e-9,vb=1e-9;
+  for(let k=Math.ceil(250/bw);k<=Math.floor(4500/bw);k++){const f=k*bw;if(f<1500)lo+=ps[k];else hi+=ps[k];if(f<=3400)vb+=ps[k];if(f>=250&&f<=3500){cs+=f*ps[k];ct+=ps[k]}}   // 차 소음(250 Hz 아래 웅웅)은 뺀 말소리 대역만 본다
   let vf=0;{let r0=1e-9;for(let i=0;i<PN-320;i++)r0+=x[off+i]*x[off+i];
     for(let lag=45;lag<=320;lag++){let a=0,b=1e-9;for(let i=0;i<PN-320;i++){a+=x[off+i]*x[off+i+lag];b+=x[off+i+lag]*x[off+i+lag]}const r=a/Math.sqrt(r0*b);if(r>vf)vf=r}}
-  return{mf,e:10*Math.log10(s/PN+1e-10),el:10*Math.log10(lo),eh:10*Math.log10(hi),cen:cs/ct,vf};
+  return{mf,e:10*Math.log10(vb/PN/PN+1e-10),el:10*Math.log10(lo),eh:10*Math.log10(hi),cen:cs/ct,vf};
 }
 function patFeat(F){   // F: MFCC 프레임들 → (계수+변화량) 를 발화 단위로 평균 0·분산 1 정규화
   const n=F.length,D=NCEP*2,M=[];
@@ -485,17 +486,17 @@ function patStep(fr){
   PS.fr.push(fr);const idx=PS.idx++;
   PS.eh.push(fr.e);if(PS.eh.length>800)PS.eh.shift();
   if(idx%25===0&&PS.eh.length>=50){const a=PS.eh.slice().sort((p,q)=>p-q);PS.floor=a[Math.floor(a.length*0.25)];}
-  const on=PS.floor+PS.sens,off=on-4,e=fr.e;
+  const mg=Math.max(5,PS.sens*0.5),on=PS.floor+mg,off=on-3,e=fr.e;   // 블루투스 마이크는 소리를 눌러서 말소리가 바닥보다 10 dB 정도만 큼 → 문턱을 낮게(소음은 뒤쪽 검사가 거른다)
   if(!PS.inSeg){
     if(e>=on&&PS.eh.length>=100){PS.loud++;if(PS.loud>=3){PS.inSeg=true;PS.on=idx-2;PS.last=idx;PS.quiet=0;}}else PS.loud=0;
     if(!PS.inSeg&&PS.fr.length>260){PS.fr.shift();PS.base++;}
   }else{
-    if(e>=off){PS.last=idx;PS.quiet=0}else{PS.quiet++;if(PS.quiet>=18){PS.inSeg=false;PS.loud=0;patSegment(PS.on,PS.last);}}
-    if(PS.inSeg&&idx-PS.on>170){PS.inSeg=false;PS.loud=0;}   // 1.7초 넘게 계속되면 말이 아니라 소음으로 보고 버림
+    if(e>=off){PS.last=idx;PS.quiet=0}else{PS.quiet++;if(PS.quiet>=26){PS.inSeg=false;PS.loud=0;patSegment(PS.on,PS.last);}}
+    if(PS.inSeg&&idx-PS.on>170){PS.inSeg=false;PS.loud=0;if(PT.onSkip)PT.onSkip(9);}   // 1.7초 넘게 계속되면 말이 아니라 소음으로 보고 버림
   }
 }
 function patSegment(on,last){
-  const dur=(last-on+1)*0.01;if(dur<0.18||dur>1.6)return;
+  const dur=(last-on+1)*0.01;if(dur<0.1||dur>1.6){if(PT.onSkip)PT.onSkip(dur);return;}
   const a=Math.max(PS.base,on-3),b=Math.min(PS.idx-1,last+2);if(b-a<10)return;
   const F=[];for(let i=a;i<=b;i++){const f=PS.fr[i-PS.base];if(!f)return;F.push(f.mf)}
   const onWall=PS.wall-(PS.recv-PS.fr[on-PS.base].es)/PR*1000-PN/PR*1000/2;
@@ -519,7 +520,7 @@ function shoutScore(fr,on,last){
   // 모음 이동: 소리 앞부분과 뒷부분의 무게중심 비 (아→우 이면 뒷부분이 낮아 1보다 한참 작음)
   const lo=L.map((f,i)=>f.el>mx-10?i:-1).filter(i=>i>=0),k1=lo.slice(0,Math.max(1,Math.floor(lo.length*0.4))),k2=lo.slice(Math.floor(lo.length*0.6));
   const mc=ix=>ix.length?ix.reduce((a,i)=>a+L[i].cen,0)/ix.length:1,glide=mc(k2)/mc(k1);
-  const okDur=dur>=0.28&&dur<=1.4,two=nn===2;
+  const okDur=dur>=0.24&&dur<=1.4,two=nn===2;
   return{ok:okDur&&voiced>=0.5&&two,dur,voiced,nn,drop,glide,nasal,why:!okDur?'길이':(voiced<0.5?'소음(유성음 아님)':(!two?'마디 '+nn+'개':''))};
 }
 /*PAT-END*/
@@ -574,6 +575,8 @@ function srOn(auto){
 }
 function srOff(){SR.want=false;try{SR.rec&&SR.rec.stop()}catch(e){}SR.on=false;setT('lvlT','마이크 꺼짐','dim');}
 
+const CNT={seg:0,ok:0,short:0,long:0};
+function cntUI(){const k=Object.keys(CNT).filter(x=>!['seg','ok','short','long'].includes(x)).map(x=>x+' '+CNT[x]).join(' · ');setT('cntT',`소리 조각 ${CNT.seg+CNT.short+CNT.long}개 · 통과 ${CNT.ok} · 너무 짧음 ${CNT.short} · 너무 김 ${CNT.long}${k?' · '+k:''}`,'dim');}
 function patAttach(ctx,src){
   patReset();PS.sens=+$('mSens').value||14;PT.hit=patOnSeg;
   const sp=ctx.createScriptProcessor(2048,1,1),r=ctx.sampleRate/PR;let acc=0,n=0,ph=0;
@@ -581,7 +584,7 @@ function patAttach(ctx,src){
     for(let i=0;i<x.length;i++){acc+=x[i];n++;ph+=1;if(ph>=r){out.push(acc/n);acc=0;n=0;ph-=r}}
     PS.sens=+$('mSens').value||14;patFeed(Float32Array.from(out),Date.now());};
   const mute=ctx.createGain();mute.gain.value=0;src.connect(sp);sp.connect(mute);mute.connect(ctx.destination);T.mic.sp=sp;
-  PT.onSeg=patOnSeg;
+  PT.onSeg=patOnSeg;PT.onSkip=d=>{if(d>=9)CNT.long++;else CNT.short++;cntUI();};
 }
 function patOnSeg(F,info){
   if(PT.reg){
@@ -594,7 +597,8 @@ function patOnSeg(F,info){
     const r=shoutScore(info.fr,info.on,info.last),dm=0.55*PT.strict,ok=r.ok&&r.drop<=dm;
     const why=r.ok?(r.drop<=dm?'':'모음 이동 약함'):r.why;
     if(r.dur>=0.2&&(r.voiced>=0.4||r.ok))log(`소리 조각 ${r.dur.toFixed(2)}초 · 마디 ${r.nn} · 모음이동 ${r.drop.toFixed(2)} (기준 ${dm.toFixed(2)}) → ${ok?'✔ 관중':'✘ 제외'+(why?' ('+why+')':'')}`);
-    setT('lvlT',`방금 소리: ${r.dur.toFixed(2)}초 · 마디 ${r.nn} · 모음이동 ${r.drop.toFixed(2)} ${ok?'✔ 관중':'✘ 제외'}`,ok?'ok':'dim');
+    CNT.seg++;if(ok)CNT.ok++;else if(r.why)CNT[r.why]=(CNT[r.why]||0)+1;else CNT['모음 이동 약함']=(CNT['모음 이동 약함']||0)+1;
+    setT('lastT',`방금 소리: ${r.dur.toFixed(2)}초 · 마디 ${r.nn} · 모음이동 ${r.drop.toFixed(2)} ${ok?'✔ 관중':'✘ 제외'+(why?' ('+why+')':'')}`,ok?'ok':'dim');cntUI();
     if(ok)addEv('voice',info.onWall,{src:'shout',d:+r.drop.toFixed(2),n:r.nn});
     return;}
   if(PT.thr==null)return;
