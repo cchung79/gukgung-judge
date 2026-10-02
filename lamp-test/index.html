@@ -81,7 +81,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
   <div class="row"><select id="mSens"><option value="10">감도 높음</option><option value="14" selected>감도 보통</option><option value="20">감도 낮음</option></select></div>
   <div class="lvl" id="lvlBox"><div id="lvlB"></div></div>
   <div id="lvlT" class="dim">마이크 꺼짐</div>
-  <div id="lastT" class="dim"></div><div id="cntT" class="dim"></div>
+  <div id="lastT" class="dim"></div><div id="cntT" class="dim"></div><div id="diagT" class="dim" style="font-size:12px"></div>
   <div class="row" id="strictRow"><select id="mStrict"><option value="1.3">엄격 (닮은 것만)</option><option value="1.6" selected>보통</option><option value="2.2">관대 (놓치지 않게)</option></select></div>
   <div id="patBox"><div class="row"><button id="bReg" class="sub">🎓 내 목소리 등록 (관중 ×5)</button><button id="bRegClr" class="sub sm">등록 지우기</button></div>
     <div id="patT" class="dim"></div></div>
@@ -109,7 +109,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.9.7';
+const VER=qs.get('fakever')||'1.9.8';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -577,15 +577,23 @@ function srOff(){SR.want=false;try{SR.rec&&SR.rec.stop()}catch(e){}SR.on=false;s
 
 const CNT={seg:0,ok:0,short:0,long:0};
 function cntUI(){const k=Object.keys(CNT).filter(x=>!['seg','ok','short','long'].includes(x)).map(x=>x+' '+CNT[x]).join(' · ');setT('cntT',`소리 조각 ${CNT.seg+CNT.short+CNT.long}개 · 통과 ${CNT.ok} · 너무 짧음 ${CNT.short} · 너무 김 ${CNT.long}${k?' · '+k:''}`,'dim');}
+const PD={cb:0,smp:0,t:0,emax:-200,elast:-200};
 function patAttach(ctx,src){
-  patReset();PS.sens=+$('mSens').value||14;PT.hit=patOnSeg;
-  const sp=ctx.createScriptProcessor(2048,1,1),r=ctx.sampleRate/PR;let acc=0,n=0,ph=0;
+  patReset();PS.sens=+$('mSens').value||14;PT.hit=patOnSeg;PD.cb=0;PD.smp=0;PD.t=performance.now();PD.emax=-200;
+  const sp=ctx.createScriptProcessor(2048,1,1),step=ctx.sampleRate/PR;let acc=0,n=0,ph=0,pos=0,last=0;
   sp.onaudioprocess=e=>{const x=e.inputBuffer.getChannelData(0),out=[];
-    for(let i=0;i<x.length;i++){acc+=x[i];n++;ph+=1;if(ph>=r){out.push(acc/n);acc=0;n=0;ph-=r}}
+    if(step>=1){for(let i=0;i<x.length;i++){acc+=x[i];n++;ph+=1;if(ph>=step){out.push(acc/n);acc=0;n=0;ph-=step}}}
+    else{let t=pos;while(t<x.length){const i=Math.floor(t),f=t-i,a=x[i],b=i+1<x.length?x[i+1]:x[i];out.push(a+(b-a)*f);t+=step}pos=t-x.length;last=x[x.length-1];}   // 8 kHz 같은 낮은 표본율(블루투스 통화 모드)은 늘려서 16 kHz 로
+    PD.cb++;PD.smp+=out.length;
     PS.sens=+$('mSens').value||14;patFeed(Float32Array.from(out),Date.now());};
   const mute=ctx.createGain();mute.gain.value=0;src.connect(sp);sp.connect(mute);mute.connect(ctx.destination);T.mic.sp=sp;
   PT.onSeg=patOnSeg;PT.onSkip=d=>{if(d>=9)CNT.long++;else CNT.short++;cntUI();};
 }
+setInterval(()=>{if(!(T.mic.on&&(T.mm==='shout'||T.mm==='pat'))){setT('diagT','','dim');return;}
+  const dt=(performance.now()-PD.t)/1000;if(dt<1)return;
+  const fr=PS.fr[PS.fr.length-1],e=fr?fr.e:-200,mx=Math.max(...PS.eh.slice(-300),-200);
+  setT('diagT',`입력 진단: 표본율 ${T.mic.ctx?T.mic.ctx.sampleRate:'?'} Hz · 콜백 ${Math.round(PD.cb/dt)}/초 · 16k 표본 ${Math.round(PD.smp/dt)}/초(정상 16000) · 현재 ${e.toFixed(0)} dB · 바닥 ${PS.floor.toFixed(0)} dB · 최근 3초 최대 ${mx.toFixed(0)} dB (문턱 바닥+${Math.max(5,PS.sens*0.5).toFixed(0)})`,'dim');
+  PD.cb=0;PD.smp=0;PD.t=performance.now();},2000);
 function patOnSeg(F,info){
   if(PT.reg){
     PT.tmp.push(F.map(f=>Array.from(f,v=>Math.round(v*100)/100)));
