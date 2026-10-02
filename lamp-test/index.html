@@ -67,6 +67,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
   <div id="lpLine" class="dim"></div>
   <button id="bRun" class="go" disabled style="min-height:80px"><span id="bRunT">▶ 시험 시작</span><br><span id="bRunS" class="bsub">샤오미를 깨워 램프·뻐꾸기를 셉니다</span></button>
   <div class="row"><button id="bSleep" class="sub" disabled>⏸ 샤오미 절전</button><button id="bWake" class="sub" disabled>💡 샤오미 깨우기</button></div>
+  <button id="bRelink" class="sub">🔄 연결 다시 시도</button>
   <div class="dim">램프 지정·줌은 샤오미 화면에서 먼저 하세요. 끝나면 샤오미의 「설정 완료 (절전으로)」 또는 여기 ⏸ 절전. 사대에 선 뒤 ▶ 시험 시작.</div>
 </div>
 
@@ -110,7 +111,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.9.9';
+const VER=qs.get('fakever')||'2.0.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -201,8 +202,8 @@ function initT(){
   $('tStart').onclick=startT;
   const ev=jparse(lsG('dj_tev'),[]);if(Array.isArray(ev))T.ev=ev;
   $('bRun').onclick=()=>T.running?stopRun():startRun();
-  $('bSleep').onclick=()=>{T.running=false;lsS('dj_trun','0');lpSend({t:'mode',m:'standby'});render();};
-  $('bWake').onclick=()=>{lpSend({t:'mode',m:'active'});};
+  $('bSleep').onclick=()=>{T.running=false;lsS('dj_trun','0');wantMode('standby');sendMode('standby');render();};
+  $('bWake').onclick=()=>{wantMode('active');sendMode('active');};
   $('bTap').onclick=()=>addEv('manual');
   $('bMic').onclick=()=>{if(listening())listenOff();else{listenOn(false);}};
   T.mm=lsG('dj_tmm3')||'shout';if(T.mm==='word'&&!SRC)T.mm='pat';$('mMode').value=T.mm;applyMode();
@@ -217,32 +218,79 @@ function initT(){
   render();
   if(!qs.get('setup')&&/^\d{4}$/.test($('tCode').value))startT();   // 저장된 코드가 있으면 열자마자 자동 시작 (코드를 바꾸려면 ?setup=1)
 }
+/* ---------- 연결 계층: 하트비트 · 먹통 감지 · 자동 복구 · 명령 재전송 ---------- */
+const LK={rx:0,gen:0,peerAt:0,discAt:0,discN:0,drops:0,lastDrop:'',lastDropAt:0,idTries:0,idWait:0,hbI:0,rtt:null,want:null,wantUntil:0,cmdN:0,lastCmd:0,seen:new Set()};
+const STALE=6000;
+function wantMode(m,ms){LK.want=m;LK.wantUntil=Date.now()+(ms||120000);LK.cmdN=0;LK.lastCmd=0;}
+function sendMode(m){const ok=lpSend({t:'mode',m});if(!ok)toast('샤오미와 연결 안 됨 — 연결되면 자동으로 보냅니다');return ok;}
+function reconcile(m){            // 샤오미가 실제로 그 모드가 될 때까지(최대 8번) 다시 보낸다
+  const now=Date.now();let w=null;
+  if(T.running)w='count';else if(LK.want&&now<LK.wantUntil)w=LK.want;
+  if(!w||m===w||now-LK.lastCmd<2500||LK.cmdN>=8)return;
+  LK.lastCmd=now;LK.cmdN++;lpSend({t:'mode',m:w});log('샤오미 모드 '+m+' → '+w+' 다시 보냄 ('+LK.cmdN+')');
+}
+function ctlPeer(why){
+  LK.gen++;const g=LK.gen;
+  const old=T.peer;T.peer=null;try{if(old)old.destroy()}catch(e){}
+  LK.peerAt=Date.now();LK.discN=0;LK.discAt=0;
+  const code=CODE();log('연결 새로 준비'+(why?' ('+why+')':''));
+  setT('mSt','시그널링 서버 연결 중…','dim');setT('lpSt','연결 중…','huge dim');
+  const peer=T.peer=mkPeer(PREFIX+code);
+  peer.on('open',()=>{if(g!==LK.gen)return;LK.idTries=0;LK.discN=0;if(!lpUp()){setT('mSt','대기 중 — 샤오미 관중 폰 페이지에서 코드 '+code+' 입력','warn');}render();log('시험 컨트롤 대기 '+code);});
+  peer.on('connection',c=>{
+    if(g!==LK.gen)return;
+    if(!(((c.peer||'').indexOf('-l-')>=0)||(c.metadata&&c.metadata.role==='lamp'))){log('램프 폰이 아닌 접속은 무시: '+c.peer);try{c.close()}catch(e){}return;}
+    const prev=T.lc;T.lc=c;if(prev&&prev!==c){try{prev.close()}catch(e){}}
+    log('샤오미 접속 시도');
+    c.on('open',()=>{if(T.lc!==c)return;LK.rx=Date.now();onOpen(c);
+      try{const pc=c.peerConnection;pc.addEventListener('iceconnectionstatechange',()=>{const st=pc.iceConnectionState;log('ICE '+st);if(st==='failed'&&T.lc===c)dropLc('ICE 실패');});}catch(e){}});
+    c.on('data',d=>{LK.rx=Date.now();onData(c,d);});
+    c.on('close',()=>{if(T.lc===c){T.lc=null;T.st=null;LK.drops++;LK.lastDrop='채널 닫힘';LK.lastDropAt=Date.now();setT('mSt','연결 끊김 — 샤오미 재접속 대기','bad');render();log('연결 끊김');}});
+    c.on('error',e=>log('conn 오류 '+e));
+  });
+  peer.on('disconnected',()=>{if(g!==LK.gen)return;LK.discAt=0;log('시그널링 끊김 → 재연결 시도');});
+  peer.on('error',e=>{
+    if(g!==LK.gen)return;log('peer 오류 '+e.type);
+    if(e.type==='unavailable-id'){try{peer.destroy()}catch(x){}T.peer=null;LK.idTries++;LK.idWait=Date.now()+Math.min(2500*LK.idTries,10000);
+      setT('mSt',LK.idTries<=8?'이전 접속이 정리되길 기다리는 중… ('+LK.idTries+') · 같은 코드의 다른 컨트롤 화면이 열려 있으면 닫으세요':'이 코드를 다른 화면이 쓰는 중일 수 있습니다 — 다른 컨트롤 화면을 닫으세요 (계속 시도 중)',LK.idTries<=8?'warn':'bad');render();}
+    else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed')setT('mSt','시그널링 서버에 못 닿음 — 인터넷 확인 (자동으로 계속 시도)','bad');
+    else setT('mSt','오류: '+e.type+' (자동으로 다시 시도)','bad');
+  });
+}
+function dropLc(why){
+  const c=T.lc;T.lc=null;T.st=null;LK.drops++;LK.lastDrop=why;LK.lastDropAt=Date.now();
+  log('연결 끊김: '+why);setT('mSt','연결 끊김 ('+why+') — 샤오미가 다시 접속하길 기다립니다','bad');try{if(c)c.close()}catch(e){}render();
+}
+function superviseCtl(){
+  const now=Date.now(),pr=T.peer;if(!T.started)return;
+  if(!pr||pr.destroyed){if(now>=(LK.idWait||0)&&now-LK.peerAt>2500){LK.idWait=0;ctlPeer(pr?'peer 소멸':'재시작');}return;}
+  if(pr.disconnected){if(now-LK.discAt>3000){LK.discAt=now;if(++LK.discN>=5){ctlPeer('시그널링 복구 실패');return;}try{pr.reconnect()}catch(e){}}return;}
+  if(!pr.open){if(now-LK.peerAt>15000)ctlPeer('시그널링 15초 응답 없음');return;}
+  if(lpUp()){
+    const age=now-LK.rx;
+    if(age>STALE){dropLc('샤오미 응답 '+Math.round(age/1000)+'초 없음');return;}
+  }
+}
+function linkInfo(){
+  const now=Date.now(),pr=T.peer;
+  const sig=!pr?'서버 연결 중':(pr.destroyed?'서버 끊김':(pr.disconnected?'서버 끊김(재연결 중)':(pr.open?'서버 ✓':'서버 연결 중')));
+  const drop=LK.drops?` · 끊김 ${LK.drops}회(마지막: ${LK.lastDrop} ${Math.round((now-LK.lastDropAt)/1000)}초 전)`:'';
+  return sig+drop;
+}
 function startT(){
   const code=CODE();if(!/^\d{4}$/.test(code)){setT('mSt','코드는 숫자 4자리','bad');$('startBox').hidden=false;return;}
   lsS('dj_tcode',code);$('verT').textContent='v'+VER+' · 아이폰 · 코드 '+code;$('tStart').disabled=true;$('tCode').disabled=true;$('startBox').hidden=true;
+  T.started=true;
   checkLatest((x,k)=>setT('mSt',x,k));setInterval(()=>{if(!T.running)checkLatest((x,k)=>setT('mSt',x,k))},600000);
   keepAwake((t,c)=>setT('mWake',t,c));
-  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){try{if(T.peer&&T.peer.disconnected)T.peer.reconnect()}catch(e){}lpSend({t:'sync'});}});
-  setT('mSt','시그널링 서버 연결 중…','dim');setT('lpSt','연결 중…','huge dim');
-  const peer=T.peer=mkPeer(PREFIX+code);
-  peer.on('open',()=>{T.startTries=0;setT('mSt','대기 중 — 샤오미 관중 폰 페이지에서 코드 '+code+' 입력','warn');setT('lpSt','샤오미 연결 대기 (코드 '+code+')','huge warn');log('시험 컨트롤 대기 '+code);});
-  peer.on('connection',c=>{
-    if(!(((c.peer||'').indexOf('-l-')>=0)||(c.metadata&&c.metadata.role==='lamp'))){log('램프 폰이 아닌 접속은 무시: '+c.peer);try{c.close()}catch(e){}return;}
-    if(T.lc){try{T.lc.close()}catch(e){}}
-    T.lc=c;log('샤오미 접속 시도');
-    c.on('open',()=>onOpen(c));c.on('data',d=>onData(c,d));
-    c.on('close',()=>{if(T.lc===c){T.st=null;setT('mSt','연결 끊김 — 샤오미 재접속 대기','bad');render();log('연결 끊김');}});
-    c.on('error',e=>log('conn 오류 '+e));
-  });
-  peer.on('disconnected',()=>{log('시그널링 끊김 → 재연결');try{peer.reconnect()}catch(e){}});
-  peer.on('error',e=>{
-    log('peer 오류 '+e.type);
-    if(e.type==='unavailable-id'){try{peer.destroy()}catch(x){}
-      if(++T.startTries<=8){setT('mSt','이전 접속이 정리되길 기다리는 중… ('+T.startTries+'/8) · 같은 코드의 다른 컨트롤 화면이 열려 있으면 닫으세요','warn');setTimeout(()=>{$('tStart').disabled=false;$('tCode').disabled=false;startT();},2500);}
-      else{setT('mSt','이 코드는 이미 사용 중 — 다른 컨트롤 화면을 닫거나 코드를 바꾸세요','bad');$('tStart').disabled=false;$('tCode').disabled=false;$('startBox').hidden=false;}}
-    else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed')setT('mSt','시그널링 서버에 못 닿음 — 인터넷 확인','bad');
-    else setT('mSt','오류: '+e.type,'bad');
-  });
+  const poke=()=>{LK.discAt=0;LK.idWait=0;superviseCtl();};
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){poke();lpSend({t:'sync'});}});
+  window.addEventListener('online',()=>{log('네트워크 복구');poke();});window.addEventListener('offline',()=>log('네트워크 끊김'));window.addEventListener('pageshow',poke);
+  $('bRelink').onclick=()=>{LK.idTries=0;LK.idWait=0;ctlPeer('수동 다시 연결');};
+  setInterval(superviseCtl,1000);
+  setInterval(()=>{if(!lpUp())return;LK.hbI++;lpSend({t:'hb',i:LK.hbI,m0:performance.now()});},1500);   // 하트비트: 샤오미가 hbr 로 답하며 현재 모드를 알려 준다
+  setInterval(()=>{if(!lpUp())renderLine();},2000);
+  ctlPeer('시작');
 }
 async function onOpen(c){
   setT('mSt','✅ 연결됨','ok');log('데이터 채널 열림');c.send({t:'ver',v:VER});
@@ -267,7 +315,8 @@ setInterval(()=>{if(lpUp()&&!T.running)runPings(12);},120000);
 /* ---------- 샤오미 → 컨트롤 ---------- */
 function onData(c,d){
   if(!d||!d.t)return;
-  if(d.t==='pong'){const m1=nowE();T.pr.push({rtt:m1-d.m0,off:d.s-(d.m0+m1)/2});}
+  if(d.t==='hbr'){LK.rtt=Math.round(performance.now()-d.m0);T.hbm=d.m;setT('mSt','✅ 연결됨 · 지연 '+LK.rtt+'ms'+(LK.drops?' · 끊김 '+LK.drops+'회(마지막: '+LK.lastDrop+')':''),'ok');reconcile(d.m);}
+  else if(d.t==='pong'){const m1=nowE();T.pr.push({rtt:m1-d.m0,off:d.s-(d.m0+m1)/2});}
   else if(d.t==='hello'){
     T.hello=d;if(T.st&&d.mode)T.st.m=d.mode;
     if(d.cam)setT('mCam',`${d.cam.label} · ${d.cam.w}×${d.cam.h}${d.cam.zoom?' · 줌 '+f1(d.cam.zoom[3])+'배':''}`,'ok');else setT('mCam','꺼짐 (대기)','dim');
@@ -284,23 +333,26 @@ function onData(c,d){
 }
 const sg=x=>(x>=0?'+':'−')+f1(Math.abs(x));
 const BN={};function setBanner(k,msg){if(msg)BN[k]=msg;else delete BN[k];const b=$('banner');b.innerHTML='';Object.keys(BN).forEach(x=>{const e=document.createElement('div');e.className='banner';e.textContent=BN[x];b.appendChild(e);});}
+function dupEv(d){const sid=d.t+(d.k||'')+d.id;if(LK.seen.has(sid))return true;LK.seen.add(sid);if(LK.seen.size>600)LK.seen.clear();return T.ev.some(e=>e.sid===sid);}
 function onLamp(d){
+  if(dupEv(d))return;
   const tc=T.off!=null?d.w-T.off:Date.now()-(d.lat||0);
-  if(d.k==='blink'){if(!T.running){log('램프 점멸 (시험 중 아님 · 세지 않음)');return;}addEv('lamp',tc,{n:d.n,lat:d.lat,col:d.col||null});}
+  if(d.k==='blink'){if(!T.running){log('램프 점멸 (시험 중 아님 · 세지 않음)');return;}addEv('lamp',tc,{n:d.n,lat:d.lat,col:d.col||null,sid:d.t+(d.k||'')+d.id});}
   else log('램프 불규칙 깜박임 '+d.n+'회 (세지 않음)');
 }
 function onTone(d){
+  if(dupEv(d))return;
   const tc=T.off!=null?d.w-T.off:Date.now()-(d.lat||0);
   if(!T.running){log('뻐꾸기 '+d.k+' (시험 중 아님 · 세지 않음)');return;}
   if(d.k!=='A'&&d.k!=='B'){T.tq=(T.tq||0)+1;log(`소리 ${hms(tc)} 종류 불명(A창 ${d.nA}·B창 ${d.nB}) → 뻐꾸기로 안 셈`);render();return;}   // 주파수 패턴이 A·B 형이 아닌 소리는 잡음
-  addEv('tone',tc,{cl:d.k,nA:d.nA,nB:d.nB,lat:d.lat});
+  addEv('tone',tc,{cl:d.k,nA:d.nA,nB:d.nB,lat:d.lat,sid:d.t+(d.k||'')+d.id});
 }
 
 /* ---------- 시험 시작·종료 ---------- */
 function startRun(){
-  T.running=true;T.tq=0;lsS('dj_trun','1');T.since=Date.now();lpSend({t:'mode',m:'count'});log('시험 시작');render();
+  T.running=true;T.tq=0;lsS('dj_trun','1');T.since=Date.now();LK.cmdN=0;lpSend({t:'mode',m:'count'});log('시험 시작');render();
 }
-function stopRun(){T.running=false;lsS('dj_trun','0');lpSend({t:'mode',m:'active'});log('시험 종료');render();}
+function stopRun(){T.running=false;lsS('dj_trun','0');wantMode('active',30000);lpSend({t:'mode',m:'active'});log('시험 종료');render();}
 
 /* ---------- 기록 · 짝짓기 ---------- */
 function saveEv(){lsS('dj_tev',JSON.stringify(T.ev.slice(-400)));}
@@ -331,7 +383,7 @@ function pairs(){
 function render(){
   const up=lpUp(),m=T.st?T.st.m:(T.hello?T.hello.mode:null),awake=up&&m&&m!=='standby';
   $('bRun').disabled=false;$('bRun').className=T.running?'stop':'go';$('bRunT').textContent=T.running?'⏹ 시험 종료':'▶ 시험 시작';$('bRunS').textContent=(T.running?'':'')+(up?(T.running?'샤오미가 램프·뻐꾸기를 세는 중':'샤오미를 깨워 램프·뻐꾸기를 셉니다'):(T.running?'샤오미 미연결 — 내 신호만 세는 중 (연결되면 자동으로 같이 셉니다)':'샤오미 없이도 시작됩니다 — 내 신호만 셉니다'));
-  $('bSleep').disabled=!up||m==='standby';$('bWake').disabled=!up||awake;
+  $('bSleep').disabled=up&&m==='standby';$('bWake').disabled=up&&awake;
   renderLine();
   const P=pairs(),nL=P.Ls.length,nT=P.Ts.length,nG=P.G.length,nV=P.Vs.length,nVo=P.Vs.filter(e=>e.k==='voice').length,nMa=nV-nVo;
   $('nL').textContent=nL;$('nT').textContent=nT;$('nV').textContent=nV;$('nVt').textContent=`내 신호 (음성 ${nVo} · 수동 ${nMa})`;
@@ -364,11 +416,11 @@ function render(){
 }
 function renderLine(){
   const up=lpUp(),st=T.st,hm=T.hello&&T.hello.mode;
-  if(!up){setT('lpSt',T.peer&&T.peer.open?'샤오미 연결 대기':(T.peer?'연결 중…':'연결 전'),'huge '+(T.peer?'warn':'dim'));setT('lpLine','','dim');return;}
+  if(!up){setT('lpSt',T.peer&&T.peer.open?'샤오미 연결 대기':(T.peer?'연결 중…':'연결 전'),'huge '+(T.peer?'warn':'dim'));setT('lpLine',T.started?linkInfo()+(T.peer&&T.peer.open?' · 샤오미 관중 폰 화면을 켜 두면 자동으로 접속합니다':''):'','dim');return;}
   if(!st){setT('lpSt',hm==='standby'?'⏸ 연결됨 · 대기 (카메라 꺼짐)':'연결됨 — 상태 수신 대기',hm==='standby'?'huge warn':'huge dim');setT('lpLine','','dim');return;}
   const m=st.m,roi=!!st.roi;
   setT('lpSt',m==='standby'?'⏸ 대기 (카메라 꺼짐)':(!roi?'⚠ 램프 미지정':(m==='count'?'🟢 점멸 세는 중':'▶ 준비 (램프 확인 중)')),'huge '+(m==='standby'?'warn':(!roi?'bad':'ok')));
-  setT('lpLine',m==='standby'?'':(!roi?'샤오미 화면에서 램프를 눌러 지정하세요. ':'')+(st.cam===0?'⚠ 카메라 영상 없음 · ':'')+`램프 ${st.on?'🟡 켜짐':'꺼짐'} · 샤오미 집계 램프 ${st.n}회·뻐꾸기 ${st.nt||0}회 · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''} · ${st.mic===1?'🎤 '+st.mdb+'dB(바닥 '+st.mfl+')':(st.mic===-1?'⛔ 샤오미 마이크 실패(뻐꾸기 못 셈)':'🎤 켜는 중')}`,'dim');
+  setT('lpLine',(LK.rtt!=null?'🔗 '+LK.rtt+'ms'+(LK.drops?' · 끊김 '+LK.drops+'회':'')+' · ':'')+(m==='standby'?'':(!roi?'샤오미 화면에서 램프를 눌러 지정하세요. ':'')+(st.cam===0?'⚠ 카메라 영상 없음 · ':'')+`램프 ${st.on?'🟡 켜짐':'꺼짐'} · 샤오미 집계 램프 ${st.n}회·뻐꾸기 ${st.nt||0}회 · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''} · ${st.mic===1?'🎤 '+st.mdb+'dB(바닥 '+st.mfl+')':(st.mic===-1?'⛔ 샤오미 마이크 실패(뻐꾸기 못 셈)':'🎤 켜는 중')}`),'dim');
 }
 setInterval(()=>{if(lpUp()&&T.st&&nowE()-T.lsAt>3500&&T.st.m!=='standby')renderLine();},1000);
 function csv(){const P=pairs();return ['종류,시각,색_종류,색상각,채도,묶인신호,내신호시차(ms)'].concat(T.ev.map(e=>{

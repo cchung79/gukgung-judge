@@ -75,6 +75,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
     <tr><td>카메라</td><td id="lCam" class="dim">-</td></tr>
     <tr><td>화면 유지</td><td id="lWake" class="dim">-</td></tr>
   </table>
+  <button id="lRelink" class="sub" style="margin-top:8px">🔄 연결 다시 시도 (컨트롤과 끊겼을 때)</button>
 </div>
 
 <details class="card"><summary>카메라 설정 (해상도 · 노출)</summary>
@@ -92,7 +93,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.9.9';
+const VER=qs.get('fakever')||'2.0.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -199,36 +200,91 @@ function initLamp(){
   setModeTxt();blkShow(true);
   if(!qs.get('setup')&&/^\d{4}$/.test($('lCode').value))startLamp();   // 저장된 코드가 있으면 열자마자 자동 연결 (코드를 바꾸려면 주소 뒤에 ?setup=1)
 }
+/* ---------- 연결 계층: 하트비트 · 먹통 감지 · 자동 재연결 · peer 재생성 ---------- */
+const LK={rx:0,fail:0,next:0,tryAt:0,peerAt:0,discAt:0,discN:0,drops:0,gen:0,since:0,lastDrop:'',lastDropAt:0,noCtl:0};
+const STALE=6000;                                   // 이 시간 동안 컨트롤에서 아무 것도 안 오면 먹통으로 보고 다시 연결
+function newPeer(why){
+  LK.gen++;const g=LK.gen;
+  const old=P.peer,oc=P.conn;P.peer=null;P.conn=null;
+  try{if(oc)oc.close()}catch(e){}try{if(old)old.destroy()}catch(e){}
+  LK.peerAt=Date.now();LK.discN=0;LK.fail=0;LK.next=0;LK.noCtl=0;
+  log('연결 새로 준비'+(why?' ('+why+')':''));setT('lSt','시그널링 서버 연결 중…','dim');
+  const peer=P.peer=mkPeer(PREFIX+P.code+'-l-'+Math.random().toString(36).slice(2,7));
+  peer.on('open',()=>{if(g!==LK.gen)return;LK.discN=0;log('시그널링 연결됨');tryConnect();});
+  peer.on('disconnected',()=>{if(g!==LK.gen)return;LK.discAt=0;log('시그널링 끊김 → 재연결 시도');});
+  peer.on('error',e=>{
+    if(g!==LK.gen)return;log('peer 오류 '+e.type);
+    if(e.type==='peer-unavailable'){
+      if(P.conn&&!P.conn.open){try{P.conn.close()}catch(x){}P.conn=null;}
+      if(!LK.noCtl)LK.noCtl=Date.now();LK.next=Date.now()+2500;
+      setT('lSt','컨트롤을 찾는 중… (아이폰에서 컨트롤 화면이 열려 있는지 확인)','warn');
+    }
+    else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed')setT('lSt','시그널링 서버에 못 닿음 — 인터넷 확인 (자동으로 계속 시도)','bad');
+    else if(e.type==='webrtc'||e.type==='negotiation-failed'||e.type==='connection-failed'){if(P.conn&&!P.conn.open){try{P.conn.close()}catch(x){}P.conn=null;LK.fail++;}}
+    else setT('lSt','오류: '+e.type+' (자동으로 다시 시도)','bad');
+  });
+}
+function dropConn(why){
+  const c=P.conn;P.conn=null;LK.drops++;LK.lastDrop=why;LK.lastDropAt=Date.now();LK.next=Date.now()+300;
+  log('연결 끊김: '+why);setT('lSt','연결 끊김 ('+why+') — 다시 연결 중 · 감시는 계속됩니다','bad');
+  try{if(c)c.close()}catch(e){}
+}
+function superviseLink(){
+  const now=Date.now(),pr=P.peer;if(!P.code)return;
+  if(!pr||pr.destroyed){if(now-LK.peerAt>2500)newPeer('peer 소멸');return;}
+  if(pr.disconnected){
+    if(now-LK.discAt>3000){LK.discAt=now;if(++LK.discN>=5){newPeer('시그널링 복구 실패');return;}try{pr.reconnect()}catch(e){}}
+    return;
+  }
+  if(!pr.open){if(now-LK.peerAt>15000)newPeer('시그널링 15초 응답 없음');return;}
+  const c=P.conn;
+  if(c&&c.open){
+    const age=now-LK.rx;
+    if(age>STALE){dropConn('컨트롤 응답 '+Math.round(age/1000)+'초 없음');return;}
+    setT('lSt','✅ 연결됨 · 응답 '+(age/1000).toFixed(1)+'초 전 · 끊김 '+LK.drops+'회','ok');
+    return;
+  }
+  if(c&&now-LK.tryAt<10000)return;                    // 접속 시도 중
+  if(c){try{c.close()}catch(e){}P.conn=null;LK.fail++;}
+  if(LK.noCtl&&now-LK.noCtl>30000){newPeer('컨트롤을 30초째 못 찾음 — 내 주소 새로 만듦');return;}
+  if(LK.fail>=4){newPeer('접속 '+LK.fail+'회 실패');return;}
+  if(now>=LK.next)tryConnect();
+}
 async function startLamp(){
   const code=$('lCode').value.trim();if(!/^\d{4}$/.test(code)){setT('lSt','코드는 숫자 4자리','bad');return;}
   P.code=code;lsS('dj_lcode',code);$('lStart').disabled=true;$('lCode').disabled=true;$('setupBox').hidden=true;
   keepAwake((t,c)=>setT('lWake',t,c));
-  setT('lSt','시그널링 서버 연결 중…','dim');
-  const peer=P.peer=mkPeer(PREFIX+code+'-l-'+Math.random().toString(36).slice(2,7));
-  peer.on('open',()=>tryConnect());
-  peer.on('disconnected',()=>{log('시그널링 끊김 → 재연결');try{peer.reconnect()}catch(e){}});
-  peer.on('error',e=>{
-    log('peer 오류 '+e.type);
-    if(e.type==='peer-unavailable'){setT('lSt','컨트롤을 찾는 중… (아이폰에서 디지털 저지 컨트롤 시작 확인)','warn');clearTimeout(P.retry);P.retry=setTimeout(tryConnect,2000);}
-    else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed')setT('lSt','시그널링 서버에 못 닿음 — 인터넷 확인','bad');
-    else setT('lSt','오류: '+e.type,'bad');
-  });
+  newPeer('시작');
   probeCam();
   checkLatest((x,k)=>setT('lSt',x,k));
-  setInterval(()=>{if(P.peer&&P.peer.open&&!(P.conn&&P.conn.open)&&Date.now()-(P.tryAt||0)>15000)tryConnect();},5000);   // 접속 시도가 멈춰 있으면 다시 시도
+  setInterval(superviseLink,1000);
+  const poke=()=>{LK.discAt=0;LK.next=0;superviseLink();};
+  window.addEventListener('online',()=>{log('네트워크 복구');poke();});window.addEventListener('offline',()=>log('네트워크 끊김'));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')poke();});
+  window.addEventListener('pageshow',poke);
+  $('lRelink').onclick=()=>newPeer('수동 다시 연결');
   setInterval(()=>{if(P.mode!=='count')checkLatest((x,k)=>setT('lSt',x,k))},600000);
 }
 function tryConnect(){
+  const pr=P.peer;if(!pr||!pr.open)return;
   if(P.conn&&P.conn.open)return;
   if(P.conn){try{P.conn.close()}catch(e){}}
-  setT('lSt','컨트롤에 접속 중…','dim');P.tryAt=Date.now();
-  const c=P.conn=P.peer.connect(PREFIX+P.code,{reliable:true,metadata:{role:'lamp'}});
-  c.on('open',async()=>{setT('lSt','✅ 연결됨 — 컨트롤의 명령을 기다립니다','ok');log('연결됨');sendHello();sendBat();
+  LK.tryAt=Date.now();LK.next=LK.tryAt+Math.min(2500+1000*LK.fail,8000);
+  setT('lSt','컨트롤에 접속 중… ('+(LK.fail+1)+'회째)','dim');
+  const c=P.conn=pr.connect(PREFIX+P.code,{reliable:true,metadata:{role:'lamp'}});let was=false;
+  c.on('open',async()=>{if(P.conn!==c)return;was=true;LK.fail=0;LK.noCtl=0;LK.rx=Date.now();LK.since=Date.now();
+    setT('lSt','✅ 연결됨 — 컨트롤의 명령을 기다립니다','ok');log('연결됨');sendHello();sendBat();resendRecent();
+    try{const pc=c.peerConnection;pc.addEventListener('iceconnectionstatechange',()=>{const s=pc.iceConnectionState;log('ICE '+s);if(s==='failed'&&P.conn===c)dropConn('ICE 실패');});}catch(e){}
     await sleep(600);const p=pathText(await pathInfo(c));setT('lPath',p[0],p[1]);});
-  c.on('data',d=>onCData(c,d));
-  c.on('close',()=>{if(P.conn===c){setT('lSt','연결 끊김 — 재접속 중 (감시는 계속됩니다)','bad');log('연결 끊김');clearTimeout(P.retry);P.retry=setTimeout(tryConnect,2000);}});
+  c.on('data',d=>{LK.rx=Date.now();onCData(c,d);});
+  c.on('close',()=>{if(P.conn===c){P.conn=null;LK.next=Date.now()+1000;if(was){LK.drops++;LK.lastDrop='채널 닫힘';LK.lastDropAt=Date.now();}else LK.fail++;
+    setT('lSt','연결 끊김 — 다시 연결 중 (감시는 계속됩니다)','bad');log('연결 끊김'+(was?'':' (접속 실패)'));}});
   c.on('error',e=>log('conn 오류 '+e));
 }
+/* 램프·뻐꾸기 이벤트는 최근 2분치를 보관했다가, 연결이 (다시) 열리면 재전송한다 → 컨트롤이 중복은 걸러냄. 끊긴 사이의 신호도 살린다 */
+const RECENT=[];
+function evsend(d){const n=Date.now();RECENT.push({at:n,d});while(RECENT.length&&n-RECENT[0].at>120000)RECENT.shift();psend(d);}
+function resendRecent(){const n=Date.now();let k=0;RECENT.forEach(r=>{if(n-r.at<=90000){psend(Object.assign({},r.d,{re:1}));k++;}});if(k)log('최근 신호 '+k+'건 재전송');}
 const psend=d=>{const c=P.conn;if(c&&c.open){try{c.send(d);return true}catch(e){}}return false;};
 function camInfo(){
   const tr=P.track;if(!tr)return null;const s=tr.getSettings?tr.getSettings():{},c=P.caps||{};
@@ -252,6 +308,7 @@ setInterval(()=>{if(P.mode!=='standby')sendLs()},500);
 function onCData(c,d){
   if(!d||!d.t)return;
   if(d.t==='ping')c.send({t:'pong',i:d.i,m0:d.m0,s:nowE()});
+  else if(d.t==='hb')c.send({t:'hbr',i:d.i,m0:d.m0,m:P.mode,ts:nowE()});
   else if(d.t==='mode')doMode(d.m);
   else if(d.t==='zoom')applyZoom(d.v);
   else if(d.t==='expc')applyExpc(d.v);
@@ -552,7 +609,7 @@ function fire(tf,k,n){
   const col=colorOf(tf);
   if(k==='blink'){P.nBlink++;P.lastBlink=Math.round(w);setT('lLast',`총 ${P.nBlink}회 · 최근 ${hms(w)} (감지 지연 ${lat} ms)`,'ok');log(`점멸 감지 ${n}회 · 색 ${col?col.name+' (색상 '+col.h+'°, 채도 '+col.s+')':'?'} (${lat} ms 늦게 확인)`);}
   else log(`불규칙한 깜박임 ${n}회 (판정에는 안 씀)`);
-  psend({t:'lamp',k,n,w,lat,id:Date.now(),col});
+  evsend({t:'lamp',k,n,w,lat,id:Date.now(),col});
 }
 
 /* ---------- 뻐꾸기 소리 (노트 10 슬레이브와 같은 방식: 울리는 두 음 → 주파수로 A/B 형 판별) ---------- */
@@ -616,7 +673,7 @@ function audOn(rms,hf,lf,pcm,ct){
 setInterval(()=>{const t=nowS();
   for(const e of AU.tones){if(e.done||t<e.t+TONE_WAIT)continue;e.done=true;const r=classify(e.t),w=T0+e.t*1000;AU.n++;
     log(`뻐꾸기 ${r.k==='?'?'종류 불명':r.k+'형'} ${r.why||`(A${r.nA}/B${r.nB})`}`);
-    psend({t:'tone',k:r.k,nA:r.nA,nB:r.nB,pk:r.pk,w,lat:Math.round(nowE()-w),id:Date.now()});}
+    evsend({t:'tone',k:r.k,nA:r.nA,nB:r.nB,pk:r.pk,w,lat:Math.round(nowE()-w),id:Date.now()});}
   while(AU.tones.length&&AU.tones[0].done&&t-AU.tones[0].t>10)AU.tones.shift();},100);
 function segment(t0,t1){
   const R=AU.rate,out=[];
