@@ -15,6 +15,7 @@ h1{font-size:18px;margin:6px 0 10px}h1 .ver{font-size:12px;color:var(--dim);font
 button{font:inherit;font-weight:700;color:#fff;background:var(--ac);border:0;border-radius:10px;min-height:48px;padding:0 16px;width:100%;margin:6px 0}
 button.sub{background:#344256}.bsub{font-weight:400;font-size:12px}.cmdmain button{min-height:68px}button.newb{background:#2b3442;border:2px solid #c0504d;color:#ffb3b0}button.newb.arm{background:#e0a030;border-color:#e0a030;color:#1a1a1a}button.go{background:#1e9e66}button.stop{background:#c0504d}button:disabled{opacity:.4}
 button.sm{min-height:38px;font-size:13px;padding:0 10px}
+.g6{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}.g6 button{margin:0;padding:0;min-height:44px;font-size:16px}
 .row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
 input,select{font:inherit;color:var(--tx);background:#0d1218;border:1px solid var(--line);border-radius:10px;min-height:44px;padding:0 10px;width:100%}
 input[type=checkbox]{width:auto;min-height:0;margin-right:6px}
@@ -79,15 +80,11 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div id="lpLine" class="dim"></div>
   <button id="lpWake" class="sub sm" disabled>💡 램프 폰 깨우기 (카메라 켬)</button>
   <details class="sub" id="lpSet"><summary>램프 지정 · 줌</summary>
-    <button id="lpSnap" class="sub" disabled>📷 램프 사진 받기</button>
-    <div id="lpPhInfo" class="dim">사진에서 램프가 보이는 자리를 누르면 그 자리가 램프로 지정됩니다.</div>
-    <div id="lpPh" hidden style="position:relative;margin-top:6px"><img id="lpImg" class="shot" alt="" style="margin-top:0"><div id="lpBox" style="position:absolute;border:2px solid #fff;pointer-events:none;display:none"></div></div>
-    <div class="row" style="margin-top:8px;align-items:flex-start"><img id="lpIns" alt="" style="width:96px;height:96px;flex:0 0 96px;border-radius:8px;background:#000" hidden><div id="lpInsT" class="dim" hidden>↑ 지정한 램프 주변 확대. 흰 상자 안에 램프가 들어와야 합니다.</div></div>
-    <div id="lpZInfo" class="dim" style="margin-top:8px">램프 폰 연결 후 표시</div>
-    <input id="lpZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0">
-    <div class="row"><button id="lpSm" class="sub sm" disabled>상자 작게</button><button id="lpBg" class="sub sm" disabled>상자 크게</button></div>
-    <div class="row"><button id="lpL" class="sub sm" disabled>◀</button><button id="lpU" class="sub sm" disabled>▲</button><button id="lpD" class="sub sm" disabled>▼</button><button id="lpR" class="sub sm" disabled>▶</button></div>
-    <div class="dim">줌을 바꾸면 램프 자리가 움직이므로 줌을 정한 뒤 사진을 다시 받아 램프를 눌러 주세요. 램프가 깜박이면 위 ‘램프 켜짐’ 표시가 바뀌고 점멸 횟수가 올라갑니다.</div>
+    <div class="row" style="margin-top:8px"><button id="lpSnap" class="sub sm" disabled style="flex:0 0 150px;margin:0">📷 사진 받기</button><div id="lpPhInfo" class="dim" style="font-size:12px;line-height:1.35">사진에서 램프를 누르면 그 자리가 램프로 지정됩니다.</div></div>
+    <div id="lpPh" hidden style="text-align:center;margin-top:6px"><div style="position:relative;display:inline-block;line-height:0"><img id="lpImg" alt="" style="max-height:42vh;max-width:100%;width:auto;height:auto;border-radius:8px;background:#000"><div id="lpBox" style="position:absolute;border:2px solid #fff;pointer-events:none;display:none"></div></div></div>
+    <div class="row" style="margin-top:8px;align-items:center;gap:10px"><img id="lpIns" alt="" style="width:72px;height:72px;flex:0 0 72px;border-radius:8px;background:#000" hidden><div style="flex:1;min-width:0"><div id="lpZInfo" class="dim" style="font-size:13px">램프 폰 연결 후 표시</div><input id="lpZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0;min-height:34px"></div></div>
+    <div class="g6" style="margin-top:6px"><button id="lpL" class="sub sm" disabled>◀</button><button id="lpU" class="sub sm" disabled>▲</button><button id="lpD" class="sub sm" disabled>▼</button><button id="lpR" class="sub sm" disabled>▶</button><button id="lpSm" class="sub sm" disabled>▢−</button><button id="lpBg" class="sub sm" disabled>▢＋</button></div>
+    <div class="dim" id="lpInsT" style="font-size:12px;margin-top:4px" hidden>왼쪽 작은 사진 = 램프 주변 확대. ◀▲▼▶ 로 상자를 옮기고 ▢−/▢＋ 로 크기를 바꿉니다. 줌을 바꾸면 사진을 다시 받아 램프를 눌러 주세요.</div>
     <button id="lpReload" class="sub sm" disabled>램프 폰 새로고침 (최신 버전으로)</button>
   </details>
 </div>
@@ -209,7 +206,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.7.1';
+const VER=qs.get('fakever')||'1.7.2';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -727,7 +724,7 @@ function lpPhoto(d){
 }
 function lpInit(){
   $('lpSnap').onclick=lpSnapReq;
-  $('lpSet').addEventListener('toggle',()=>{if($('lpSet').open&&!Lp.ph&&lpUp())lpSnapReq();});
+  $('lpSet').addEventListener('toggle',()=>{if($('lpSet').open){if(!Lp.ph&&lpUp())lpSnapReq();setTimeout(()=>{try{$('lpSet').scrollIntoView({block:'start',behavior:'smooth'})}catch(e){}},80);}});
   $('lpImg').onclick=e=>{const r=$('lpImg').getBoundingClientRect();if(!lpUp())return;
     const fx=(e.clientX-r.left)/r.width,fy=(e.clientY-r.top)/r.height;lpSend({t:'roi',fx,fy});setT('lpPhInfo','램프 지정 요청함…','dim');setTimeout(lpSnapReq,700);};
   const z=$('lpZ');let tm=null;
