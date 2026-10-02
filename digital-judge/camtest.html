@@ -11,9 +11,10 @@ button{font:inherit;font-weight:700;color:#fff;background:var(--ac);border:0;bor
 button.sub{background:#344256}.row{display:flex;gap:8px}.row>*{flex:1}
 .dim{color:var(--dim);font-size:14px}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
 .res div{padding:6px 0;border-top:1px solid #2a3544}.res div:first-child{border-top:0}
+[hidden]{display:none!important}
 img,canvas{width:100%;border-radius:10px;background:#000;display:block;margin-top:8px}
 </style></head><body>
-<h1>외장(USB) 카메라 주소 시험 <span class="dim">v4</span></h1>
+<h1>외장(USB) 카메라 주소 시험 <span class="dim">v5</span></h1>
 <div class="card">
   <h2>순서</h2>
   <div class="dim">① 노트 10에 ‘USB Camera’ 앱(Shenyaocn)을 깔고 ELP를 연결 → 앱 설정에서 HTTP 서버를 켭니다. ② 앱이 알려 주는 주소(예: http://127.0.0.1:8080/ 또는 같은 와이파이의 http://192.168.x.x:포트/)를 아래에 넣고 시험합니다.</div>
@@ -29,6 +30,12 @@ img,canvas{width:100%;border-radius:10px;background:#000;display:block;margin-to
     <h2>카메라 두 개 동시에 열기 시험 (이 폰의 앞·뒷면 등)</h2>
     <button id="b5">5. 보이는 카메라를 모두 동시에 열어 보기 (최대 해상도 요청)</button>
     <div class="res" id="res5"></div><div id="v5"></div>
+  </div>
+  <div class="card" style="background:#141b24">
+    <h2>6. 카메라 줌·초점 능력 시험 (램프를 멀리서 잡을 수 있는지)</h2>
+    <div class="dim">뒷면 카메라를 열어 줌 범위를 읽고, 아래 막대로 줌을 올려 보며 화면이 실제로 커지는지 확인합니다. 줌을 올려도 해상도(픽셀 수)는 그대로이므로 아래 ‘실제 영상 크기’ 숫자가 중요합니다.</div>
+    <button id="b6">6. 카메라 능력 읽기 + 줌 시험</button>
+    <div class="res" id="res6"></div><div id="v6"></div>
   </div>
   <img id="im" alt="" hidden><canvas id="cv" hidden></canvas>
 </div>
@@ -96,4 +103,26 @@ $('b5').onclick=async()=>{const R=$('res5');R.innerHTML='';$('v5').innerHTML='';
   say5(`동시에 살아 있는 카메라: ${live}개 / 연 것 ${streams.length}개`,live>=2?'ok':'warn');
   if(streams.length>=2&&live<2)say5('→ 먼저 연 카메라가 멈췄습니다. 이 폰에서는 카메라 두 개를 동시에 못 씁니다.','warn');
   if(live>=2)say5('→ 동시에 열립니다. 화면에 영상이 둘 다 움직이는지 확인하세요.','ok');};
+
+$('b6').onclick=async()=>{const R=$('res6');R.innerHTML='';$('v6').innerHTML='';
+  const say6=(t,c)=>{const d=document.createElement('div');d.className=c||'';d.textContent=t;R.appendChild(d);};
+  try{const t=await navigator.mediaDevices.getUserMedia({video:true});t.getTracks().forEach(x=>x.stop());}catch(e){say6('⛔ 카메라 권한 없음: '+e.name,'bad');return;}
+  const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+  for(let i=0;i<Math.min(ds.length,4);i++){
+    let st;try{st=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:ds[i].deviceId},width:{ideal:3840},height:{ideal:2160}}});}catch(e){say6(`⛔ ${i+1}번 열기 실패: ${e.name}`,'bad');continue;}
+    const tr=st.getVideoTracks()[0],cap=tr.getCapabilities?tr.getCapabilities():{},set=tr.getSettings();
+    say6(`${i+1}번 ${ds[i].label||''}`,'ok');
+    say6(`  실제 영상 크기 ${set.width}×${set.height}`,'dim');
+    say6(`  최대 해상도 ${cap.width?cap.width.max:'?'}×${cap.height?cap.height.max:'?'} · 프레임 ${cap.frameRate?cap.frameRate.max:'?'}fps`,'dim');
+    say6('  줌: '+(cap.zoom?`${cap.zoom.min}~${cap.zoom.max} (단계 ${cap.zoom.step})`:'지원 안 함'),cap.zoom?'ok':'warn');
+    say6('  초점: '+(cap.focusMode?cap.focusMode.join('/'):'정보 없음')+(cap.focusDistance?` · 거리 ${cap.focusDistance.min}~${cap.focusDistance.max}`:''),'dim');
+    say6('  노출 보정: '+(cap.exposureCompensation?`${cap.exposureCompensation.min}~${cap.exposureCompensation.max}`:'정보 없음')+' · 손전등: '+(cap.torch?'있음':'없음'),'dim');
+    const v=document.createElement('video');v.muted=true;v.playsInline=true;v.autoplay=true;v.srcObject=st;v.style.cssText='width:100%;border-radius:10px;background:#000;margin-top:8px';
+    $('v6').appendChild(v);
+    if(cap.zoom){const z=document.createElement('input');z.type='range';z.min=cap.zoom.min;z.max=cap.zoom.max;z.step=cap.zoom.step||0.1;z.value=cap.zoom.min;z.style.cssText='width:100%;margin-top:6px';
+      const zt=document.createElement('div');zt.className='dim';zt.textContent='줌 ×'+z.value+' (막대를 움직여 보세요)';
+      z.oninput=async()=>{try{await tr.applyConstraints({advanced:[{zoom:+z.value}]});const s2=tr.getSettings();zt.textContent=`줌 ×${s2.zoom||z.value} · 영상 ${s2.width}×${s2.height}`;}catch(e){zt.textContent='줌 적용 실패: '+e.name;}};
+      $('v6').appendChild(z);$('v6').appendChild(zt);}
+    await new Promise(r=>setTimeout(r,500));}
+  say6('끝. 막대로 줌을 올려 멀리 있는 물체가 커지는지, 줌 숫자와 영상 크기를 알려 주세요.','dim');};
 </script></body></html>
