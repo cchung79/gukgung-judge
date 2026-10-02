@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>디지털 저지 램프</title>
+<title>디지털 저지 관중 폰</title>
 <style>
 :root{--bg:#10151c;--card:#1a222d;--line:#2b3644;--tx:#e8edf3;--dim:#93a1b3;--ok:#3ecf8e;--warn:#f5b84b;--bad:#ff6b6b;--ac:#4aa3ff}
 *{box-sizing:border-box}[hidden]{display:none!important}
@@ -32,7 +32,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 </style>
 </head>
 <body>
-<h1>디지털 저지 램프 <span class="ver" id="verT"></span></h1>
+<h1>디지털 저지 관중 폰 <span class="ver" id="verT"></span></h1>
 <div id="blk"></div>
 
 <div class="card" id="setupBox">
@@ -92,7 +92,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.8.1';
+const VER=qs.get('fakever')||'1.9.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -172,7 +172,7 @@ const fmtB=b=>b<1024?b+' B':(b<1048576?Math.round(b/102.4)/10+' KB':Math.round(b
 const CODE=()=>P.code||($('lCode')?$('lCode').value.trim():'');
 const P={peer:null,conn:null,code:'',retry:null,mode:'standby',stream:null,track:null,tapMode:false,
   roi:null,roiScale:1,trk:null,bg:null,devAbs:[],lampMed:0,sigma:3,edges:[],wasOn:false,warm:null,lastT:null,lastFlash:-1e9,weak:null,
-  ring:[],dev:0,thr:0,fps:{n:0,t0:0,v:0},nBlink:0,lastBlink:null,tx:0,res:'fhd',trkBad:0,loopGen:0,caps:null,zoomV:null,exp:null};
+  col:[],ring:[],dev:0,thr:0,fps:{n:0,t0:0,v:0},nBlink:0,lastBlink:null,tx:0,res:'fhd',trkBad:0,loopGen:0,caps:null,zoomV:null,exp:null};
 const LAMP_MIN_RISE=40,TK=2,TR=8;
 const median=a=>{const b=a.slice().sort((x,y)=>x-y);return b.length?b[b.length>>1]:0;};
 const vid=$('lVid'),ov=$('lOv'),ovx=ov.getContext('2d');
@@ -236,7 +236,7 @@ function camInfo(){
     zoom:c.zoom?[c.zoom.min,c.zoom.max,c.zoom.step||0.1,s.zoom!=null?s.zoom:(P.zoomV||c.zoom.min)]:null,
     expc:c.exposureCompensation?[c.exposureCompensation.min,c.exposureCompensation.max,c.exposureCompensation.step||0.1,s.exposureCompensation!=null?s.exposureCompensation:0]:null};
 }
-function sendHello(){psend({t:'hello',app:'dj-lamp',ver:VER,mode:P.mode,cam:camInfo(),roi:P.roi?1:0,res:P.res});}
+function sendHello(){psend({t:'hello',app:'dj-lamp',ver:VER,mode:P.mode,mic:audState(),cam:camInfo(),roi:P.roi?1:0,res:P.res});}
 async function sendBat(){
   let lvl=null,chg=null;try{if(navigator.getBattery){const b=P.bat||(P.bat=await navigator.getBattery());lvl=b.level;chg=b.charging;}}catch(e){}
   const tr=P.track;psend({t:'bat',lvl,chg,vis:document.visibilityState,mode:P.mode,cs:tr?(tr.readyState+(tr.muted?'·muted':'')):'꺼짐',ts:nowE()});
@@ -244,7 +244,7 @@ async function sendBat(){
 setInterval(sendBat,10000);
 document.addEventListener('visibilitychange',()=>{log('화면 '+document.visibilityState);sendBat();});
 function sendLs(){
-  psend({t:'ls',m:P.mode,on:P.wasOn?1:0,roi:P.roi?1:0,dev:Math.round(P.dev),thr:Math.round(P.thr),fps:P.fps.v,trk:P.trk&&P.trkBad>10?1:0,cam:(P.stream&&performance.now()-(P.lastFrameAt||0)<3000)?1:0,n:P.nBlink,lb:P.lastBlink,ts:nowE()});
+  psend({t:'ls',m:P.mode,on:P.wasOn?1:0,roi:P.roi?1:0,dev:Math.round(P.dev),thr:Math.round(P.thr),fps:P.fps.v,trk:P.trk&&P.trkBad>10?1:0,cam:(P.stream&&performance.now()-(P.lastFrameAt||0)<3000)?1:0,n:P.nBlink,lb:P.lastBlink,mic:audState(),mdb:AU.db,mfl:AU.fl,nt:AU.n,ts:nowE()});
 }
 setInterval(()=>{if(P.mode!=='standby')sendLs()},500);
 
@@ -277,8 +277,8 @@ function doMode(m){modeChain=modeChain.then(async()=>{
   if(m===was&&(m==='standby'||P.stream)){psend({t:'mode',m,ready:true});return;}   // 같은 모드를 다시 받으면 감시 상태를 건드리지 않는다
   P.mode=m;P.autoReopen=0;if(m==='count'&&was!=='count'){P.nBlink=0;setT('lLast','시험 시작 — 0회','dim');}
   try{
-    if(m==='standby'){stopCam();blkShow(true);}
-    else{blkShow(false);if(!P.stream)await openCam();if(was==='standby'||m==='count')resetDet();}
+    if(m==='standby'){stopCam();blkShow(true);audOff();}
+    else{blkShow(false);if(!P.stream)await openCam();if(was==='standby'||m==='count')resetDet();audInit();}
     setModeTxt();psend({t:'mode',m,ready:true});sendHello();
   }catch(e){P.mode=was;psend({t:'mode',m,ready:false,err:(e&&e.name)||String(e)});log('모드 오류 '+e);}
 }).catch(e=>log('모드 오류 '+e));}
@@ -439,7 +439,7 @@ function setROI(cxp,cyp,scale){
 }
 function roiScaleBy(k){if(!P.roi)return;const r=eff();setROI(r.x+r.w/2,r.y+r.h/2,Math.max(0.4,Math.min(4,P.roiScale*k)));}
 function nud(dx,dy){if(!P.roi)return;const r=eff();setROI(r.x+r.w/2+dx,r.y+r.h/2+dy);}
-function resetDet(){P.lastFlash=-1e9;P.edges=[];P.weak=null;P.wasOn=false;P.warm=null;P.bg=null;P.lastT=null;P.ring=[];P.devAbs=[];P.lampMed=0;P.sigma=3;}
+function resetDet(){P.lastFlash=-1e9;P.edges=[];P.weak=null;P.wasOn=false;P.warm=null;P.bg=null;P.lastT=null;P.ring=[];P.col=[];P.devAbs=[];P.lampMed=0;P.sigma=3;}
 
 /* ---------- 램프 추적 (single-shot 에서 검증한 방식: 램프 주변 무늬를 따라가 흔들림을 보정) ---------- */
 function eff(){const r=P.roi;if(!r)return null;const t=P.trk;return t?{x:r.x+t.dx,y:r.y+t.dy,w:r.w,h:r.h}:r}
@@ -507,14 +507,14 @@ function onFrame(t){
   const dt=Math.min(0.2,Math.max(0.001,t-(P.lastT??t)));P.lastT=t;
   const aN=1-Math.exp(-dt/0.6),aL=1-Math.exp(-dt/3.3);
   const df=new Float32Array(np);for(let j=0;j<np;j++){const v=m[j]-P.bg[j];df[j]=v;P.bg[j]+=(v<12?aN:aL)*v}
-  df.sort();const k=Math.min(6,np);let hi=0,lo=0;for(let i=0;i<k;i++){hi+=df[np-1-i];lo+=df[i]}hi/=k;lo/=k;
+  const dfc=df.slice();df.sort();const k=Math.min(6,np);let hi=0,lo=0;for(let i=0;i<k;i++){hi+=df[np-1-i];lo+=df[i]}hi/=k;lo/=k;
   const dev=hi-Math.max(0,-lo);   // 밝아진 만큼 − 어두워진 만큼: 경계 흔들림 상쇄
   if(P.warm==null)P.warm=t;const warm=t-P.warm>3;
   // 문턱 = 기준 + 퍼짐. 빛 변화로 기준선이 오르면 문턱도 같이 올라가고, 실제 점멸(+200 안팎)은 그 위에 남는다
   P.devAbs.push(dev);if(P.devAbs.length>300)P.devAbs.shift();
   if(P.devAbs.length%15===0){P.lampMed=median(P.devAbs);P.sigma=Math.max(1,1.48*median(P.devAbs.map(v=>Math.abs(v-P.lampMed))))}
   const thr=Math.max(10,(P.lampMed||0)+Math.max(LAMP_MIN_RISE,3.5*P.sigma)),on=warm&&dev>thr;
-  P.dev=dev;P.thr=thr;
+  P.dev=dev;P.thr=thr;if(on)sampleColor(d,dfc,hi,t);
   P.ring.push({t,dev,thr});while(P.ring.length&&t-P.ring[0].t>7)P.ring.shift();
   $('lNow').textContent=on?'켜짐':'꺼짐';$('lNow').className=on?'ok':'dim';
   // 램프는 고른 리듬으로 깜박인다. 흔들림 때문에 생긴 한두 번의 번쩍임은 걸러진다
@@ -529,11 +529,111 @@ function onFrame(t){
   if(P.weak&&t-P.weak.t>2.0){const w=P.weak;P.weak=null;if(t-P.lastFlash>3)fire(w.t,'weak',w.n)}
   drawOverlay();drawMeter(t);drawInset();
 }
+/* ---------- 램프 색: 켜진 순간 가장 밝아진 픽셀 중 채도 높은 쪽의 색상(hue) ---------- */
+function sampleColor(d,dfc,hi,t){
+  const th=Math.max(20,hi*0.4),sel=[];
+  for(let j=0;j<dfc.length;j++)if(dfc[j]>=th){const i=j*4,r=d[i],g=d[i+1],b=d[i+2],mx=Math.max(r,g,b),mn=Math.min(r,g,b);sel.push([mx?(mx-mn)/mx:0,r,g,b])}
+  if(!sel.length)return;sel.sort((a,b)=>b[0]-a[0]);const use=sel.slice(0,Math.max(1,sel.length>>1));
+  let R=0,G=0,B=0;for(const u of use){R+=u[1];G+=u[2];B+=u[3]}R/=use.length;G/=use.length;B/=use.length;
+  const mx=Math.max(R,G,B),mn=Math.min(R,G,B),sat=mx?(mx-mn)/mx:0;let h=0;
+  if(mx>mn){const dd=mx-mn;h=mx===R?((G-B)/dd)%6:mx===G?(B-R)/dd+2:(R-G)/dd+4;h*=60;if(h<0)h+=360}
+  P.col.push({t,h,s:sat,v:mx});while(P.col.length&&t-P.col[0].t>4)P.col.shift();
+}
+function hueName(h,s){if(s<0.22)return'흰색(포화)';if(h>=340||h<15)return'빨강';if(h<45)return'주황';if(h<65)return'노랑';if(h<170)return'초록';if(h<260)return'파랑';return'보라';}
+function colorOf(tf){
+  const a=P.col.filter(c=>c.t>=tf-0.05);if(!a.length)return null;
+  let x=0,y=0,ss=0;for(const c of a){x+=Math.cos(c.h*Math.PI/180)*c.s;y+=Math.sin(c.h*Math.PI/180)*c.s;ss+=c.s}
+  let h=Math.atan2(y,x)*180/Math.PI;if(h<0)h+=360;const sat=ss/a.length;
+  return{h:Math.round(h),s:+sat.toFixed(2),name:hueName(h,sat),n:a.length};
+}
 function fire(tf,k,n){
   const w=T0+tf*1000,lat=Math.round(nowE()-w);
-  if(k==='blink'){P.nBlink++;P.lastBlink=Math.round(w);setT('lLast',`총 ${P.nBlink}회 · 최근 ${hms(w)} (감지 지연 ${lat} ms)`,'ok');log(`점멸 감지 ${n}회 (${lat} ms 늦게 확인)`);}
+  const col=colorOf(tf);
+  if(k==='blink'){P.nBlink++;P.lastBlink=Math.round(w);setT('lLast',`총 ${P.nBlink}회 · 최근 ${hms(w)} (감지 지연 ${lat} ms)`,'ok');log(`점멸 감지 ${n}회 · 색 ${col?col.name+' (색상 '+col.h+'°, 채도 '+col.s+')':'?'} (${lat} ms 늦게 확인)`);}
   else log(`불규칙한 깜박임 ${n}회 (판정에는 안 씀)`);
-  psend({t:'lamp',k,n,w,lat,id:Date.now()});
+  psend({t:'lamp',k,n,w,lat,id:Date.now(),col});
+}
+
+/* ---------- 뻐꾸기 소리 (노트 10 슬레이브와 같은 방식: 울리는 두 음 → 주파수로 A/B 형 판별) ---------- */
+const SENS_N={khf:6,krms:4,low:0.7},TONE_WAIT=1.35,r1=x=>Math.round(x*10)/10;
+const WORKLET=`class F extends AudioWorkletProcessor{constructor(o){super();const p=o.processorOptions;this.hop=p.hop;this.a=p.a;this.D=p.D;this.n=0;this.s2=0;this.d2=0;this.l2=0;this.p=0;this.lp=0;this.acc=0;this.k=0;this.pb=new Float32Array(Math.ceil(p.hop/p.D)+8);this.pi=0}
+process(inp){const c=inp[0]&&inp[0][0];if(!c)return true;for(let i=0;i<c.length;i++){const x=c[i],d=x-this.p;this.p=x;this.lp+=this.a*(x-this.lp);this.s2+=x*x;this.d2+=d*d;this.l2+=this.lp*this.lp;
+this.acc+=x;if(++this.k>=this.D){if(this.pi<this.pb.length){this.pb[this.pi++]=this.acc/this.D}this.acc=0;this.k=0}
+if(++this.n>=this.hop){const n=this.n;this.port.postMessage([Math.sqrt(this.s2/n),Math.sqrt(this.d2/n),Math.sqrt(this.l2/n),this.pb.slice(0,this.pi),currentTime]);this.pi=0;this.n=0;this.s2=0;this.d2=0;this.l2=0}}return true}}
+registerProcessor('feat',F);`;
+const AU={ctx:null,node:null,st:null,src:null,err:null,rate:16000,ring:[],abuf:{rms:[],hf:[]},med:{rms:1e-4,hf:1e-4},cnt:0,cand:null,lastTone:-1e9,tones:[],db:-120,fl:-120,n:0,busy:false};
+function audState(){return AU.st&&AU.ctx&&AU.ctx.state==='running'?1:(AU.err?-1:0);}
+async function audEnsure(){
+  if(AU.ctx)return AU.ctx;
+  const AC=window.AudioContext||window.webkitAudioContext;const c=new AC({latencyHint:'interactive'});AU.ctx=c;
+  const hop=Math.round(c.sampleRate*0.01),a=1-Math.exp(-2*Math.PI*300/c.sampleRate),D=Math.max(1,Math.round(c.sampleRate/16000));AU.rate=c.sampleRate/D;
+  await c.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET],{type:'application/javascript'})));
+  const node=new AudioWorkletNode(c,'feat',{processorOptions:{hop,a,D},numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[1]});
+  node.port.onmessage=e=>audOn(e.data[0],e.data[1],e.data[2],e.data[3],e.data[4]);
+  const mute=c.createGain();mute.gain.value=0;node.connect(mute);mute.connect(c.destination);AU.node=node;c.onstatechange=()=>{sendHello();};
+  return c;
+}
+async function audInit(){
+  if(AU.st||AU.busy)return;AU.busy=true;
+  try{
+    AU.err=null;
+    const st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1}});
+    if(P.mode==='standby'){st.getTracks().forEach(t=>t.stop());AU.busy=false;return;}
+    const c=await audEnsure();AU.src=c.createMediaStreamSource(st);AU.src.connect(AU.node);AU.st=st;
+    AU.abuf={rms:[],hf:[]};AU.cand=null;AU.cnt=0;try{await c.resume()}catch(e){}
+    st.getAudioTracks().forEach(t=>{t.onended=()=>{log('마이크 트랙 종료');AU.st=null;setTimeout(()=>{if(P.mode!=='standby')audInit()},800);};});
+    log('마이크 켜짐 '+Math.round(c.sampleRate)+' Hz');
+  }catch(e){AU.err=(e&&e.name)||String(e);log('마이크 실패 '+AU.err+' (뻐꾸기 소리는 못 셉니다 · 램프는 정상)');}
+  AU.busy=false;sendHello();
+}
+function audOff(){
+  try{if(AU.src){AU.src.disconnect();AU.src=null}if(AU.st)AU.st.getTracks().forEach(t=>{t.onended=null;t.stop()})}catch(e){}
+  AU.st=null;AU.ring=[];AU.tones=[];AU.cand=null;try{AU.ctx&&AU.ctx.suspend()}catch(e){}
+}
+setInterval(()=>{if(P.mode!=='standby'&&AU.ctx&&AU.st&&AU.ctx.state==='suspended')AU.ctx.resume().catch(()=>{});
+  if(P.mode!=='standby'&&!AU.st&&!AU.busy&&!AU.err)audInit();},2000);
+function audRing(t,pcm){AU.ring.push({t,m:pcm});let tot=0;for(const r of AU.ring)tot+=r.m.length;while(tot>AU.rate*5&&AU.ring.length>1){tot-=AU.ring[0].m.length;AU.ring.shift()}}
+function audOn(rms,hf,lf,pcm,ct){
+  const c=AU.ctx;if(!AU.st)return;
+  const t=(c&&ct!=null)?nowS()-(c.currentTime-ct):nowS();
+  if(pcm&&pcm.length)audRing(t,pcm);
+  const A=AU.abuf;A.rms.push(rms);A.hf.push(hf);if(A.rms.length>300){A.rms.shift();A.hf.shift()}
+  AU.cnt++;if(AU.cnt%10===0&&A.rms.length>=50){AU.med.rms=Math.max(1e-5,median(A.rms));AU.med.hf=Math.max(1e-6,median(A.hf))}
+  AU.db=r1(20*Math.log10(rms+1e-7));AU.fl=r1(20*Math.log10(AU.med.rms));
+  if(A.rms.length<150)return;
+  const rr=rms/AU.med.rms,hr=hf/AU.med.hf;
+  if(AU.cand){const k=AU.cand;k.n++;k.rms.push(rms);
+    if(k.n>=15){AU.cand=null;let pi=0;for(let i=1;i<k.rms.length;i++)if(k.rms[i]>k.rms[pi])pi=i;
+      const peak=k.rms[pi],pr=peak/k.mr,dec=rms/peak;
+      if(pr>5&&dec>0.5){   // 울리는 두 음 = 뻐꾸기(과녁 소리). 1초 안의 반복은 한 번으로
+        if(k.t-AU.lastTone>1){log('뻐꾸기 소리 감지 · 종류 판별 중');AU.tones.push({t:k.t,done:false});}
+        AU.lastTone=k.t;}
+    }
+    return;}
+  if(hr>SENS_N.khf)AU.cand={t,n:0,rms:[rms],mr:AU.med.rms,hr};
+}
+setInterval(()=>{const t=nowS();
+  for(const e of AU.tones){if(e.done||t<e.t+TONE_WAIT)continue;e.done=true;const r=classify(e.t),w=T0+e.t*1000;AU.n++;
+    log(`뻐꾸기 ${r.k==='?'?'종류 불명':r.k+'형'} ${r.why||`(A${r.nA}/B${r.nB})`}`);
+    psend({t:'tone',k:r.k,nA:r.nA,nB:r.nB,pk:r.pk,w,lat:Math.round(nowE()-w),id:Date.now()});}
+  while(AU.tones.length&&AU.tones[0].done&&t-AU.tones[0].t>10)AU.tones.shift();},100);
+function segment(t0,t1){
+  const R=AU.rate,out=[];
+  for(const r of AU.ring){const rt1=r.t,rt0=r.t-r.m.length/R;if(rt1<t0||rt0>t1)continue;
+    const a=Math.max(0,Math.round((t0-rt0)*R)),b=Math.min(r.m.length,Math.round((t1-rt0)*R));if(b>a)out.push(r.m.subarray(a,b))}
+  if(!out.length)return null;let n=0;for(const o of out)n+=o.length;const x=new Float32Array(n);let p=0;for(const o of out){x.set(o,p);p+=o.length}return x}
+function fft(re,im){const n=re.length;for(let i=1,j=0;i<n;i++){let b=n>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]]}}
+  for(let len=2;len<=n;len<<=1){const ang=-2*Math.PI/len,wr=Math.cos(ang),wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){let cr=1,ci=0;for(let j=0;j<len/2;j++){const a=i+j,b=a+len/2,tr=re[b]*cr-im[b]*ci,ti=re[b]*ci+im[b]*cr;re[b]=re[a]-tr;im[b]=im[a]-ti;re[a]+=tr;im[a]+=ti;const nr=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=nr}}}}
+/* A형(3관): 1294→1535→679 Hz, B형(2관): ~800→673→1330→673 Hz. 1500~1600 Hz 가 두 창 이상이면 A, 1290~1350 Hz 가 두 창 이상이면 B */
+function classify(t){
+  const x=segment(t-0.5,t+1.3);if(!x||x.length<AU.rate*0.5)return{k:'?',why:'소리 부족'};
+  const R=AU.rate,N=1024,hop=Math.round(R*0.05),pk=[];let mx=0;
+  for(let s=0;s+N<=x.length;s+=hop){const re=new Float64Array(N),im=new Float64Array(N);for(let i=0;i<N;i++)re[i]=x[s+i]*(0.5-0.5*Math.cos(2*Math.PI*i/N));fft(re,im);
+    let bi=0,bm=0;for(let k=Math.floor(400*N/R);k<=Math.floor(3000*N/R);k++){const a=re[k]*re[k]+im[k]*im[k];if(a>bm){bm=a;bi=k}}
+    pk.push([bi*R/N,bm]);if(bm>mx)mx=bm}
+  let nA=0,nB=0;for(const[f,a]of pk){if(a<mx*0.05)continue;if(f>=1480&&f<=1600)nA++;else if(f>=1290&&f<=1350)nB++}
+  return{k:nA>=2?'A':(nB>=2?'B':'?'),nA,nB,pk:pk.map(([f,a])=>a>=mx*0.05?Math.round(f/10)*10:0)};
 }
 function drawOverlay(){
   const W=ov.width,H=ov.height;ovx.clearRect(0,0,W,H);inset.style.display=P.roi&&P.stream?'block':'none';
