@@ -104,7 +104,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.9.0';
+const VER=qs.get('fakever')||'1.9.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -210,7 +210,7 @@ function startT(){
   const code=CODE();if(!/^\d{4}$/.test(code)){setT('mSt','코드는 숫자 4자리','bad');$('startBox').hidden=false;return;}
   lsS('dj_tcode',code);$('verT').textContent='v'+VER+' · 아이폰 · 코드 '+code;$('tStart').disabled=true;$('tCode').disabled=true;$('startBox').hidden=true;
   checkLatest((x,k)=>setT('mSt',x,k));setInterval(()=>{if(!T.running)checkLatest((x,k)=>setT('mSt',x,k))},600000);
-  keepAwake((t,c)=>{setT('mWake',t,c);setBanner('wake',c==='warn'?'⚠ 화면이 꺼지면 마이크가 끊깁니다 — 아이폰 설정 > 디스플레이 및 밝기 > 자동 잠금 > 안 함 (시험 중에는 화면을 켜 둡니다)':'');});
+  keepAwake((t,c)=>setT('mWake',t,c));
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){try{if(T.peer&&T.peer.disconnected)T.peer.reconnect()}catch(e){}lpSend({t:'sync'});}});
   setT('mSt','시그널링 서버 연결 중…','dim');setT('lpSt','연결 중…','huge dim');
   const peer=T.peer=mkPeer(PREFIX+code);
