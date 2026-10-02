@@ -38,18 +38,20 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 <div class="card" id="setupBox">
   <h2>연결 코드 (디지털 저지 컨트롤과 같은 4자리)</h2>
   <div class="row"><input id="lCode" class="code" inputmode="numeric" maxlength="4" placeholder="코드"><button id="lStart" style="margin:0">시작</button></div>
-  <div class="dim" style="margin-top:6px">이 폰(샤오미)은 사대 쪽에서 과녁의 램프를 향해 세워 둡니다. 시작하면 카메라가 켜집니다. 램프 지정·줌은 이 화면이나 아이폰 컨트롤 어느 쪽에서든 할 수 있습니다.</div>
+  <div class="dim" style="margin-top:6px">이 폰(샤오미)은 사대 쪽에서 과녁의 램프를 향해 세워 둡니다. 시작하면 컨트롤에 자동으로 붙고 절전(카메라 꺼짐)으로 대기합니다. 이후 깨우기·줌·램프 지정은 모두 아이폰 컨트롤에서 합니다. 코드는 기억되어 다음부터는 이 페이지를 열면 자동으로 연결됩니다.</div>
 </div>
 
 <div class="card">
   <h2>램프 화면 <span id="lFps" class="dim" style="font-weight:400"></span></h2>
   <div class="vw"><video id="lVid" playsinline muted autoplay></video><canvas id="lOv"></canvas></div>
   <div id="lHint" class="dim" style="margin:6px 0">-</div>
+  <details class="sub" style="margin-top:6px"><summary>이 폰에서 직접 설정 (보통은 아이폰 컨트롤에서 함)</summary>
   <div class="row"><button id="lAim" class="sub sm">램프 지정</button><button id="lSmall" class="sub sm">상자 작게</button><button id="lBig" class="sub sm">상자 크게</button></div>
   <div class="nud" style="margin-top:6px"><button id="nL" class="sub sm">◀</button><button id="nU" class="sub sm">▲</button><button id="nD" class="sub sm">▼</button><button id="nR" class="sub sm">▶</button></div>
   <div id="lZInfo" class="dim" style="margin-top:8px">-</div>
   <input id="lZ" type="range" min="1" max="1" step="0.1" value="1" disabled>
   <div class="dim">줌을 바꾸면 램프 자리가 옮겨지므로, 줌을 정한 뒤 「램프 지정」으로 램프를 다시 눌러 주세요.</div>
+  </details>
 </div>
 
 <div class="card">
@@ -92,7 +94,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.7.0';
+const VER=qs.get('fakever')||'1.7.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -170,7 +172,7 @@ const fmtB=b=>b<1024?b+' B':(b<1048576?Math.round(b/102.4)/10+' KB':Math.round(b
    과녁 쪽 램프(관중 불빛)의 점멸만 본다. 사대 쪽에서 램프를 확대해 찍고, 점멸이 잡히면 시각을 컨트롤에 보낸다.
    컨트롤이 시계를 맞춰 노트 10(발시 판정)에 전달한다. 마이크·자세 인식은 쓰지 않는다. */
 const CODE=()=>P.code||($('lCode')?$('lCode').value.trim():'');
-const P={peer:null,conn:null,code:'',retry:null,mode:'active',stream:null,track:null,tapMode:false,
+const P={peer:null,conn:null,code:'',retry:null,mode:'standby',stream:null,track:null,tapMode:false,
   roi:null,roiScale:1,trk:null,bg:null,devAbs:[],lampMed:0,sigma:3,edges:[],wasOn:false,warm:null,lastT:null,lastFlash:-1e9,weak:null,
   ring:[],dev:0,thr:0,fps:{n:0,t0:0,v:0},nBlink:0,lastBlink:null,tx:0,res:'fhd',trkBad:0,loopGen:0,caps:null,zoomV:null,exp:null};
 const LAMP_MIN_RISE=40,TK=2,TR=8;
@@ -194,15 +196,15 @@ function initLamp(){
   ov.addEventListener('pointerup',onTap);
   new ResizeObserver(sizeOv).observe(vid);
   const sr=jparse(lsG('dj_lroi'),null);if(sr&&sr.fx!=null)P.savedRoi=sr;
-  aimUI();blkShow(false);
-  if(qs.get('auto')&&/^\d{4}$/.test($('lCode').value))startLamp();
+  aimUI();
+  setModeTxt();blkShow(true);
+  if(!qs.get('setup')&&/^\d{4}$/.test($('lCode').value))startLamp();   // 저장된 코드가 있으면 열자마자 자동 연결 (코드를 바꾸려면 주소 뒤에 ?setup=1)
 }
 async function startLamp(){
   const code=$('lCode').value.trim();if(!/^\d{4}$/.test(code)){setT('lSt','코드는 숫자 4자리','bad');return;}
   P.code=code;lsS('dj_lcode',code);$('lStart').disabled=true;$('lCode').disabled=true;$('setupBox').hidden=true;
   keepAwake((t,c)=>setT('lWake',t,c));
   setT('lSt','시그널링 서버 연결 중…','dim');
-  await openCam().catch(e=>{setT('lCam','⛔ 카메라 실패: '+((e&&e.name)||e),'bad');});
   const peer=P.peer=mkPeer(PREFIX+code+'-l-'+Math.random().toString(36).slice(2,7));
   peer.on('open',()=>tryConnect());
   peer.on('disconnected',()=>{log('시그널링 끊김 → 재연결');try{peer.reconnect()}catch(e){}});
@@ -212,13 +214,15 @@ async function startLamp(){
     else if(e.type==='network'||e.type==='server-error'||e.type==='socket-error'||e.type==='socket-closed')setT('lSt','시그널링 서버에 못 닿음 — 인터넷 확인','bad');
     else setT('lSt','오류: '+e.type,'bad');
   });
+  probeCam();
   checkLatest((x,k)=>setT('lSt',x,k));
+  setInterval(()=>{if(P.peer&&P.peer.open&&!(P.conn&&P.conn.open)&&Date.now()-(P.tryAt||0)>15000)tryConnect();},5000);   // 접속 시도가 멈춰 있으면 다시 시도
   setInterval(()=>{if(P.mode!=='count')checkLatest((x,k)=>setT('lSt',x,k))},600000);
 }
 function tryConnect(){
   if(P.conn&&P.conn.open)return;
   if(P.conn){try{P.conn.close()}catch(e){}}
-  setT('lSt','컨트롤에 접속 중…','dim');
+  setT('lSt','컨트롤에 접속 중…','dim');P.tryAt=Date.now();
   const c=P.conn=P.peer.connect(PREFIX+P.code,{reliable:true,metadata:{role:'lamp'}});
   c.on('open',async()=>{setT('lSt','✅ 연결됨 — 컨트롤의 명령을 기다립니다','ok');log('연결됨');sendHello();sendBat();
     await sleep(600);const p=pathText(await pathInfo(c));setT('lPath',p[0],p[1]);});
@@ -280,7 +284,12 @@ function doMode(m){modeChain=modeChain.then(async()=>{
   }catch(e){P.mode=was;psend({t:'mode',m,ready:false,err:(e&&e.name)||String(e)});log('모드 오류 '+e);}
 }).catch(e=>log('모드 오류 '+e));}
 function setModeTxt(){setT('lMode',{standby:'⏸ 대기 (절전)',active:'▶ 준비 (램프 확인)',count:'🏹 발시 카운트 (점멸 감시)'}[P.mode],P.mode==='standby'?'warn':'ok');}
-function blkShow(on){const b=$('blk');b.style.display=on?'flex':'none';b.textContent=on?'':'';}
+function blkShow(on){const b=$('blk');b.style.display=on?'flex':'none';b.textContent=on?'💡 램프 폰 · 대기 (절전)\n컨트롤에서 깨웁니다':'';b.style.whiteSpace='pre-line';}
+/* 연결하자마자 카메라를 껐다 켜 보며 권한만 받아 둔다 → 이후 컨트롤이 깨울 때 이 폰에 허용 창이 뜨지 않는다 */
+async function probeCam(){
+  try{const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});s.getTracks().forEach(t=>t.stop());if(!P.stream)setT('lCam','꺼짐 (대기) · 카메라 권한 확인됨','dim');}
+  catch(e){setT('lCam','⛔ 카메라 권한·열기 실패: '+((e&&e.name)||e)+' — 폰 설정에서 이 사이트의 카메라를 허용하세요','bad');}
+}
 
 /* ---------- 카메라 ---------- */
 async function openCam(){

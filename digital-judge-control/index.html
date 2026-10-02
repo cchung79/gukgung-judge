@@ -77,6 +77,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <h2>램프 폰 (샤오미)</h2>
   <div id="lpSt" class="big dim">연결 전 — 샤오미의 ‘디지털 저지 램프’에서 같은 코드를 입력하세요</div>
   <div id="lpLine" class="dim"></div>
+  <button id="lpWake" class="sub sm" disabled>💡 램프 폰 깨우기 (카메라 켬)</button>
   <details class="sub" id="lpSet"><summary>램프 지정 · 줌</summary>
     <button id="lpSnap" class="sub" disabled>📷 램프 사진 받기</button>
     <div id="lpPhInfo" class="dim">사진에서 램프가 보이는 자리를 누르면 그 자리가 램프로 지정됩니다.</div>
@@ -208,7 +209,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.7.0';
+const VER=qs.get('fakever')||'1.7.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -295,7 +296,7 @@ const RESN={hit:'中',miss:'／',pending:''};
 /* ---------- 시작 · 연결 ---------- */
 function initControl(){
   const saved=lsG('dj_ccode');
-  $('mCode').value=qs.get('code')||saved||String(1000+Math.floor(Math.random()*9000));
+  $('mCode').value=qs.get('code')||saved||String(1000+Math.floor(Math.random()*9000));if(qs.get('code'))lsS('dj_ccode',qs.get('code'));
   const cf=jparse(lsG('dj_ccfg'),{});C.tg=jparse(lsG('dj_ctg'),[]);if(!Array.isArray(C.tg))C.tg=[];
   if(cf.af===false)$('cAf').value='0';if(cf.kwan!=null)$('cKwan').value=cf.kwan;if(cf.wm)$('cWm').value=cf.wm;if(cf.sens)$('cSens').value=cf.sens;
   if(cf.rec===false)$('cRec').checked=false;if(cf.recq)$('cRecq').value=cf.recq;
@@ -327,7 +328,7 @@ function initControl(){
   $('mCopyJ').onclick=()=>copyText(exportJSON());$('mCopyC').onclick=()=>copyText(exportCSV());
   const cb=jparse(lsG('dj_cbd'),null);if(cb&&cb.arrows){C.board=cb;}
   renderAll();applyModeUI();
-  if(qs.get('auto')||saved)startControl();
+  if(!qs.get('setup')&&(qs.get('auto')||saved||qs.get('code')))startControl();   // 저장된 코드가 있으면 열자마자 자동 시작 (코드를 바꾸려면 주소 뒤에 ?setup=1)
 }
 const send=d=>{if(C.conn&&C.conn.open){try{C.conn.send(d);return true}catch(e){}}return false;};
 function getCfg(){return{af:$('cAf').value==='1',kwan:+$('cKwan').value,tg:C.tg||[],wm:Math.max(3,Math.min(15,+$('cWm').value||7)),sens:$('cSens').value,rec:$('cRec').checked,recq:$('cRecq').value};}
@@ -351,7 +352,7 @@ function sendCfg(){const c=getCfg();lsS('dj_ccfg',JSON.stringify(c));send(Object
 function setBanner(k,msg){if(msg)C.bn[k]=msg;else delete C.bn[k];$('banner').innerHTML=Object.keys(C.bn).map(x=>'<div class="banner"></div>').join('');Object.keys(C.bn).forEach((x,i)=>{$('banner').children[i].textContent=C.bn[x];});}
 async function startControl(){
   const code=CODE();if(!/^\d{4}$/.test(code)){setT('mSt','코드는 숫자 4자리','bad');$('startBox').hidden=false;return;}
-  lsS('dj_ccode',code);$('mStart').disabled=true;$('mCode').disabled=true;$('startBox').hidden=true;
+  lsS('dj_ccode',code);$('verT').textContent='v'+VER+' · 마스터(아이폰) · 코드 '+code;$('mStart').disabled=true;$('mCode').disabled=true;$('startBox').hidden=true;
   checkLatest((x,k)=>setT('mSt',x,k));setInterval(()=>{if(C.mode!=='count')checkLatest((x,k)=>setT('mSt',x,k))},600000);
   keepAwake((t,c)=>setT('mWake',t,c));
   document.addEventListener('visibilitychange',()=>{log('화면 '+document.visibilityState);if(document.visibilityState==='visible'){try{if(C.peer&&C.peer.disconnected)C.peer.reconnect()}catch(e){}send({t:'sync'});}});
@@ -680,7 +681,7 @@ function lpData(c,d){
       if(k<0)c.send({t:'ver',v:VER});else if(k>0)tryUpdate(d.ver,(x,kk)=>setT('mSt',x,kk));}
     lpCtl();lpRender();
   }
-  else if(d.t==='ls'){Lp.st=d;Lp.lsAt=nowE();if(d.lb)Lp.lastEv=d.lb;updLampOn();}
+  else if(d.t==='ls'){const pm=Lp.st&&Lp.st.m;Lp.st=d;if(pm!==d.m)lpCtl();Lp.lsAt=nowE();if(d.lb)Lp.lastEv=d.lb;updLampOn();}
   else if(d.t==='lamp'){lpBlink(d);}
   else if(d.t==='bat'){Lp.bat=d;setT('mLpBat',`${d.lvl==null?'-':Math.round(d.lvl*100)+'%'} ${d.chg?'⚡충전 중':'방전 중'} · 화면 ${d.vis==='visible'?'켜짐':'⚠ 숨김'} · 카메라 ${d.cs||'-'}${lpVer?' · v'+lpVer:''}`,d.chg?'warn':'dim');
     if(d.lvl!=null&&d.lvl<0.4&&!d.chg)setBanner('lbat','🔋 램프 폰 배터리 '+Math.round(d.lvl*100)+'% — 충전하면서 쓰세요');else setBanner('lbat',null);}
@@ -701,13 +702,15 @@ function lpBlink(d){
 function lpRender(){
   const st=Lp.st,box=$('lpSt');
   if(!lpUp()){setT('lpSt',lsG('dj_lamp_used')==='1'?'램프 폰 연결 끊김 — 재접속 대기':'연결 전 — 샤오미의 ‘디지털 저지 램프’에서 같은 코드를 입력하세요',lsG('dj_lamp_used')==='1'?'big bad':'big dim');setT('lpLine','','dim');return;}
-  if(!st){setT('lpSt','램프 폰 연결됨 — 상태 수신 대기','big dim');return;}
+  if(!st){const hm=Lp.hello&&Lp.hello.mode;setT('lpSt',hm==='standby'?'⏸ 연결됨 · 대기 (카메라 꺼짐)':'램프 폰 연결됨 — 상태 수신 대기',hm==='standby'?'big warn':'big dim');return;}
   const m=st.m,roi=!!st.roi;
+  if(m!=='standby'&&!roi&&!Lp.autoOpened){Lp.autoOpened=true;$('lpSet').open=true;}
   setT('lpSt',m==='standby'?'⏸ 대기 (카메라 꺼짐)':(!roi?'⚠ 램프가 지정되지 않았습니다 — 아래 ‘램프 지정 · 줌’에서 지정':(m==='count'?'🟢 점멸 감시 중':'▶ 준비 · 램프 확인 중')),m==='standby'?'big warn':(!roi?'big bad':'big ok'));
   setT('lpLine',m==='standby'?'':`램프 ${st.on?'🟡 켜짐':'꺼짐'} · 점멸 감지 ${Lp.n}회${Lp.lastEv&&Lp.off!=null?' · 최근 '+hms(Lp.lastEv-Lp.off):''} · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''}`,'dim');
 }
 function lpCtl(){
   const up=lpUp(),m=Lp.st?Lp.st.m:null,act=up&&m&&m!=='standby';
+  $('lpWake').disabled=!up;$('lpWake').textContent=act?'💤 램프 폰 재우기 (카메라 끔)':'💡 램프 폰 깨우기 (카메라 켬)';
   ['lpSnap','lpSm','lpBg','lpL','lpU','lpD','lpR'].forEach(i=>$(i).disabled=!act);$('lpReload').disabled=!up||C.mode==='count';
   const c=Lp.cam,z=$('lpZ');
   if(act&&c&&c.zoom){z.min=c.zoom[0];z.max=c.zoom[1];z.step=c.zoom[2]||0.1;if(!Lp.zDrag)z.value=c.zoom[3];z.disabled=false;
@@ -731,6 +734,7 @@ function lpInit(){
   z.oninput=()=>{Lp.zDrag=true;Lp.zBusy=true;setT('lpZInfo','요청 '+f1(+z.value)+'배…','dim');clearTimeout(Lp.at);clearTimeout(tm);tm=setTimeout(()=>{lpSend({t:'zoom',v:+z.value});Lp.zDrag=false;setTimeout(()=>{Lp.zBusy=false},1500);},200);};
   $('lpSm').onclick=()=>{lpSend({t:'roisz',k:1/1.4});setTimeout(lpSnapReq,500);};$('lpBg').onclick=()=>{lpSend({t:'roisz',k:1.4});setTimeout(lpSnapReq,500);};
   [['lpL',-2,0],['lpU',0,-2],['lpD',0,2],['lpR',2,0]].forEach(([i,dx,dy])=>{$(i).onclick=()=>{lpSend({t:'nudge',dx,dy});clearTimeout(Lp.nt);Lp.nt=setTimeout(lpSnapReq,600);};});
+  $('lpWake').onclick=()=>{const up=Lp.st&&Lp.st.m!=='standby';lpSend({t:'mode',m:up?'standby':'active'});};
   $('lpReload').onclick=()=>{lpSend({t:'reload'});log('램프 폰 새로고침 요청');};
   lpRender();lpCtl();
 }
