@@ -79,8 +79,8 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div id="lpSt" class="big dim">연결 전 — 샤오미의 ‘디지털 저지 램프’에서 같은 코드를 입력하세요</div>
   <div id="lpLine" class="dim"></div>
   <button id="lpWake" class="sub sm" disabled>💡 램프 폰 깨우기 (카메라 켬)</button>
-  <details class="sub" id="lpSet"><summary>램프 지정 · 줌</summary>
-    <div class="row" style="margin-top:8px"><button id="lpSnap" class="sub sm" disabled style="flex:0 0 150px;margin:0">📷 사진 받기</button><div id="lpPhInfo" class="dim" style="font-size:12px;line-height:1.35">사진에서 램프를 누르면 그 자리가 램프로 지정됩니다.</div></div>
+  <details class="sub" id="lpSet"><summary>램프 미세 조정 (사진 · 줌 · 이동)</summary>
+    <div class="row" style="margin-top:8px"><button id="lpSnap" class="sub sm" disabled style="flex:0 0 150px;margin:0">📷 사진 받기</button><div id="lpPhInfo" class="dim" style="font-size:12px;line-height:1.35">램프 지정과 줌은 샤오미에서 먼저 하고, 여기서는 사진으로 확인·미세 조정합니다.</div></div>
     <div id="lpPh" hidden style="text-align:center;margin-top:6px"><div style="position:relative;display:inline-block;line-height:0"><img id="lpImg" alt="" style="max-height:42vh;max-width:100%;width:auto;height:auto;border-radius:8px;background:#000"><div id="lpBox" style="position:absolute;border:2px solid #fff;pointer-events:none;display:none"></div></div></div>
     <div class="row" style="margin-top:8px;align-items:center;gap:10px"><img id="lpIns" alt="" style="width:72px;height:72px;flex:0 0 72px;border-radius:8px;background:#000" hidden><div style="flex:1;min-width:0"><div id="lpZInfo" class="dim" style="font-size:13px">램프 폰 연결 후 표시</div><input id="lpZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0;min-height:34px"></div></div>
     <div class="g6" style="margin-top:6px"><button id="lpL" class="sub sm" disabled>◀</button><button id="lpU" class="sub sm" disabled>▲</button><button id="lpD" class="sub sm" disabled>▼</button><button id="lpR" class="sub sm" disabled>▶</button><button id="lpSm" class="sub sm" disabled>▢−</button><button id="lpBg" class="sub sm" disabled>▢＋</button></div>
@@ -206,7 +206,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.7.2';
+const VER=qs.get('fakever')||'1.7.3';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -489,7 +489,6 @@ function onHello(c,d){
   if(d.ver){const k=cmpVer(d.ver,VER);setT('mSVer','v'+d.ver+(k===0?' · 같은 버전':(k<0?' · 구버전 → 갱신 요청함':' · 이 폰이 구버전')),k===0?'ok':'warn');
     if(k<0)c.send({t:'ver',v:VER});else if(k>0)tryUpdate(d.ver,(x,kk)=>setT('mSt',x,kk));}
   if(d.mode!==C.mode&&!C.trans){C.mode=d.mode;}
-  if(!C.trans)lpMode(C.mode);
   if(C.want&&d.mode!==C.want&&!C.trans){c.send({t:'mode',m:C.want});C.trans=C.want;log('슬레이브가 다시 시작됨 → 명령 재전송: '+C.want);}
   if(d.nb===0&&C.board&&C.board.arrows.length){c.send({t:'restore',b:C.board});log('슬레이브 기록이 비어 있어 컨트롤의 기록 '+C.board.arrows.length+'발을 복원 요청');}
   applyModeUI();
@@ -650,7 +649,7 @@ function lpAccept(c){
 async function lpOpen(c){
   lsS('dj_lamp_used','1');setT('mLpC','✅ 연결됨','ok');log('램프 폰 데이터 채널 열림');
   c.send({t:'ver',v:VER});
-  if(C.want||C.hello)lpMode(C.want||C.mode);
+  { const m=C.want||C.mode;if(m==='active'||m==='count')lpMode(m); }   // 대기면 보내지 않는다(램프 폰이 이 폰에서 먼저 설정 중일 수 있음)
   lpPings(20);lpCtl();updLampOn();
   await sleep(600);const p=pathText(await pathInfo(c));setT('mLpC','✅ 연결됨 · '+p[0].split('\n')[0],p[1]);
   if($('lpSet').open)lpSnapReq();
@@ -683,7 +682,7 @@ function lpData(c,d){
   else if(d.t==='bat'){Lp.bat=d;setT('mLpBat',`${d.lvl==null?'-':Math.round(d.lvl*100)+'%'} ${d.chg?'⚡충전 중':'방전 중'} · 화면 ${d.vis==='visible'?'켜짐':'⚠ 숨김'} · 카메라 ${d.cs||'-'}${lpVer?' · v'+lpVer:''}`,d.chg?'warn':'dim');
     if(d.lvl!=null&&d.lvl<0.4&&!d.chg)setBanner('lbat','🔋 램프 폰 배터리 '+Math.round(d.lvl*100)+'% — 충전하면서 쓰세요');else setBanner('lbat',null);}
   else if(d.t==='zoomed'){setT('lpZInfo',d.ok?`✅ 줌 ${f1(d.v)}배 적용 · 잠시 후 사진 자동 요청`:`⚠ 줌 적용 실패: ${d.err}`,d.ok?'ok':'bad');if(d.ok){clearTimeout(Lp.at);Lp.at=setTimeout(lpSnapReq,1500);}}
-  else if(d.t==='mode'){if(d.ready===false)log('램프 폰 모드 변경 실패: '+d.err);}
+  else if(d.t==='mode'){if(d.ready===false){log('램프 폰 모드 변경 실패: '+d.err);setBanner('lamperr','⛔ 램프 폰 카메라를 열지 못했습니다: '+d.err+' — 샤오미 화면을 확인하세요');}else setBanner('lamperr',null);}
   else if(d.t==='lph'){lpPhoto(d);}
 }
 let lpVer=null;
@@ -701,9 +700,8 @@ function lpRender(){
   if(!lpUp()){setT('lpSt',lsG('dj_lamp_used')==='1'?'램프 폰 연결 끊김 — 재접속 대기':'연결 전 — 샤오미의 ‘디지털 저지 램프’에서 같은 코드를 입력하세요',lsG('dj_lamp_used')==='1'?'big bad':'big dim');setT('lpLine','','dim');return;}
   if(!st){const hm=Lp.hello&&Lp.hello.mode;setT('lpSt',hm==='standby'?'⏸ 연결됨 · 대기 (카메라 꺼짐)':'램프 폰 연결됨 — 상태 수신 대기',hm==='standby'?'big warn':'big dim');return;}
   const m=st.m,roi=!!st.roi;
-  if(m!=='standby'&&!roi&&!Lp.autoOpened){Lp.autoOpened=true;$('lpSet').open=true;}
-  setT('lpSt',m==='standby'?'⏸ 대기 (카메라 꺼짐)':(!roi?'⚠ 램프가 지정되지 않았습니다 — 아래 ‘램프 지정 · 줌’에서 지정':(m==='count'?'🟢 점멸 감시 중':'▶ 준비 · 램프 확인 중')),m==='standby'?'big warn':(!roi?'big bad':'big ok'));
-  setT('lpLine',m==='standby'?'':`램프 ${st.on?'🟡 켜짐':'꺼짐'} · 점멸 감지 ${Lp.n}회${Lp.lastEv&&Lp.off!=null?' · 최근 '+hms(Lp.lastEv-Lp.off):''} · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''}`,'dim');
+  setT('lpSt',m==='standby'?'⏸ 대기 (카메라 꺼짐)':(!roi?'⚠ 램프가 지정되지 않았습니다 — 샤오미 화면에서 램프를 눌러 지정하세요':(m==='count'?'🟢 점멸 감시 중':'▶ 준비 · 램프 확인 중')),m==='standby'?'big warn':(!roi?'big bad':'big ok'));
+  setT('lpLine',m==='standby'?'':(st.cam===0?'⚠ 카메라 영상이 들어오지 않습니다 — 자동으로 다시 여는 중':'')+` 램프 ${st.on?'🟡 켜짐':'꺼짐'} · 점멸 감지 ${Lp.n}회${Lp.lastEv&&Lp.off!=null?' · 최근 '+hms(Lp.lastEv-Lp.off):''} · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''}`,'dim');
 }
 function lpCtl(){
   const up=lpUp(),m=Lp.st?Lp.st.m:null,act=up&&m&&m!=='standby';
