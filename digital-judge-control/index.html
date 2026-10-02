@@ -48,9 +48,9 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 <h1>디지털 저지 컨트롤 <span class="ver" id="verT"></span></h1>
 
 <div class="card" id="startBox">
-  <h2>연결 코드 (노트 10의 ‘디지털 저지’와 같은 4자리)</h2>
+  <h2>연결 코드 (노트 10 ‘디지털 저지’·샤오미 ‘디지털 저지 램프’와 같은 4자리)</h2>
   <div class="row"><input id="mCode" class="code" inputmode="numeric" maxlength="4"><button id="mStart" style="margin:0">시작</button></div>
-  <div class="dim" style="margin-top:6px">‘시작’ 후 노트 10(디지털 저지)에서 같은 코드를 입력하세요. 코드는 기억되고, 이 페이지를 새로고침하면 노트 10도 자동으로 최신 버전으로 따라옵니다.</div>
+  <div class="dim" style="margin-top:6px">‘시작’ 후 노트 10(디지털 저지)과 샤오미(디지털 저지 램프)에서 같은 코드를 입력하세요. 코드는 기억되고, 이 페이지를 새로고침하면 노트 10도 자동으로 최신 버전으로 따라옵니다.</div>
 </div>
 
 <div id="banner"></div>
@@ -71,6 +71,24 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
     <div class="row"><button id="scCont" class="go">이어서 계속</button><button id="scNew" class="stop">기록 지우고 새로 시작</button></div>
     <button id="scCancel" class="sub">취소</button>
   </div>
+</div>
+
+<div class="card" id="lpCard">
+  <h2>램프 폰 (샤오미)</h2>
+  <div id="lpSt" class="big dim">연결 전 — 샤오미의 ‘디지털 저지 램프’에서 같은 코드를 입력하세요</div>
+  <div id="lpLine" class="dim"></div>
+  <details class="sub" id="lpSet"><summary>램프 지정 · 줌</summary>
+    <button id="lpSnap" class="sub" disabled>📷 램프 사진 받기</button>
+    <div id="lpPhInfo" class="dim">사진에서 램프가 보이는 자리를 누르면 그 자리가 램프로 지정됩니다.</div>
+    <div id="lpPh" hidden style="position:relative;margin-top:6px"><img id="lpImg" class="shot" alt="" style="margin-top:0"><div id="lpBox" style="position:absolute;border:2px solid #fff;pointer-events:none;display:none"></div></div>
+    <div class="row" style="margin-top:8px;align-items:flex-start"><img id="lpIns" alt="" style="width:96px;height:96px;flex:0 0 96px;border-radius:8px;background:#000" hidden><div id="lpInsT" class="dim" hidden>↑ 지정한 램프 주변 확대. 흰 상자 안에 램프가 들어와야 합니다.</div></div>
+    <div id="lpZInfo" class="dim" style="margin-top:8px">램프 폰 연결 후 표시</div>
+    <input id="lpZ" type="range" min="1" max="1" step="0.1" value="1" disabled style="padding:0">
+    <div class="row"><button id="lpSm" class="sub sm" disabled>상자 작게</button><button id="lpBg" class="sub sm" disabled>상자 크게</button></div>
+    <div class="row"><button id="lpL" class="sub sm" disabled>◀</button><button id="lpU" class="sub sm" disabled>▲</button><button id="lpD" class="sub sm" disabled>▼</button><button id="lpR" class="sub sm" disabled>▶</button></div>
+    <div class="dim">줌을 바꾸면 램프 자리가 움직이므로 줌을 정한 뒤 사진을 다시 받아 램프를 눌러 주세요. 램프가 깜박이면 위 ‘램프 켜짐’ 표시가 바뀌고 점멸 횟수가 올라갑니다.</div>
+    <button id="lpReload" class="sub sm" disabled>램프 폰 새로고침 (최신 버전으로)</button>
+  </details>
 </div>
 
 <div class="card">
@@ -140,7 +158,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
   <div class="row"><span class="dim">현소리 감도</span><select id="cSens"><option value="n">보통</option><option value="h">민감</option><option value="l">둔감</option></select></div>
   <div class="row"><label class="dim"><input id="cRec" type="checkbox" checked>원본 영상+소리 녹화 (발시 카운트 중 노트 10에 저장)</label></div>
   <div class="row"><span class="dim">녹화 화질</span><select id="cRecq"><option value="m">중 (분당 약 19MB)</option><option value="h">상 (분당 약 30MB)</option><option value="l">하 (분당 약 9MB)</option></select></div>
-  <div class="dim">뻐꾸기는 관중 판정의 보조 신호입니다(램프 판정은 추가 예정). 발시 후 ‘최대 시간’ 안에 내 관의 뻐꾸기가 울리면 관중, 아니면 불로 확정합니다 — 활이 약한 선수는 7초까지 걸립니다. 설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다.</div>
+  <div class="dim">뻐꾸기와 램프(샤오미 폰)가 관중 신호입니다. 램프 폰이 연결돼 램프가 지정돼 있으면 뻐꾸기가 없는 관(1관·비봉정 등)도 램프로 관중·불을 판정합니다. 발시 후 ‘최대 시간’ 안에 내 관의 뻐꾸기가 울리면 관중, 아니면 불로 확정합니다 — 활이 약한 선수는 7초까지 걸립니다. 설정은 노트 10에 저장되고 연결될 때마다 다시 전달됩니다.</div>
 </details>
 <details class="sub"><summary>점검 도구</summary>
   <h2>카메라 전체 비교 (ELP 줌 카메라 확인용)</h2>
@@ -166,6 +184,9 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
     <tr><td>지연(RTT)</td><td id="mRtt" class="dim">-</td></tr>
     <tr><td>시계 차</td><td id="mOff" class="dim">-</td></tr>
     <tr><td>발시 알림 지연</td><td id="mEvLat" class="dim">-</td></tr>
+    <tr><td>램프 폰 연결</td><td id="mLpC" class="dim">-</td></tr>
+    <tr><td>램프 폰 시계 차</td><td id="mLpOff" class="dim">-</td></tr>
+    <tr><td>램프 폰 배터리·버전</td><td id="mLpBat" class="dim">-</td></tr>
     <tr><td>슬레이브 카메라</td><td id="mCam" class="dim">-</td></tr>
     <tr><td>슬레이브 마이크</td><td id="mSMic" class="dim">-</td></tr>
     <tr><td>슬레이브 배터리</td><td id="mBat" class="dim">-</td></tr>
@@ -187,7 +208,7 @@ details{margin:10px 0}summary{cursor:pointer;color:var(--dim);font-weight:700;pa
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.6.4';
+const VER=qs.get('fakever')||'1.7.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -268,6 +289,7 @@ const CODE=()=>$('mCode').value.trim();
 const C={peer:null,conn:null,mode:'standby',want:null,trans:null,board:null,st:null,players:null,locked:false,off:null,offErr:null,rtt:null,pr:[],snap:null,rx:null,cam:null,
   sel:null,selAuto:true,lg:[],snd:[],evN:0,gaps:[],lastBatAt:0,hello:null,jm:null,bn:{},lvlOn:false,lastTx:null,batH:[],startTries:0,fit:null};
 $('verT').textContent='v'+VER+' · 마스터(아이폰)';
+const Lp={conn:null,off:null,offErr:null,rtt:null,pr:[],hello:null,st:null,cam:null,n:0,lastEv:null,snap:null,lsAt:0,sent:null,mode:null,bat:null};
 const RESN={hit:'中',miss:'／',pending:''};
 
 /* ---------- 시작 · 연결 ---------- */
@@ -337,6 +359,7 @@ async function startControl(){
   const peer=C.peer=mkPeer(PREFIX+code);
   peer.on('open',()=>{C.startTries=0;setT('mSt','대기 중 — 노트 10의 디지털 저지에서 코드 '+code+' 입력','warn');setT('mModeSt','노트 10 연결 대기 (코드 '+code+')','huge warn');log('컨트롤 대기 시작 '+code);});
   peer.on('connection',c=>{
+    if(((c.peer||'').indexOf('-l-')>=0)||(c.metadata&&c.metadata.role==='lamp')){lpAccept(c);return;}
     if(C.conn){try{C.conn.close()}catch(e){}}
     C.conn=c;log('슬레이브 접속 시도');
     c.on('open',()=>onOpen(c));
@@ -358,7 +381,7 @@ async function startControl(){
 async function onOpen(c){
   setT('mSt','✅ 연결됨','ok');log('데이터 채널 열림');
   c.send({t:'ver',v:VER});sendCfg();c.send({t:'photocfg',on:$('mPhoto').checked});if(C.lvlOn)c.send({t:'lvlon',on:true});
-  applyModeUI();runPings(20);
+  C.lampSent=null;updLampOn();applyModeUI();runPings(20);
   await sleep(600);const p=pathText(await pathInfo(c));setT('mPath',p[0],p[1]);
 }
 function runPings(n){
@@ -378,16 +401,16 @@ function finishPings(){
 /* ---------- 명령 ---------- */
 function freshStart(){
   if(!send({t:'mode',m:'active',fresh:true}))return;
-  C.want='active';C.trans='active';setBanner('mode',null);$('startChoice').hidden=true;
+  lpMode('active');C.want='active';C.trans='active';setBanner('mode',null);$('startChoice').hidden=true;
   setT('mModeSt','새로 시작 중… (기록 지우고 준비 모드로, 자동 줌 다시 맞춤)','huge dim');applyModeUI();log('명령: 새로 시작 (기록 삭제 → 준비 모드)');
 }
 function cmd(m,txt){
   if(!send({t:'mode',m}))return;
-  C.want=m;C.trans=m;setT('mModeSt',txt,'huge dim');setBanner('mode',null);applyModeUI();log('명령: '+m);
+  lpMode(m);C.want=m;C.trans=m;setT('mModeSt',txt,'huge dim');setBanner('mode',null);applyModeUI();log('명령: '+m);
 }
 function startCount(reset){
   if(!send({t:'mode',m:'count',reset:!!reset}))return;
-  C.want='count';C.trans='count';setBanner('mode',null);
+  lpMode('count');C.want='count';C.trans='count';setBanner('mode',null);
   setT('mModeSt','인원 확정 중… (카메라를 켜고 사람 수를 세는 중, 수 초)','huge dim');applyModeUI();log('명령: 발시 카운트 시작'+(reset?' (새로 시작)':''));
 }
 function edit(o){send(Object.assign({t:'edit'},o));}
@@ -413,7 +436,7 @@ function renderNow(){
   { const st2=C.st,rc=st2&&st2.rc,rp=st2&&st2.rp;
     setT('mRec',rc&&rc.on?`🔴 원본 영상 녹화 중 · 구간 ${rc.seg} · ${rc.mb} MB (노트 10에 저장)`:(m==='count'&&!getCfg().rec?'녹화 꺼짐 (설정)':''),rc&&rc.on?'bad':'dim');
     setT('mRp',rp&&rp.n?`${rp.n}개 · ${rp.mb} MB — 노트 10 화면을 두 번 빠르게 터치하면 목록에서 저장·삭제`:'없음',rp&&rp.n?'warn':'dim'); }
-  setT('mJm',C.jm&&m==='count'?('판정 방식: '+(C.jm==='motion'?'자세(만작→발시) + 현소리':'현소리만 (자세로 선수를 찾지 못함)')+' · 관중: '+({3:'3관 뻐꾸기(A형)',2:'2관 뻐꾸기(B형)',1:'판정 안 함(1관 소리 미등록 · 발시만 셈)',0:'판정 안 함(뻐꾸기 없음 · 발시만 셈)'}[getCfg().kwan])):'','dim');
+  setT('mJm',C.jm&&m==='count'?('판정 방식: '+(C.jm==='motion'?'자세(만작→발시) + 현소리':'현소리만 (자세로 선수를 찾지 못함)')+' · 관중: '+(()=>{const k=getCfg().kwan,lo=lpOn(),cu={3:'3관 뻐꾸기(A형)',2:'2관 뻐꾸기(B형)'}[k];return cu?cu+(lo?' + 램프':''):(lo?'램프 점멸 (뻐꾸기 판정 안 함)':(k===1?'판정 안 함(1관 소리 미등록 · 발시만 셈)':'판정 안 함(뻐꾸기 없음 · 발시만 셈)'));})()):'','dim');
   // 선수별 상태 칩
   const N=m==='count'||m==='active'?(st&&st.sl&&st.sl.length?st.sl.length:(C.players||0)):0,box=$('chips');
   const cnt=m==='count'&&st?Math.max(st.n||0,st.sl?st.sl.length:0):N;
@@ -468,6 +491,7 @@ function onHello(c,d){
   if(d.ver){const k=cmpVer(d.ver,VER);setT('mSVer','v'+d.ver+(k===0?' · 같은 버전':(k<0?' · 구버전 → 갱신 요청함':' · 이 폰이 구버전')),k===0?'ok':'warn');
     if(k<0)c.send({t:'ver',v:VER});else if(k>0)tryUpdate(d.ver,(x,kk)=>setT('mSt',x,kk));}
   if(d.mode!==C.mode&&!C.trans){C.mode=d.mode;}
+  if(!C.trans)lpMode(C.mode);
   if(C.want&&d.mode!==C.want&&!C.trans){c.send({t:'mode',m:C.want});C.trans=C.want;log('슬레이브가 다시 시작됨 → 명령 재전송: '+C.want);}
   if(d.nb===0&&C.board&&C.board.arrows.length){c.send({t:'restore',b:C.board});log('슬레이브 기록이 비어 있어 컨트롤의 기록 '+C.board.arrows.length+'발을 복원 요청');}
   applyModeUI();
@@ -475,8 +499,8 @@ function onHello(c,d){
 function onMode(c,d){
   C.trans=null;if(d.tx)C.lastTx=d.tx;
   if(d.ready===false){
-    C.mode=d.cur||C.mode;C.want=C.mode;setBanner('mode','⛔ 실패: '+d.err);log('명령 실패: '+d.err);applyModeUI();return;}
-  C.mode=d.m;if(d.m==='count'){C.locked=true;if(d.jm)C.jm=d.jm;log('발시 카운트 시작됨 ('+Math.round(d.ms||0)+' ms)'+(d.again?' — 이미 진행 중':''));}else{C.locked=false;if(d.m==='standby'){C.players=C.players;}}
+    C.mode=d.cur||C.mode;C.want=C.mode;lpMode(C.mode);setBanner('mode','⛔ 실패: '+d.err);log('명령 실패: '+d.err);applyModeUI();return;}
+  C.mode=d.m;lpMode(d.m);if(d.m==='count'){C.locked=true;if(d.jm)C.jm=d.jm;log('발시 카운트 시작됨 ('+Math.round(d.ms||0)+' ms)'+(d.again?' — 이미 진행 중':''));}else{C.locked=false;if(d.m==='standby'){C.players=C.players;}}
   if(d.mic&&d.m==='count')setBanner('mic',d.mic.state!=='running'?'⚠ 노트 10의 마이크가 일시정지 상태입니다 — 노트 10 화면을 한 번 터치해 주세요 (뻐꾸기 소리를 못 듣습니다)':null);
   if(d.m==='standby')setBanner('mic',null);
   applyModeUI();
@@ -608,6 +632,109 @@ function setupZoom(c){
   [1,2,3,5].filter(v=>v>=mn&&v<=mx).forEach(v=>{const b=document.createElement('button');b.className='sub';b.textContent=v+'×';b.onclick=()=>{clearTimeout(C.autoT);sl.value=v;setT('mZInfo','요청 '+v+'배…','dim');sd(v);};bt.appendChild(b);});
 }
 function camText(c){return `${c.label||'카메라'} · ${c.w}×${c.h}${c.fps?' @'+Math.round(c.fps)+'fps':''}${c.zoom?' · 줌 '+c.zoom[0]+'~'+c.zoom[1]:''}`;}
+/* ---------- 램프 폰(샤오미): 두 번째 접속. 시계는 컨트롤 기준으로 각각 맞추고, 램프 점멸을 노트 10(발시 판정) 시계로 바꿔 전달 ---------- */
+const lpSend=d=>{const c=Lp.conn;if(c&&c.open){try{c.send(d);return true}catch(e){}}return false;};
+const lpUp=()=>!!(Lp.conn&&Lp.conn.open);
+const lpOn=()=>lpUp()&&!!Lp.st&&!!Lp.st.roi&&Lp.st.m!=='standby'&&nowE()-Lp.lsAt<3500;
+function lpMode(m){if(m&&m!==Lp.mode){Lp.mode=m;}if(m)lpSend({t:'mode',m});}
+function updLampOn(){const on=lpOn();if(on!==Lp.sent||C.lampSent==null){Lp.sent=on;C.lampSent=on;send({t:'lampst',on});}lpBanner();lpRender();}
+function lpBanner(){
+  const used=lsG('dj_lamp_used')==='1';
+  setBanner('lamp',(used&&C.mode==='count'&&!lpOn())?(lpUp()?'⚠ 램프 폰은 연결돼 있지만 램프가 지정되지 않았거나 신호가 끊겼습니다 — 지금 램프 판정이 빠져 있습니다':'⚠ 램프 폰 연결이 끊겼습니다 — 지금 램프 판정이 빠져 있습니다(뻐꾸기만)'):null);
+}
+function lpAccept(c){
+  if(Lp.conn){try{Lp.conn.close()}catch(e){}}
+  Lp.conn=c;log('램프 폰 접속 시도');
+  c.on('open',()=>lpOpen(c));c.on('data',d=>lpData(c,d));
+  c.on('close',()=>{if(Lp.conn===c){Lp.st=null;setT('mLpC','연결 끊김','bad');log('램프 폰 연결 끊김');updLampOn();lpCtl();}});
+  c.on('error',e=>log('램프 conn 오류 '+e));
+}
+async function lpOpen(c){
+  lsS('dj_lamp_used','1');setT('mLpC','✅ 연결됨','ok');log('램프 폰 데이터 채널 열림');
+  c.send({t:'ver',v:VER});
+  if(C.want||C.hello)lpMode(C.want||C.mode);
+  lpPings(20);lpCtl();updLampOn();
+  await sleep(600);const p=pathText(await pathInfo(c));setT('mLpC','✅ 연결됨 · '+p[0].split('\n')[0],p[1]);
+  if($('lpSet').open)lpSnapReq();
+}
+function lpPings(n){
+  if(!lpUp())return;Lp.pr=[];let i=0;
+  const step=()=>{if(i>=n||!lpUp()){setTimeout(lpFinish,700);return;}Lp.conn.send({t:'ping',i,m0:nowE()});i++;setTimeout(step,120);};step();
+}
+function lpFinish(){
+  const a=Lp.pr.slice();if(!a.length){setT('mLpOff','응답 없음','bad');return;}
+  const best=a.slice().sort((x,y)=>x.rtt-y.rtt).slice(0,Math.max(3,Math.ceil(a.length/4)));
+  const offs=best.map(x=>x.off).sort((x,y)=>x-y);Lp.off=offs[offs.length>>1];Lp.offErr=best[0].rtt/2;
+  const r=a.map(x=>x.rtt).sort((x,y)=>x-y);Lp.rtt=r[r.length>>1];
+  setT('mLpOff',`램프 폰 시계가 ${f1(Math.abs(Lp.off))} ms ${Lp.off>=0?'빠름':'느림'} (±${f1(Lp.offErr)} ms) · RTT 중앙 ${f1(Lp.rtt)} ms`,Math.abs(Lp.off)<500?'ok':'warn');
+}
+setInterval(()=>{if(lpUp()&&C.mode!=='count')lpPings(12);},120000);
+setInterval(()=>{if(lsG('dj_lamp_used')==='1')updLampOn();},1000);
+function lpData(c,d){
+  if(!d||!d.t)return;
+  if(d.t==='pong'){const m1=nowE();Lp.pr.push({rtt:m1-d.m0,off:d.s-(d.m0+m1)/2});}
+  else if(d.t==='hello'){
+    Lp.hello=d;Lp.cam=d.cam;
+    if(Lp.st&&d.mode)Lp.st.m=d.mode;
+    if(d.ver){const k=cmpVer(d.ver,VER);lpVer=d.ver;setT('mLpBat','v'+d.ver+(k===0?' · 같은 버전':(k<0?' · 구버전 → 갱신 요청함':' · 이 폰이 구버전')),k===0?'ok':'warn');
+      if(k<0)c.send({t:'ver',v:VER});else if(k>0)tryUpdate(d.ver,(x,kk)=>setT('mSt',x,kk));}
+    lpCtl();lpRender();
+  }
+  else if(d.t==='ls'){Lp.st=d;Lp.lsAt=nowE();if(d.lb)Lp.lastEv=d.lb;updLampOn();}
+  else if(d.t==='lamp'){lpBlink(d);}
+  else if(d.t==='bat'){Lp.bat=d;setT('mLpBat',`${d.lvl==null?'-':Math.round(d.lvl*100)+'%'} ${d.chg?'⚡충전 중':'방전 중'} · 화면 ${d.vis==='visible'?'켜짐':'⚠ 숨김'} · 카메라 ${d.cs||'-'}${lpVer?' · v'+lpVer:''}`,d.chg?'warn':'dim');
+    if(d.lvl!=null&&d.lvl<0.4&&!d.chg)setBanner('lbat','🔋 램프 폰 배터리 '+Math.round(d.lvl*100)+'% — 충전하면서 쓰세요');else setBanner('lbat',null);}
+  else if(d.t==='zoomed'){setT('lpZInfo',d.ok?`✅ 줌 ${f1(d.v)}배 적용 · 잠시 후 사진 자동 요청`:`⚠ 줌 적용 실패: ${d.err}`,d.ok?'ok':'bad');if(d.ok){clearTimeout(Lp.at);Lp.at=setTimeout(lpSnapReq,1500);}}
+  else if(d.t==='mode'){if(d.ready===false)log('램프 폰 모드 변경 실패: '+d.err);}
+  else if(d.t==='lph'){lpPhoto(d);}
+}
+let lpVer=null;
+function lpBlink(d){
+  if(d.k==='blink')Lp.n++;
+  const tc=d.w-(Lp.off||0);                                     // 컨트롤 시계 기준 시각
+  addLg({k:'note',x:d.k==='blink'?`램프 점멸 ${d.n}회 감지 (램프 폰, 감지 지연 ${d.lat}ms)`:`램프 불규칙 깜박임 ${d.n}회 (판정 안 씀)`,w:Math.round(tc)});
+  if(Lp.off==null||C.off==null){log('램프 점멸을 받았지만 시계 보정 전이라 노트 10에 못 보냄 (Lp.off '+(Lp.off!=null)+', C.off '+(C.off!=null)+')');return;}
+  const ws=d.w-Lp.off+C.off;                                    // 노트 10 시계 기준
+  send({t:'lamp',k:d.k,n:d.n,w:ws,lat:d.lat});
+  lpRender();
+}
+function lpRender(){
+  const st=Lp.st,box=$('lpSt');
+  if(!lpUp()){setT('lpSt',lsG('dj_lamp_used')==='1'?'램프 폰 연결 끊김 — 재접속 대기':'연결 전 — 샤오미의 ‘디지털 저지 램프’에서 같은 코드를 입력하세요',lsG('dj_lamp_used')==='1'?'big bad':'big dim');setT('lpLine','','dim');return;}
+  if(!st){setT('lpSt','램프 폰 연결됨 — 상태 수신 대기','big dim');return;}
+  const m=st.m,roi=!!st.roi;
+  setT('lpSt',m==='standby'?'⏸ 대기 (카메라 꺼짐)':(!roi?'⚠ 램프가 지정되지 않았습니다 — 아래 ‘램프 지정 · 줌’에서 지정':(m==='count'?'🟢 점멸 감시 중':'▶ 준비 · 램프 확인 중')),m==='standby'?'big warn':(!roi?'big bad':'big ok'));
+  setT('lpLine',m==='standby'?'':`램프 ${st.on?'🟡 켜짐':'꺼짐'} · 점멸 감지 ${Lp.n}회${Lp.lastEv&&Lp.off!=null?' · 최근 '+hms(Lp.lastEv-Lp.off):''} · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''}`,'dim');
+}
+function lpCtl(){
+  const up=lpUp(),m=Lp.st?Lp.st.m:null,act=up&&m&&m!=='standby';
+  ['lpSnap','lpSm','lpBg','lpL','lpU','lpD','lpR'].forEach(i=>$(i).disabled=!act);$('lpReload').disabled=!up||C.mode==='count';
+  const c=Lp.cam,z=$('lpZ');
+  if(act&&c&&c.zoom){z.min=c.zoom[0];z.max=c.zoom[1];z.step=c.zoom[2]||0.1;if(!Lp.zDrag)z.value=c.zoom[3];z.disabled=false;
+    if(!Lp.zBusy)setT('lpZInfo',`줌 ${f1(c.zoom[3])}배 (범위 ${f1(c.zoom[0])}~${f1(c.zoom[1])}) · ${c.w}×${c.h}`,'ok');}
+  else{z.disabled=true;setT('lpZInfo',!up?'램프 폰 연결 후 표시':(!act?'대기 모드에서는 카메라가 꺼져 있습니다':'이 카메라는 줌 제어를 열어 주지 않음'),'dim');}
+}
+function lpSnapReq(){if(!lpUp())return;const id=Date.now();Lp.snap={id,t0:nowE()};lpSend({t:'lsnap',id});setT('lpPhInfo','사진 요청함…','dim');}
+function lpPhoto(d){
+  if(d.err){setT('lpPhInfo','⚠ '+d.err,'warn');return;}
+  const im=$('lpImg');im.src=d.img;$('lpPh').hidden=false;Lp.ph=d;
+  const b=$('lpBox');if(d.roi){b.style.display='block';b.style.left=d.roi[0]*100+'%';b.style.top=d.roi[1]*100+'%';b.style.width=Math.max(d.roi[2]*100,1.2)+'%';b.style.height=Math.max(d.roi[3]*100,0.9)+'%';b.style.borderColor=d.on?'#FFC53D':'#fff';}else b.style.display='none';
+  if(d.ins){$('lpIns').src=d.ins;$('lpIns').hidden=false;$('lpInsT').hidden=false;}else{$('lpIns').hidden=true;$('lpInsT').hidden=true;}
+  setT('lpPhInfo',(d.roi?'흰 상자가 지금 램프 자리입니다. ':'')+'사진에서 램프가 보이는 자리를 누르면 그 자리로 다시 지정됩니다.','dim');
+}
+function lpInit(){
+  $('lpSnap').onclick=lpSnapReq;
+  $('lpSet').addEventListener('toggle',()=>{if($('lpSet').open&&!Lp.ph&&lpUp())lpSnapReq();});
+  $('lpImg').onclick=e=>{const r=$('lpImg').getBoundingClientRect();if(!lpUp())return;
+    const fx=(e.clientX-r.left)/r.width,fy=(e.clientY-r.top)/r.height;lpSend({t:'roi',fx,fy});setT('lpPhInfo','램프 지정 요청함…','dim');setTimeout(lpSnapReq,700);};
+  const z=$('lpZ');let tm=null;
+  z.oninput=()=>{Lp.zDrag=true;Lp.zBusy=true;setT('lpZInfo','요청 '+f1(+z.value)+'배…','dim');clearTimeout(Lp.at);clearTimeout(tm);tm=setTimeout(()=>{lpSend({t:'zoom',v:+z.value});Lp.zDrag=false;setTimeout(()=>{Lp.zBusy=false},1500);},200);};
+  $('lpSm').onclick=()=>{lpSend({t:'roisz',k:1/1.4});setTimeout(lpSnapReq,500);};$('lpBg').onclick=()=>{lpSend({t:'roisz',k:1.4});setTimeout(lpSnapReq,500);};
+  [['lpL',-2,0],['lpU',0,-2],['lpD',0,2],['lpR',2,0]].forEach(([i,dx,dy])=>{$(i).onclick=()=>{lpSend({t:'nudge',dx,dy});clearTimeout(Lp.nt);Lp.nt=setTimeout(lpSnapReq,600);};});
+  $('lpReload').onclick=()=>{lpSend({t:'reload'});log('램프 폰 새로고침 요청');};
+  lpRender();lpCtl();
+}
+lpInit();
 initControl();
 
 </script>
