@@ -22,6 +22,7 @@ input[type=checkbox]{width:auto;min-height:0;margin-right:6px}
 .code{font-size:34px;letter-spacing:6px;text-align:center;font-weight:800}
 table{width:100%;border-collapse:collapse}td,th{padding:5px 4px;border-top:1px solid var(--line);vertical-align:top}
 .kv td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:10px}
+.clip{display:flex;gap:8px;align-items:center;border-top:1px solid var(--line);padding:6px 0}.clip>div{flex:1;min-width:0;word-break:break-all}.clip button{flex:0 0 auto;margin:0;padding:0 10px;min-height:40px;width:auto}
 .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
 #bMic.bad{background:#7a2a2a;color:#fff}.dim{color:var(--dim)}
 .big{font-size:16px;font-weight:700}.huge{font-size:22px;font-weight:800}
@@ -92,6 +93,11 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
   <div class="dim" id="micHelp"></div>
 </div>
 
+<div class="card"><h2>소리 조각 (뻐꾸기 후보)</h2>
+  <div class="dim" style="margin-bottom:6px">샤오미가 뻐꾸기 후보로 들은 소리의 2초 녹음입니다. A·B형이 아닌 소리(다른 관의 뻐꾸기 등)는 「불명」으로 여기 남습니다. 📤로 파일을 저장·공유할 수 있습니다.</div>
+  <div id="clipBox"></div>
+  <div class="row"><button id="bClipAll" class="sub sm">📤 최근 10개 모두 저장·공유</button><button id="bClipClr" class="stop sm">비우기</button></div></div>
+
 <div class="card"><h2>기록 (최신순)</h2><div class="tl" id="tl"></div>
   <div class="row"><button id="bCopy" class="sub sm">복사 (CSV)</button><button id="bClr" class="stop sm">기록 지우기</button></div></div>
 
@@ -113,7 +119,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.3.0';
+const VER=qs.get('fakever')||'2.4.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -219,7 +225,7 @@ function initT(){
   $('lSens').value=lsG('dj_tlsens')||'n';$('lSens').onchange=()=>{lsS('dj_tlsens',$('lSens').value);lpSend({t:'lsens',v:$('lSens').value});};
   $('tSens').value=lsG('dj_ttsens')||'n';$('tSens').onchange=()=>{lsS('dj_ttsens',$('tSens').value);lpSend({t:'tsens',v:$('tSens').value});};
   $('mReload').onclick=()=>{lpSend({t:'reload'});log('샤오미 새로고침 요청');};
-  render();
+  render();renderClips();$('bClipAll').onclick=()=>shareClips(T.clips.slice(0,10));$('bClipClr').onclick=()=>{T.clips=[];saveClips();try{localStorage.removeItem('dj_tclips')}catch(e){}renderClips();};
   if(!qs.get('setup')&&/^\d{4}$/.test($('tCode').value))startT();   // 저장된 코드가 있으면 열자마자 자동 시작 (코드를 바꾸려면 ?setup=1)
 }
 /* ---------- 연결 계층: 하트비트 · 먹통 감지 · 자동 복구 · 명령 재전송 ---------- */
@@ -328,6 +334,7 @@ function onData(c,d){
       if(k<0)c.send({t:'ver',v:VER});else if(k>0)tryUpdate(d.ver,(x,kk)=>setT('mSt',x,kk));}
     render();
   }
+  else if(d.t==='clip'){onClip(d);}
   else if(d.t==='relock'){log('샤오미가 램프 자리를 자동 조정: ('+d.dx+', '+d.dy+'px) · '+d.n+'번째');}
   else if(d.t==='ls'){const pm=T.st&&T.st.m;T.st=d;T.lsAt=nowE();if(pm!==d.m)render();else renderLine();}
   else if(d.t==='lamp'){onLamp(d);}
@@ -346,11 +353,43 @@ function onLamp(d){
   if(d.k==='blink'){if(!T.running){log('램프 점멸 (시험 중 아님 · 세지 않음)');return;}addEv('lamp',tc,{n:d.n,lat:d.lat,col:d.col||null,pk:d.pk,rr:d.rr,sp:d.sp,sid:d.t+(d.k||'')+d.id});}
   else log('램프 불규칙 깜박임 '+d.n+'회 (세지 않음)');
 }
+/* ---------- 소리 조각 (뻐꾸기 후보) ---------- */
+function pkTxt(pk){if(!pk)return'-';const o=[];for(const f of pk){if(!f)continue;if(o.length&&Math.abs(o[o.length-1]-f)<=40)continue;o.push(f)}return o.slice(0,10).join('→')||'-';}
+T.clips=(()=>{const a=jparse(lsG('dj_tclips'),[]);return Array.isArray(a)?a:[];})();
+function saveClips(){while(T.clips.length){try{localStorage.setItem('dj_tclips',JSON.stringify(T.clips));return}catch(e){T.clips.pop()}}}
+function onClip(d){
+  const tc=T.off!=null?d.w-T.off:Date.now()-1500;
+  if(T.clips.some(x=>x.id===d.id))return;
+  T.clips.unshift({id:d.id,t:tc,k:d.k,nA:d.nA,nB:d.nB,pk:pkTxt(d.pk),rate:d.rate,b64:d.b64});
+  if(T.clips.length>20)T.clips.length=20;saveClips();renderClips();
+}
+function wavBlob(b64,rate){
+  const bin=atob(b64),n=bin.length,buf=new ArrayBuffer(44+n),v=new DataView(buf),W=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};
+  W(0,'RIFF');v.setUint32(4,36+n,true);W(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);W(36,'data');v.setUint32(40,n,true);
+  const u8=new Uint8Array(buf,44);for(let i=0;i<n;i++)u8[i]=bin.charCodeAt(i);return new Blob([buf],{type:'audio/wav'});
+}
+const clipName=c=>{const d=new Date(c.t),p=x=>String(x).padStart(2,'0');return `cuckoo_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}_${c.k==='A'||c.k==='B'?c.k:'unk'}.wav`;};
+async function shareClips(list){
+  const files=list.map(c=>new File([wavBlob(c.b64,c.rate)],clipName(c),{type:'audio/wav'}));
+  try{if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files,title:'뻐꾸기 소리 조각'});return}}catch(e){if(e&&e.name==='AbortError')return}
+  files.forEach((f,i)=>setTimeout(()=>{const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;document.body.appendChild(a);a.click();a.remove()},i*400));
+}
+let clipAud=null;
+function playClip(c){try{if(clipAud)clipAud.pause();clipAud=new Audio(URL.createObjectURL(wavBlob(c.b64,c.rate)));clipAud.play()}catch(e){}}
+function renderClips(){
+  const box=$('clipBox');if(!box)return;box.innerHTML='';
+  if(!T.clips.length){box.innerHTML='<div class="dim">아직 없습니다. 시험 중 뻐꾸기 후보 소리가 들리면 여기에 쌓입니다.</div>';return;}
+  T.clips.forEach(c=>{const row=document.createElement('div');row.className='clip';
+    const a=document.createElement('div');a.innerHTML=`<b>${hms(c.t)}</b> · <span class="${c.k==='A'||c.k==='B'?'ok':'warn'}">${c.k==='A'||c.k==='B'?c.k+'형':'불명'}</span> <span class="dim">(A창 ${c.nA} · B창 ${c.nB})</span><div class="dim">${c.pk}</div>`;
+    const p=document.createElement('button');p.className='sub sm';p.textContent='▶ 듣기';p.onclick=()=>playClip(c);
+    const s=document.createElement('button');s.className='sub sm';s.textContent='📤';s.onclick=()=>shareClips([c]);
+    row.appendChild(a);row.appendChild(p);row.appendChild(s);box.appendChild(row);});
+}
 function onTone(d){
   if(dupEv(d))return;
   const tc=T.off!=null?d.w-T.off:Date.now()-(d.lat||0);
   if(!T.running){log('뻐꾸기 '+d.k+' (시험 중 아님 · 세지 않음)');return;}
-  if(d.k!=='A'&&d.k!=='B'){T.tq=(T.tq||0)+1;log(`소리 ${hms(tc)} 종류 불명(A창 ${d.nA}·B창 ${d.nB}) → 뻐꾸기로 안 셈`);render();return;}   // 주파수 패턴이 A·B 형이 아닌 소리는 잡음
+  if(d.k!=='A'&&d.k!=='B'){T.tq=(T.tq||0)+1;log(`소리 ${hms(tc)} 종류 불명(A창 ${d.nA}·B창 ${d.nB} · 주파수 ${pkTxt(d.pk)}) → 뻐꾸기로 안 셈`);render();return;}   // 주파수 패턴이 A·B 형이 아닌 소리는 잡음
   addEv('tone',tc,{cl:d.k,nA:d.nA,nB:d.nB,lat:d.lat,sid:d.t+(d.k||'')+d.id});
 }
 
