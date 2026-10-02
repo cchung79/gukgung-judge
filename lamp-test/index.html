@@ -77,12 +77,12 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
   <div id="grpT" class="dim"></div>
   <div id="verdict" class="big dim">시험 시작 전</div>
   <button id="bTap" class="tapb">👆 관중 (수동 +1)</button>
-  <div class="row"><button id="bMic" class="sub">🎤 마이크 켜기</button><select id="mMode"><option value="pat">패턴 인식 (내 목소리)</option><option value="word">단어 인식 (사파리)</option><option value="level">소리 크기</option></select></div>
+  <div class="row"><button id="bMic" class="sub">🎤 마이크 켜기</button><select id="mMode"><option value="shout">구호 패턴 (누구나)</option><option value="pat">내 목소리 등록</option><option value="word">단어 인식 (사파리)</option><option value="level">소리 크기</option></select></div>
   <div class="row"><select id="mSens"><option value="10">감도 높음</option><option value="14" selected>감도 보통</option><option value="20">감도 낮음</option></select></div>
   <div class="lvl" id="lvlBox"><div id="lvlB"></div></div>
   <div id="lvlT" class="dim">마이크 꺼짐</div>
+  <div class="row" id="strictRow"><select id="mStrict"><option value="1.3">엄격 (닮은 것만)</option><option value="1.6" selected>보통</option><option value="2.2">관대 (놓치지 않게)</option></select></div>
   <div id="patBox"><div class="row"><button id="bReg" class="sub">🎓 내 목소리 등록 (관중 ×5)</button><button id="bRegClr" class="sub sm">등록 지우기</button></div>
-    <div class="row"><select id="mStrict"><option value="1.3">엄격 (닮은 것만)</option><option value="1.6" selected>보통</option><option value="2.2">관대 (놓치지 않게)</option></select></div>
     <div id="patT" class="dim"></div></div>
   <div class="dim" id="micHelp"></div>
 </div>
@@ -108,7 +108,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'1.9.5';
+const VER=qs.get('fakever')||'1.9.6';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -203,9 +203,9 @@ function initT(){
   $('bWake').onclick=()=>{lpSend({t:'mode',m:'active'});};
   $('bTap').onclick=()=>addEv('manual');
   $('bMic').onclick=()=>{if(listening())listenOff();else{listenOn(false);}};
-  T.mm=lsG('dj_tmm2')||'pat';if(T.mm==='word'&&!SRC)T.mm='pat';$('mMode').value=T.mm;applyMode();
-  $('mMode').onchange=()=>{const was=listening();listenOff();T.mm=$('mMode').value;lsS('dj_tmm2',T.mm);applyMode();if(was)listenOn(false);};
-  $('mStrict').onchange=()=>{PT.strict=+$('mStrict').value;lsS('dj_tstrict2',$('mStrict').value);patCalib();patUI();};const sv2=lsG('dj_tstrict2');if(sv2){$('mStrict').value=sv2;PT.strict=+sv2;}
+  T.mm=lsG('dj_tmm3')||'shout';if(T.mm==='word'&&!SRC)T.mm='pat';$('mMode').value=T.mm;applyMode();
+  $('mMode').onchange=()=>{const was=listening();listenOff();T.mm=$('mMode').value;lsS('dj_tmm3',T.mm);applyMode();if(was)listenOn(false);};
+  $('mStrict').onchange=()=>{PT.strict=+$('mStrict').value;lsS('dj_tstrict3',$('mStrict').value);patCalib();patUI();};const sv2=lsG('dj_tstrict3');if(sv2){$('mStrict').value=sv2;PT.strict=+sv2;}
   $('bReg').onclick=regToggle;$('bRegClr').onclick=regClear;try{const tp=jparse(lsG('dj_ptpl'),[]);if(Array.isArray(tp))PT.tpl=tp.map(m=>({m,f:(patInit(),patFeat(m.map(r=>Float32Array.from(r))))}));patCalib();}catch(e){}patUI();
   $('mSens').onchange=()=>lsS('dj_tsens',$('mSens').value);const sv=lsG('dj_tsens');if(sv)$('mSens').value=sv;
   $('bCopy').onclick=()=>copyText(csv());
@@ -383,7 +383,7 @@ async function micOn(auto){
     const ctx=new (window.AudioContext||window.webkitAudioContext)();if(ctx.state!=='running')await ctx.resume();
     M.stream=st;M.ctx=ctx;
     const src=ctx.createMediaStreamSource(st);M.an=ctx.createAnalyser();M.an.fftSize=1024;src.connect(M.an);M.buf=new Float32Array(M.an.fftSize);
-    if(T.mm==='pat')patAttach(ctx,src);
+    if(T.mm==='pat'||T.mm==='shout')patAttach(ctx,src);
     M.on=true;M.hist=[];M.above=0;M.flat=0;M.bad=0;M.t=setInterval(micTick,25);$('bMic').textContent='🎤 마이크 끄기';$('bMic').classList.remove('bad');
     lsS('dj_tmic','1');setBanner('mic');
     st.getAudioTracks().forEach(t=>{t.onended=()=>{if(M.stream===st)micLost('트랙이 끝남');};});   // 음소거(mute) 이벤트는 아이폰이 수시로 내므로 쓰지 않는다
@@ -440,8 +440,13 @@ function patFrame(x,off){
   for(let i=0;i<PN;i++){const v=x[off+i],p=i?x[off+i-1]:v;re[i]=(v-0.97*p)*PT.hamm[i];s+=v*v}
   patFft(re,im);const ps=new Float64Array(NFFT/2+1);for(let k=0;k<ps.length;k++)ps[k]=re[k]*re[k]+im[k]*im[k];
   const le=new Float64Array(NMEL);for(let m=0;m<NMEL;m++){let a=0;const f=PT.mel[m];for(let k=0;k<f.length;k++)if(f[k])a+=f[k]*ps[k];le[m]=Math.log(a+1e-9)}
-  const mf=new Float32Array(NCEP);for(let c=0;c<NCEP;c++){let a=0;const r=PT.dct[c];for(let m=0;m<NMEL;m++)a+=r[m]*le[m];mf[c]=a}
-  return{mf,e:10*Math.log10(s/PN+1e-10)};
+  const mf=new Float32Array(NCEP);for(let c=0;c<NCEP;c=c+1){let a=0;const r=PT.dct[c];for(let m=0;m<NMEL;m++)a+=r[m]*le[m];mf[c]=a}
+  // 구호 패턴용: 저음대(100~1500 Hz)·고음대(1500~4500 Hz) 에너지, 스펙트럼 무게중심, 유성음(주기성) 정도
+  const bw=PR/NFFT;let lo=1e-9,hi=1e-9,cs=0,ct=1e-9;
+  for(let k=Math.ceil(100/bw);k<=Math.floor(4500/bw);k++){const f=k*bw;if(f<1500)lo+=ps[k];else hi+=ps[k];if(f>=200&&f<=3500){cs+=f*ps[k];ct+=ps[k]}}
+  let vf=0;{let r0=1e-9;for(let i=0;i<PN-320;i++)r0+=x[off+i]*x[off+i];
+    for(let lag=45;lag<=320;lag++){let a=0,b=1e-9;for(let i=0;i<PN-320;i++){a+=x[off+i]*x[off+i+lag];b+=x[off+i+lag]*x[off+i+lag]}const r=a/Math.sqrt(r0*b);if(r>vf)vf=r}}
+  return{mf,e:10*Math.log10(s/PN+1e-10),el:10*Math.log10(lo),eh:10*Math.log10(hi),cen:cs/ct,vf};
 }
 function patFeat(F){   // F: MFCC 프레임들 → (계수+변화량) 를 발화 단위로 평균 0·분산 1 정규화
   const n=F.length,D=NCEP*2,M=[];
@@ -482,7 +487,7 @@ function patStep(fr){
   if(idx%25===0&&PS.eh.length>=50){const a=PS.eh.slice().sort((p,q)=>p-q);PS.floor=a[Math.floor(a.length*0.25)];}
   const on=PS.floor+PS.sens,off=on-4,e=fr.e;
   if(!PS.inSeg){
-    if(e>=on){PS.loud++;if(PS.loud>=3){PS.inSeg=true;PS.on=idx-2;PS.last=idx;PS.quiet=0;}}else PS.loud=0;
+    if(e>=on&&PS.eh.length>=100){PS.loud++;if(PS.loud>=3){PS.inSeg=true;PS.on=idx-2;PS.last=idx;PS.quiet=0;}}else PS.loud=0;
     if(!PS.inSeg&&PS.fr.length>260){PS.fr.shift();PS.base++;}
   }else{
     if(e>=off){PS.last=idx;PS.quiet=0}else{PS.quiet++;if(PS.quiet>=18){PS.inSeg=false;PS.loud=0;patSegment(PS.on,PS.last);}}
@@ -494,7 +499,28 @@ function patSegment(on,last){
   const a=Math.max(PS.base,on-3),b=Math.min(PS.idx-1,last+2);if(b-a<10)return;
   const F=[];for(let i=a;i<=b;i++){const f=PS.fr[i-PS.base];if(!f)return;F.push(f.mf)}
   const onWall=PS.wall-(PS.recv-PS.fr[on-PS.base].es)/PR*1000-PN/PR*1000/2;
-  if(PT.onSeg){PT.onSeg(F,{dur,onWall});return;}
+  if(PT.onSeg){PT.onSeg(F,{dur,onWall,fr:PS.fr.slice(a-PS.base,b-PS.base+1),on:on-a,last:last-a});return;}
+}
+/* 구호 패턴(누구나): 「관중」처럼 크게 외치는 두 음절 소리 — 길이 · 유성음 · 마디(음절 핵) 2개 · 모음이 아→우로 이동 */
+function shoutScore(fr,on,last){
+  const L=[];for(let i=on;i<=last;i++)L.push(fr[i]);const n=L.length,dur=n*0.01;
+  const el=L.map(f=>f.el),sm=el.map((_,i)=>{let a=0,c=0;for(let j=Math.max(0,i-2);j<=Math.min(n-1,i+2);j++){a+=el[j];c++}return a/c});
+  const mx=Math.max(...sm);
+  // 유성음 비율: 에너지가 큰 프레임 중 주기성이 있는 비율
+  const act=L.filter(f=>f.el>mx-15),voiced=act.length?act.filter(f=>f.vf>0.5).length/act.length:0;
+  // 마디(음절 핵) 찾기: 저음대 에너지의 봉우리
+  let pk=[];for(let i=2;i<n-2;i++){let ok=sm[i]>=mx-18;for(let j=i-4;j<=i+4&&ok;j++)if(j>=0&&j<n&&sm[j]>sm[i])ok=false;if(ok)pk.push(i)}
+  const mg=[];for(const p of pk){if(mg.length&&p-mg[mg.length-1]<12){if(sm[p]>sm[mg[mg.length-1]])mg[mg.length-1]=p}else mg.push(p)}
+  const nuc=[mg[0]];for(let k=1;k<mg.length;k++){let v=1e9;for(let j=nuc[nuc.length-1];j<=mg[k];j++)v=Math.min(v,sm[j]);if(v<=Math.min(sm[nuc[nuc.length-1]],sm[mg[k]])-5)nuc.push(mg[k]);else if(sm[mg[k]]>sm[nuc[nuc.length-1]])nuc[nuc.length-1]=mg[k]}
+  const nn=pk.length?nuc.length:0;
+  const cenAt=i=>{let a=0,c=0;for(let j=Math.max(0,i-2);j<=Math.min(n-1,i+2);j++){a+=L[j].cen;c++}return a/c};
+  const drop=nn>=2?cenAt(nuc[nuc.length-1])/cenAt(nuc[0]):1;      // 둘째 마디의 무게중심이 낮아지면(아→우) < 1
+  const tail=L.slice(Math.max(0,n-8)),nasal=tail.reduce((a,f)=>a+(f.el-f.eh),0)/tail.length;   // 끝이 코소리(ㄴ·ㅇ)면 저음대가 고음대보다 훨씬 큼
+  // 모음 이동: 소리 앞부분과 뒷부분의 무게중심 비 (아→우 이면 뒷부분이 낮아 1보다 한참 작음)
+  const lo=L.map((f,i)=>f.el>mx-10?i:-1).filter(i=>i>=0),k1=lo.slice(0,Math.max(1,Math.floor(lo.length*0.4))),k2=lo.slice(Math.floor(lo.length*0.6));
+  const mc=ix=>ix.length?ix.reduce((a,i)=>a+L[i].cen,0)/ix.length:1,glide=mc(k2)/mc(k1);
+  const okDur=dur>=0.28&&dur<=1.4,two=nn===2;
+  return{ok:okDur&&voiced>=0.5&&two,dur,voiced,nn,drop,glide,nasal,why:!okDur?'길이':(voiced<0.5?'소음(유성음 아님)':(!two?'마디 '+nn+'개':''))};
 }
 /*PAT-END*/
 
@@ -503,11 +529,12 @@ const SRC=window.SpeechRecognition||window.webkitSpeechRecognition;
 const KW=/관중|관종|광중|관쭝|관증|간중|완중/g;
 const kwCount=t=>{const m=String(t).replace(/[\s.,?!]+/g,'').match(KW);return m?m.length:0;};
 const SR={on:false,rec:null,want:false,cnt:{},last:'',errs:0};
-function applyMode(){const m=T.mm,w=m==='word',p=m==='pat';
-  $('mSens').style.display=w?'none':'';$('lvlBox').style.display=w?'none':'';$('patBox').style.display=p?'':'none';
+function applyMode(){const m=T.mm,w=m==='word',p=m==='pat',h=m==='shout';
+  $('mSens').style.display=w?'none':'';$('lvlBox').style.display=w?'none':'';$('patBox').style.display=p?'':'none';$('strictRow').style.display=(p||h)?'':'none';
   setT('lvlT',w?'단어 인식 방식 — 마이크를 켜면 들린 말이 여기 표시됩니다':'마이크 꺼짐','dim');
-  $('micHelp').textContent=p?'먼저 「🎓 내 목소리 등록」으로 「관중」을 5번 말해 등록하세요. 그 뒤로는 등록한 소리와 닮은 소리만 셉니다(기침·다른 말은 세지 않음). 서버를 쓰지 않아 쉬었다 말해도 똑같이 잡히고, 말이 끝나면 곧바로 셉니다.'
-    :(w?'「관중」이라는 말이 인식될 때만 셉니다. 사파리 음성 인식은 한동안 쉬었다 말하면 놓치는 일이 있습니다.':'소리가 커지는 순간을 한 번으로 셉니다(어떤 소리든 셉니다). 이어폰 마이크로 말하세요.');}
+  $('micHelp').textContent=h?'누구의 목소리든 「관중!」처럼 크게 외치는 두 음절 소리를 셉니다 — 길이 0.3~1.4초 · 목소리 · 마디 2개 · 「아→우」로 모음이 낮아지는 패턴. 기침·박수·바람·한 음절·세 음절 이상의 말은 세지 않습니다. 비슷한 두 음절 말은 세어질 수 있습니다.'
+    :(p?'먼저 「🎓 내 목소리 등록」으로 「관중」을 5번 말해 등록하세요. 그 뒤로는 등록한 소리와 닮은 소리만 셉니다(내 목소리 전용).'
+    :(w?'「관중」이라는 말이 인식될 때만 셉니다. 사파리 음성 인식은 한동안 쉬었다 말하면 놓치는 일이 있습니다.':'소리가 커지는 순간을 한 번으로 셉니다(어떤 소리든 셉니다). 이어폰 마이크로 말하세요.'));}
 const listening=()=>T.mm==='word'?SR.on||SR.want:T.mic.on||T.mic.want;
 function listenOn(auto){
   if(T.mm==='word'){
@@ -562,6 +589,13 @@ function patOnSeg(F,info){
     patUI();log(`등록 소리 ${PT.tmp.length}/5 (${info.dur.toFixed(2)}초)`);
     if(PT.tmp.length>=5){PT.reg=false;PT.tpl=PT.tmp.map(m=>({m,f:patFeat(m.map(r=>Float32Array.from(r)))}));PT.tmp=[];patCalib();
       lsS('dj_ptpl',JSON.stringify(PT.tpl.map(t=>t.m)));patUI();log(`등록 완료 · 등록 소리끼리 거리 ${f1(PT.base)} · 문턱 ${f1(PT.thr)}`);}
+    return;}
+  if(T.mm==='shout'){
+    const r=shoutScore(info.fr,info.on,info.last),dm=0.55*PT.strict,ok=r.ok&&r.drop<=dm;
+    const why=r.ok?(r.drop<=dm?'':'모음 이동 약함'):r.why;
+    if(r.dur>=0.2&&(r.voiced>=0.4||r.ok))log(`소리 조각 ${r.dur.toFixed(2)}초 · 마디 ${r.nn} · 모음이동 ${r.drop.toFixed(2)} (기준 ${dm.toFixed(2)}) → ${ok?'✔ 관중':'✘ 제외'+(why?' ('+why+')':'')}`);
+    setT('lvlT',`방금 소리: ${r.dur.toFixed(2)}초 · 마디 ${r.nn} · 모음이동 ${r.drop.toFixed(2)} ${ok?'✔ 관중':'✘ 제외'}`,ok?'ok':'dim');
+    if(ok)addEv('voice',info.onWall,{src:'shout',d:+r.drop.toFixed(2),n:r.nn});
     return;}
   if(PT.thr==null)return;
   const sc=patScore(patFeat(F)),ok=sc<=PT.thr;
