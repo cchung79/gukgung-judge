@@ -100,7 +100,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.5.0';
+const VER=qs.get('fakever')||'2.5.1';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -316,10 +316,12 @@ function tryConnect(){
     setT('lSt','연결 끊김 — 다시 연결 중 (감시는 계속됩니다)','bad');log('연결 끊김'+(was?'':' (접속 실패)'));}});
   c.on('error',e=>log('conn 오류 '+e));
 }
-/* 램프·뻐꾸기 이벤트는 최근 2분치를 보관했다가, 연결이 (다시) 열리면 재전송한다 → 컨트롤이 중복은 걸러냄. 끊긴 사이의 신호도 살린다 */
+/* 관중 신호(램프·뻐꾸기)는 측정(count) 중에만 보낸다. 컨트롤이 받았다고 답(ack)할 때까지만 보관하고, 연결이 다시 열리면 못 받은 것만 다시 보낸다.
+   새 측정을 시작하면 이전 순의 보관분은 버린다 — 순이 끝나 컨트롤로 넘어간 데이터는 이 폰에 남길 필요가 없다 */
 const RECENT=[];
-function evsend(d){const n=Date.now();RECENT.push({at:n,d});while(RECENT.length&&(n-RECENT[0].at>7200000||RECENT.length>600))RECENT.shift();psend(d);}
-function resendRecent(){let k=0;RECENT.forEach(r=>{psend(Object.assign({},r.d,{re:1}));k++;});if(k)log('보관 신호 '+k+'건 재전송 (컨트롤이 중복은 거름)');}
+function evsend(d){if(P.mode!=='count')return false;RECENT.push({at:Date.now(),d});while(RECENT.length>600)RECENT.shift();psend(d);return true;}
+function resendRecent(){let k=0;RECENT.forEach(r=>{psend(Object.assign({},r.d,{re:1}));k++;});if(k)log('컨트롤이 아직 못 받은 신호 '+k+'건 재전송');}
+function onAck(id){const i=RECENT.findIndex(r=>r.d.id===id);if(i>=0)RECENT.splice(i,1);}
 const psend=d=>{const c=P.conn;if(c&&c.open){try{c.send(d);return true}catch(e){}}return false;};
 function camInfo(){
   const tr=P.track;if(!tr)return null;const s=tr.getSettings?tr.getSettings():{},c=P.caps||{};
@@ -343,6 +345,7 @@ setInterval(()=>{if(P.mode!=='standby')sendLs()},500);
 function onCData(c,d){
   if(!d||!d.t)return;
   if(d.t==='ping')c.send({t:'pong',i:d.i,m0:d.m0,s:nowE()});
+  else if(d.t==='ack')onAck(d.id);
   else if(d.t==='hb')c.send({t:'hbr',i:d.i,m0:d.m0,m:P.mode,ts:nowE()});
   else if(d.t==='mode')doMode(d.m);
   else if(d.t==='zoom')applyZoom(d.v);
@@ -366,11 +369,11 @@ function onCData(c,d){
 }
 let modeChain=Promise.resolve();
 function doMode(m,self){modeChain=modeChain.then(async()=>{
-  if(!['standby','active','count'].includes(m))return;
+  if(P.yielded||!['standby','active','count'].includes(m))return;
   const was=P.mode;
   if(m===was&&(m==='standby'||P.stream)){psend({t:'mode',m,ready:true,self:!!self});return;}   // 같은 모드를 다시 받으면 감시 상태를 건드리지 않는다
   P.mode=m;P.autoReopen=0;lsS('dj_lmode',m==='standby'?'standby':'active');   // 지정한 모드를 바로 기억 (카메라가 다 켜지기 전에 새로고침돼도)
-  if(m==='count'&&was!=='count'){P.nBlink=0;setT('lLast','시험 시작 — 0회','dim');}
+  if(m==='count'&&was!=='count'){P.nBlink=0;RECENT.length=0;setT('lLast','측정 시작 — 0회','dim');}
   try{
     if(m==='standby'){stopCam();blkShow(true);audOff();}
     else{blkShow(false);if(!P.stream)await openCam();if(was==='standby'||m==='count')resetDet();audInit();}
@@ -417,6 +420,7 @@ async function openCamInner(){
     lastErr=new Error('영상이 들어오지 않음');log('카메라 영상 없음(9초) → 한 번 더 엽니다');P.stream.getTracks().forEach(t=>t.stop());P.stream=null;P.track=null;
   }
   if(!P.stream){setT('lCam','⛔ 카메라를 열지 못했습니다: '+((lastErr&&(lastErr.name||lastErr.message))||'?'),'bad');throw lastErr||new Error('카메라 없음');}
+  if(P.yielded){stopCam();throw new Error('쉬는 탭');}   // 여는 도중에 다른 탭에 자리를 넘겼다
   P.lastFrameAt=performance.now();log(`첫 영상 ${vid.videoWidth}×${vid.videoHeight} (${Math.round(performance.now()-T0c)} ms)`);
   if(P.caps.zoom){const zc=P.caps.zoom,zt=Math.max(zc.min,Math.min(zc.max,P.zoomV!=null?P.zoomV:DEF_ZOOM));   // 이번 실행에서 손으로 바꾼 줌이 없으면 기본 10배
     try{await P.track.applyConstraints({advanced:[{zoom:zt}]});P.zoomV=zt;log('줌 '+f1(zt)+'배로 시작'+(zt<DEF_ZOOM&&P.zoomV===zc.max?' (이 폰 최대)':''))}catch(e){log('줌 적용 실패 '+((e&&e.name)||e))}}
@@ -427,6 +431,7 @@ async function openCamInner(){
     if(!P.caps.zoom||!sz||Math.abs(sz-zn)<=0.03*zn)setROI(P.savedRoi.fx*vid.videoWidth,P.savedRoi.fy*vid.videoHeight,P.savedRoi.sc);
     else log('저장된 램프 자리는 다른 줌(×'+f1(sz)+')에서 잡은 것이라 쓰지 않음 — 램프를 다시 톡 눌러 주세요');}
   else if(P.roi)setROI(P.roi.x+P.roi.w/2,P.roi.y+P.roi.h/2);   // 해상도가 바뀌면 같은 자리를 다시 잡는다(비율 유지)
+  if(P.yielded){stopCam();return;}
   startLoop();sizeOv();
   const lg=P.loopGen;setTimeout(()=>{if(lg!==P.loopGen||!P.roi||!vid.videoWidth)return;settleRoi();},2500);
 }
@@ -835,7 +840,7 @@ async function audInit(){
   try{
     AU.err=null;
     const st=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:1}});
-    if(P.mode==='standby'){st.getTracks().forEach(t=>t.stop());AU.busy=false;return;}
+    if(P.mode==='standby'||P.yielded){st.getTracks().forEach(t=>t.stop());AU.busy=false;return;}
     const c=await audEnsure();AU.src=c.createMediaStreamSource(st);AU.src.connect(AU.node);AU.st=st;
     AU.abuf={rms:[],hf:[]};AU.cand=null;AU.cnt=0;try{await c.resume()}catch(e){}
     st.getAudioTracks().forEach(t=>{t.onended=()=>{log('마이크 트랙 종료');AU.st=null;setTimeout(()=>{if(P.mode!=='standby')audInit()},800);};});
@@ -881,6 +886,7 @@ function sendClip(t,r,w){
   try{const x=segment(t-0.7,t+1.5);if(!x||x.length<AU.rate*0.5)return;
     const n=x.length,i16=new Int16Array(n);for(let i=0;i<n;i++){const v=Math.max(-1,Math.min(1,x[i]*4));i16[i]=v<0?v*32768:v*32767}   // 작은 소리라 4배 키움
     const u8=new Uint8Array(i16.buffer);let bin='';for(let i=0;i<u8.length;i+=8192)bin+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));
+    if(P.mode!=='count')return;
     psend({t:'clip',k:r.k,nA:r.nA,nB:r.nB,pk:r.pk,w,rate:Math.round(AU.rate),id:Date.now(),b64:btoa(bin)});
   }catch(e){log('소리 조각 보내기 실패 '+e)}
 }
