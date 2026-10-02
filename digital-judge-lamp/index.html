@@ -24,6 +24,10 @@ td:first-child{color:var(--dim);white-space:nowrap;width:1%;padding-right:10px}
 #blk.peek{color:#bbb}
 video.pv{width:100%;border-radius:8px;background:#000;display:block}
 .vw{position:relative;background:#000;border-radius:8px;overflow:hidden}.vw video{display:block;width:100%;height:46vh;object-fit:contain;background:#000}.vw canvas{position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none}
+#gwFlash{position:absolute;inset:0;pointer-events:none;box-sizing:border-box;border:0 solid #ff8a00;opacity:0;z-index:6;display:flex;align-items:flex-start;justify-content:center}
+#gwFlash.fl{animation:gwf 1.7s ease-out}
+#gwLbl{margin-top:14px;background:#ff8a00;color:#1a1000;font-weight:800;font-size:28px;padding:2px 22px;border-radius:999px;letter-spacing:1px}
+@keyframes gwf{0%{opacity:1;border-width:22px;box-shadow:inset 0 0 40px 10px rgba(255,138,0,.85)}20%{opacity:.25;border-width:22px}40%{opacity:1;border-width:22px;box-shadow:inset 0 0 40px 10px rgba(255,138,0,.85)}60%{opacity:.25;border-width:22px}80%{opacity:1;border-width:22px}100%{opacity:0;border-width:22px}}
 button.sm{min-height:42px;font-size:13px;padding:0 8px}button.go{background:#1e9e66}button.on{background:#e0a030;color:#1a1a1a}
 input[type=range]{padding:0;min-height:36px}
 .g6{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:8px}.g6 button{margin:0;padding:0;min-height:44px;font-size:16px}
@@ -43,8 +47,9 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 
 <div class="card">
   <h2>램프 화면 <span id="lFps" class="dim" style="font-weight:400"></span></h2>
-  <div class="vw"><video id="lVid" playsinline muted autoplay></video><canvas id="lOv"></canvas><canvas id="lInset" width="96" height="96" style="left:auto;right:6px;top:6px;width:84px;height:84px;border:1px solid #888;border-radius:6px;pointer-events:none;background:#0d1218;display:none"></canvas></div>
+  <div class="vw"><video id="lVid" playsinline muted autoplay></video><canvas id="lOv"></canvas><div id="gwFlash"><div id="gwLbl">관중</div></div><canvas id="lInset" width="96" height="96" style="left:auto;right:6px;top:6px;width:84px;height:84px;border:1px solid #888;border-radius:6px;pointer-events:none;background:#0d1218;display:none"></canvas></div>
   <div id="lHint" class="dim" style="margin:6px 0">-</div>
+  <button id="lSpeak" class="sub sm" style="margin:2px 0 6px">🔇 관중 소리: 꺼짐</button>
   <div id="lZInfo" class="dim" style="margin-top:8px">-</div>
   <input id="lZ" type="range" min="1" max="1" step="0.1" value="1" disabled>
   <div class="g6"><button id="nL" class="sub sm">◀</button><button id="nU" class="sub sm">▲</button><button id="nD" class="sub sm">▼</button><button id="nR" class="sub sm">▶</button><button id="lSmall" class="sub sm">▢−</button><button id="lBig" class="sub sm">▢＋</button></div>
@@ -94,7 +99,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.2.2';
+const VER=qs.get('fakever')||'2.3.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -193,6 +198,7 @@ function initLamp(){
   $('nU').onclick=()=>nud(0,-2);$('nD').onclick=()=>nud(0,2);$('nL').onclick=()=>nud(-2,0);$('nR').onclick=()=>nud(2,0);
   $('lRes').onchange=async()=>{P.res=$('lRes').value;lsS('dj_lres',P.res);if(P.mode!=='standby'){await openCam();sendHello();}};
   $('lExpLock').onclick=expLock;
+  gwUI();$('lSpeak').onclick=()=>{GW.speak=!GW.speak;lsS('dj_lspeak',GW.speak?'1':'0');gwUI();if(GW.speak)gwSay();};
   $('lDone').onclick=()=>{if(!P.roi){toast('먼저 램프를 톡 눌러 지정하세요');return}doMode('standby');};
   $('lReopen').onclick=()=>{if(P.mode==='standby'){doMode('active');return}P.autoReopen=0;P.reopening=true;log('수동으로 카메라 다시 열기');openCam().then(sendHello).catch(()=>{}).finally(()=>{P.reopening=false;P.lastFrameAt=performance.now()});};
   const r=lsG('dj_lres');if(r){P.res=r;$('lRes').value=r;}
@@ -746,10 +752,25 @@ function colorOf(tf){
   let h=Math.atan2(y,x)*180/Math.PI;if(h<0)h+=360;const sat=ss/a.length;
   return{h:Math.round(h),s:+sat.toFixed(2),name:hueName(h,sat),n:a.length};
 }
+/* ---------- 관중 표시: 사진 둘레 주황 번쩍임 + (선택) '관중' 소리 ---------- */
+const GW={speak:lsG('dj_lspeak')==='1',tmr:null};
+function gwUI(){const b=$('lSpeak');if(!b)return;b.textContent=GW.speak?'🔊 관중 소리: 켜짐':'🔇 관중 소리: 꺼짐';b.className=GW.speak?'on sm':'sub sm';}
+function gwSay(){
+  if(!GW.speak||!('speechSynthesis' in window))return;
+  if(navigator.userActivation&&!navigator.userActivation.hasBeenActive){toast('소리를 내려면 화면을 한 번 톡 터치하세요');return;}   // 새로고침 직후엔 브라우저가 소리를 막는다
+  try{const u=new SpeechSynthesisUtterance('관중');u.lang='ko-KR';u.rate=1.1;u.volume=1;
+    const v=(speechSynthesis.getVoices()||[]).find(x=>/^ko/i.test(x.lang));if(v)u.voice=v;
+    AU.mute=Date.now()+1800;speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){}
+}
+function gwFlash(n){
+  const f=$('gwFlash');if(!f)return;$('gwLbl').textContent='관중 '+n;
+  f.classList.remove('fl');void f.offsetWidth;f.classList.add('fl');clearTimeout(GW.tmr);GW.tmr=setTimeout(()=>f.classList.remove('fl'),1800);
+  gwSay();
+}
 function fire(tf,k,n,col0,ex){
   const w=T0+tf*1000,lat=Math.round(nowE()-w);
   const col=col0!=null?col0:colorOf(tf);
-  if(k==='blink'){P.nBlink++;P.lastBlink=Math.round(w);setT('lLast',`총 ${P.nBlink}회 · 최근 ${hms(w)} (감지 지연 ${lat} ms)`,'ok');log(`점멸 감지 ${n}회 · 색 ${col?col.name+' (색상 '+col.h+'°, 채도 '+col.s+')':'?'} (${lat} ms 늦게 확인)`);}
+  if(k==='blink'){P.nBlink++;gwFlash(P.nBlink);P.lastBlink=Math.round(w);setT('lLast',`총 ${P.nBlink}회 · 최근 ${hms(w)} (감지 지연 ${lat} ms)`,'ok');log(`점멸 감지 ${n}회 · 색 ${col?col.name+' (색상 '+col.h+'°, 채도 '+col.s+')':'?'} (${lat} ms 늦게 확인)`);}
   else if(k==='rej'){log(`램프처럼 보였지만 제외: ${ex.why} · ${n}회 · 색 ${col?col.name+' '+col.h+'°/'+col.s:'?'}`);}
   else log(`불규칙한 깜박임 ${n}회 (판정에는 안 씀)`);
   evsend(Object.assign({t:'lamp',k,n,w,lat,id:Date.now(),col},ex||{}));
@@ -796,6 +817,7 @@ setInterval(()=>{if(P.mode!=='standby'&&AU.ctx&&AU.st&&AU.ctx.state==='suspended
 function audRing(t,pcm){AU.ring.push({t,m:pcm});let tot=0;for(const r of AU.ring)tot+=r.m.length;while(tot>AU.rate*5&&AU.ring.length>1){tot-=AU.ring[0].m.length;AU.ring.shift()}}
 function audOn(rms,hf,lf,pcm,ct){
   const c=AU.ctx;if(!AU.st)return;
+  if(AU.mute&&Date.now()<AU.mute){AU.cand=null;return}               // 이 폰이 '관중' 소리를 내는 동안은 자기 소리를 뻐꾸기로 듣지 않는다
   const t=(c&&ct!=null)?nowS()-(c.currentTime-ct):nowS();
   if(pcm&&pcm.length)audRing(t,pcm);
   const A=AU.abuf;A.rms.push(rms);A.hf.push(hf);if(A.rms.length>300){A.rms.shift();A.hf.shift()}
