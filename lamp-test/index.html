@@ -113,7 +113,7 @@ button.tapb{min-height:84px;font-size:20px;background:#6b4fd8}button.tapb:active
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.1.1';
+const VER=qs.get('fakever')||'2.2.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -428,7 +428,7 @@ function renderLine(){
   if(!st){setT('lpSt',hm==='standby'?'⏸ 연결됨 · 대기 (카메라 꺼짐)':'연결됨 — 상태 수신 대기',hm==='standby'?'huge warn':'huge dim');setT('lpLine','','dim');return;}
   const m=st.m,roi=!!st.roi;
   setT('lpSt',m==='standby'?'⏸ 대기 (카메라 꺼짐)':(!roi?'⚠ 램프 미지정':(m==='count'?'🟢 점멸 세는 중':'▶ 준비 (램프 확인 중)')),'huge '+(m==='standby'?'warn':(!roi?'bad':'ok')));
-  setT('lpLine',(LK.rtt!=null?'🔗 '+LK.rtt+'ms'+(LK.drops?' · 끊김 '+LK.drops+'회':'')+' · ':'')+(m==='standby'?'':(!roi?'샤오미 화면에서 램프를 눌러 지정하세요. ':'')+(st.cam===0?'⚠ 카메라 영상 없음 · ':'')+`램프 ${st.on?'🟡 켜짐':'꺼짐'}${st.rl?' · 🎯 자리 자동 조정 '+st.rl+'회':''}${st.rj?' · 반사 의심 제외 '+st.rj:''} · 샤오미 집계 램프 ${st.n}회·뻐꾸기 ${st.nt||0}회 · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''} · ${st.mic===1?'🎤 '+st.mdb+'dB(바닥 '+st.mfl+')':(st.mic===-1?'⛔ 샤오미 마이크 실패(뻐꾸기 못 셈)':'🎤 켜는 중')}`),'dim');
+  setT('lpLine',(LK.rtt!=null?'🔗 '+LK.rtt+'ms'+(LK.drops?' · 끊김 '+LK.drops+'회':'')+' · ':'')+(m==='standby'?'':(!roi?'샤오미 화면에서 램프를 눌러 지정하세요. ':'')+(st.cam===0?'⚠ 카메라 영상 없음 · ':'')+`램프 ${st.on?'🟡 켜짐':'꺼짐'}${st.rl?' · 🎯 자리 자동 조정 '+st.rl+'회':''}${st.pm!=null?' · 패턴 '+st.pm:''}${st.rj?' · 반사 의심 제외 '+st.rj:''} · 샤오미 집계 램프 ${st.n}회·뻐꾸기 ${st.nt||0}회 · 신호 ${st.dev}/${st.thr} · ${st.fps}fps${st.trk?' · ⚠ 추적 불안정':''} · ${st.mic===1?'🎤 '+st.mdb+'dB(바닥 '+st.mfl+')':(st.mic===-1?'⛔ 샤오미 마이크 실패(뻐꾸기 못 셈)':'🎤 켜는 중')}`),'dim');
 }
 setInterval(()=>{if(lpUp()&&T.st&&nowE()-T.lsAt>3500&&T.st.m!=='standby')renderLine();},1000);
 function csv(){const P=pairs();return ['종류,시각,색_종류,색상각,채도,묶인신호,내신호시차(ms),램프신호최대,주변상승,자리흩어짐'].concat(T.ev.map(e=>{

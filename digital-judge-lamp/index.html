@@ -62,6 +62,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
     <tr><td>램프 지금</td><td id="lNow" class="dim">-</td></tr>
     <tr><td>최근 점멸</td><td id="lLast" class="dim">아직 없음</td></tr>
     <tr><td>추적</td><td id="lTrk" class="dim">-</td></tr>
+    <tr><td>패턴 인식</td><td id="lPat" class="dim">-</td></tr>
   </table>
   <div class="dim">노란 선이 밝기 변화, 점선이 문턱입니다. 램프가 깜박일 때 노란 선이 점선 위로 규칙적으로 솟아야 합니다.</div>
 </div>
@@ -93,7 +94,7 @@ pre{white-space:pre-wrap;word-break:break-all;font:11px/1.45 ui-monospace,Menlo,
 'use strict';
 const $=id=>document.getElementById(id);
 const qs=new URLSearchParams(location.search);
-const VER=qs.get('fakever')||'2.1.1';
+const VER=qs.get('fakever')||'2.2.0';
 const cmpVer=(a,b)=>{const x=String(a).split('.').map(Number),y=String(b).split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d)return d>0?1:-1;}return 0;};
 const rlGet=()=>{try{return sessionStorage.getItem('dj_rl')}catch(e){return null}};
 const rlSet=v=>{try{sessionStorage.setItem('dj_rl',v)}catch(e){}};
@@ -176,7 +177,6 @@ const P={peer:null,conn:null,code:'',retry:null,mode:'standby',stream:null,track
   col:[],ring:[],dev:0,thr:0,fps:{n:0,t0:0,v:0},nBlink:0,lastBlink:null,tx:0,res:'fhd',trkBad:0,loopGen:0,caps:null,zoomV:null,exp:null};
 const LAMP_MIN_RISE=40,TK=2,TR=8;
 const LSENS={h:{rise:28,k:3.0},n:{rise:40,k:3.5},l:{rise:65,k:4.5}};let lsens=lsG('dj_llsens')||'n';if(!LSENS[lsens])lsens='n';   // 램프 감도: 문턱(밝기 상승 최소값·σ 배수)
-const SW=9;                              // 자동 찾기 범위 = 램프 상자의 9배 (카메라가 흔들려 상자를 벗어난 램프를 이 안에서 찾아 상자를 옮긴다)
 const hueDiff=(a,b)=>{const d=Math.abs(a-b)%360;return d>180?360-d:d;};
 const median=a=>{const b=a.slice().sort((x,y)=>x-y);return b.length?b[b.length>>1]:0;};
 const vid=$('lVid'),ov=$('lOv'),ovx=ov.getContext('2d');
@@ -303,7 +303,7 @@ async function sendBat(){
 setInterval(sendBat,10000);
 document.addEventListener('visibilitychange',()=>{log('화면 '+document.visibilityState);sendBat();});
 function sendLs(){
-  psend({t:'ls',m:P.mode,on:P.wasOn?1:0,roi:P.roi?1:0,dev:Math.round(P.dev),thr:Math.round(P.thr),fps:P.fps.v,trk:P.trk&&P.trkBad>10?1:0,cam:(P.stream&&performance.now()-(P.lastFrameAt||0)<3000)?1:0,n:P.nBlink,lb:P.lastBlink,mic:audState(),tsn:tsens,mdb:AU.db,mfl:AU.fl,nt:AU.n,rl:P.relocks,rj:P.rej,ts:nowE()});
+  psend({t:'ls',m:P.mode,on:P.wasOn?1:0,roi:P.roi?1:0,dev:Math.round(P.dev),thr:Math.round(P.thr),fps:P.fps.v,trk:P.trk&&P.trkBad>10?1:0,cam:(P.stream&&performance.now()-(P.lastFrameAt||0)<3000)?1:0,n:P.nBlink,lb:P.lastBlink,mic:audState(),tsn:tsens,mdb:AU.db,mfl:AU.fl,nt:AU.n,rl:P.relocks,rj:P.rej,pm:IM.s0!=null?Math.round(IM.s0*100)/100:null,ts:nowE()});
 }
 setInterval(()=>{if(P.mode!=='standby')sendLs()},500);
 
@@ -495,7 +495,7 @@ function setROI(cxp,cyp,scale){
   const w=Math.max(8,Math.round(Math.min(W,H)*0.034*P.roiScale)),h=Math.max(6,Math.round(w*0.62));
   P.roi={x:Math.round(Math.min(W-w,Math.max(0,cxp-w/2))),y:Math.round(Math.min(H-h,Math.max(0,cyp-h/2))),w,h};
   P.trk=null;P.bg=null;P.weak=null;P.devAbs=[];P.lampMed=0;P.sigma=3;P.edges=[];P.ring=[];P.wasOn=false;P.warm=null;P.trkBad=0;
-  P.epos=[];P.sg=null;P.sig=null;P.sigA=[];P.pendRL=null;P.relocks=0;P.relockT=[];P.rej=0;buildTemplate();aimUI();
+  P.epos=[];P.sg=null;P.sig=null;P.sigA=[];P.relocks=0;P.relockT=[];P.rej=0;buildTemplate();imBuild();aimUI();
   const r=P.roi;P.anchor={x:r.x+r.w/2,y:r.y+r.h/2};lsS('dj_lroi',JSON.stringify({fx:(r.x+r.w/2)/W,fy:(r.y+r.h/2)/H,sc:P.roiScale,z:zoomNow()}));P.savedRoi=jparse(lsG('dj_lroi'),null);
   sendHello();
 }
@@ -597,7 +597,7 @@ function onFrame(t){
   }
   if(P.edges.length>=2&&t-P.lastFlash>3&&(!P.weak||P.weak.t!==P.edges[0]))P.weak={t:P.edges[0],n:P.edges.length};
   if(P.weak&&t-P.weak.t>2.0){const w=P.weak;P.weak=null;if(t-P.lastFlash>3)fire(w.t,'weak',w.n)}
-  searchFrame(t,dt);
+  imStep();$('lPat').textContent=IM.msg||'-';
   drawOverlay();drawMeter(t);drawInset();
 }
 
@@ -627,91 +627,107 @@ function gateBlink(E,st,r){
   }
   return m;
 }
-/* ---------- 자동 재잠금: 램프 상자 둘레 넓은 범위에서 점멸 패턴을 찾아 상자를 그 자리로 옮긴다 ---------- */
-const SGC=document.createElement('canvas'),sgx=SGC.getContext('2d',{willReadFrequently:true});
-function sgWin(){
-  const r=eff(),W=vid.videoWidth,H=vid.videoHeight;const w=Math.min(W,Math.max(r.w*SW,120)),h=Math.min(H,Math.max(r.h*SW,80));
-  return{x:Math.round(Math.max(0,Math.min(W-w,r.x+r.w/2-w/2))),y:Math.round(Math.max(0,Math.min(H-h,r.y+r.h/2-h/2))),w:Math.round(w),h:Math.round(h)};
+/* ---------- 자동 재잠금: 영상 패턴 매칭 ----------
+   램프를 지정하는 순간, 램프 주변의 넓은 배경(램프 자체는 빼고)을 기준 무늬로 저장한다.
+   카메라가 움직이면(바람·삼각대 흔들림·대충 다시 겨냥) 화면 전체에서 그 무늬와 가장 닮은 곳을 찾아 램프 상자를 그 자리로 옮긴다.
+   깜빡임을 쓰지 않으므로 램프가 꺼져 있어도 따라간다. 닮음 척도는 정규화 상관(NCC): 밝기·대비가 조금 변해도 견딘다. */
+const IMC=document.createElement('canvas'),imx=IMC.getContext('2d',{willReadFrequently:true});
+const IM={T:null,job:null,pend:null,last:0,lowN:0,s0:null,msg:'',lastRelock:0,ms:0};
+function imGray(sx,sy,sw,sh,k){
+  const cw=Math.max(1,Math.round(sw/k)),ch=Math.max(1,Math.round(sh/k));
+  if(IMC.width!==cw||IMC.height!==ch){IMC.width=cw;IMC.height=ch}
+  imx.imageSmoothingEnabled=true;imx.imageSmoothingQuality='high';imx.fillStyle='#000';imx.fillRect(0,0,cw,ch);sdraw(imx,sx,sy,sw,sh,0,0,cw,ch);
+  const d=imx.getImageData(0,0,cw,ch).data,g=new Float32Array(cw*ch);for(let i=0,j=0;j<g.length;i+=4,j++)g[j]=d[i]*0.3+d[i+1]*0.59+d[i+2]*0.11;
+  return{g,cw,ch};
 }
-function searchFrame(t,dt){
-  if(!P.roi||!vid.videoWidth)return;
-  const r=eff(),win=sgWin(),ks=Math.max(2,Math.round(win.w/110)),cw=Math.max(8,Math.round(win.w/ks)),ch=Math.max(8,Math.round(win.h/ks));
-  if(SGC.width!==cw||SGC.height!==ch){SGC.width=cw;SGC.height=ch}
-  sgx.fillStyle='#000';sgx.fillRect(0,0,cw,ch);sdraw(sgx,win.x,win.y,win.w,win.h,0,0,cw,ch);
-  const d=sgx.getImageData(0,0,cw,ch).data,n=cw*ch;let S=P.sg;
-  if(!S||S.n!==n||S.cw!==cw||Math.abs(S.wx-win.x)>win.w*0.2||Math.abs(S.wy-win.y)>win.h*0.2){
-    // 창이 많이 움직였거나 처음이면 배경을 새로 잡는다 (기록한 점멸 자리는 영상 좌표라 그대로 유효)
-    const m=new Float32Array(n);for(let i=0,j=0;j<n;i+=4,j++)m[j]=Math.max(d[i],d[i+1],d[i+2]);
-    S=P.sg={n,cw,ch,bg:m,wx:win.x,wy:win.y,pk:[],edges:[],on:false,warm:t,df:new Float32Array(n),bl:new Float32Array(n),last:-1e9,lastFire:S?S.lastFire:-1e9};
-  }
-  S.wx=win.x;S.wy=win.y;
-  const aN=1-Math.exp(-dt/0.6),aL=1-Math.exp(-dt/3.3),df=S.df,bl=S.bl;
-  for(let i=0,j=0;j<n;i+=4,j++){const m=Math.max(d[i],d[i+1],d[i+2]),v=m-S.bg[j];df[j]=v;S.bg[j]+=(v<12?aN:aL)*v}
-  let pk=-1e9,pj=0;
-  for(let y=1;y<ch-1;y++)for(let x=1;x<cw-1;x++){const j=y*cw+x;
-    const v=(df[j-cw-1]+df[j-cw]+df[j-cw+1]+df[j-1]+df[j]+df[j+1]+df[j+cw-1]+df[j+cw]+df[j+cw+1])/9;bl[j]=v;if(v>pk){pk=v;pj=j}}
-  S.pk.push(pk);if(S.pk.length>300)S.pk.shift();
-  if(S.pk.length%15===0){S.med=median(S.pk);S.sig=Math.max(1,1.48*median(S.pk.map(v=>Math.abs(v-S.med))))}
-  const thr=Math.max(25,(S.med||0)+Math.max(Math.min(LSENS[lsens].rise,40)*0.8,3.5*(S.sig||3))),on=t-S.warm>3&&pk>thr;
-  if(on&&!S.on&&t-S.last>0.08){
-    S.last=t;const px=pj%cw,py=(pj/cw)|0;let sx=0,sy=0,sw=0,R=0,G=0,B=0,nn=0;const th2=pk*0.5;
-    for(let y=Math.max(0,py-5);y<=Math.min(ch-1,py+5);y++)for(let x=Math.max(0,px-5);x<=Math.min(cw-1,px+5);x++){const j=y*cw+x;if(df[j]>=th2){const w_=df[j];sx+=x*w_;sy+=y*w_;sw+=w_;R+=d[j*4];G+=d[j*4+1];B+=d[j*4+2];nn++}}
-    if(sw){R/=nn;G/=nn;B/=nn;const mx=Math.max(R,G,B),mn=Math.min(R,G,B),sat=mx?(mx-mn)/mx:0;let h=0;
-      if(mx>mn){const dd=mx-mn;h=mx===R?((G-B)/dd)%6:mx===G?(B-R)/dd+2:(R-G)/dd+4;h*=60;if(h<0)h+=360}
-      S.edges.push({t,x:win.x+(sx/sw+0.5)*(win.w/cw),y:win.y+(sy/sw+0.5)*(win.h/ch),h,s:sat});}
-  }
-  S.on=on;S.edges=S.edges.filter(e=>t-e.t<=2.0);
-  if(S.edges.length>=3&&t-S.lastFire>3&&t-P.lastFlash>1.0)relockCheck(S,t,r);
+function imNorm(g,cw,ch,hole){   // 램프 자리(hole)를 뺀 나머지를 평균 0·크기 1로 정규화한 기준 무늬
+  const ix=[],iy=[],v=[];let sum=0;
+  for(let y=0;y<ch;y++)for(let x=0;x<cw;x++){if(x>=hole[0]&&x<hole[2]&&y>=hole[1]&&y<hole[3])continue;ix.push(x);iy.push(y);const q=g[y*cw+x];v.push(q);sum+=q}
+  const n=v.length,m=sum/n;let s2=0;for(const q of v)s2+=(q-m)*(q-m);const nr=Math.sqrt(s2)||1,z=new Float32Array(n);for(let k=0;k<n;k++)z[k]=(v[k]-m)/nr;
+  return{cw,ch,n,sd:Math.sqrt(s2/n),z,ix:Int32Array.from(ix),iy:Int32Array.from(iy)};
 }
-function relockCheck(S,t,r){
-  const E=S.edges,st=regularStart(E.map(e=>e.t));if(st<0)return;
-  const g=E.slice(st);if(g.length<3)return;
-  const mx=median(g.map(e=>e.x)),my=median(g.map(e=>e.y)),rho=Math.max(r.w*0.9,10);
-  if(g.some(e=>Math.hypot(e.x-mx,e.y-my)>rho))return;                     // 켜질 때마다 같은 자리여야 한다
-  const rc={x:r.x+r.w/2,y:r.y+r.h/2},dist=Math.hypot(mx-rc.x,my-rc.y);
-  if(dist<Math.max(r.w*0.7,8))return;                                     // 이미 상자 안 — 평소 감지가 처리
-  const iv=median(g.slice(1).map((e,i)=>e.t-g[i].t));
-  let x=0,y=0,ss=0;for(const e of g){x+=Math.cos(e.h*Math.PI/180)*e.s;y+=Math.sin(e.h*Math.PI/180)*e.s;ss+=e.s}
-  let h=Math.atan2(y,x)*180/Math.PI;if(h<0)h+=360;const sat=ss/g.length;
-  const reject=m=>{S.lastFire=t;log('상자 밖 점멸 무시: '+m);};
-  const sg=P.sig,whiteLamp=sg&&sg.n>=3&&sg.s<0.25;                      // 이 카메라에서 실제 램프가 흰색으로 찍히면(현장에서 확인됨) 흰빛도 인정
-  if(sg&&sg.n>=3){
-    if(!whiteLamp&&sg.h!=null&&hueDiff(h,sg.h)>45){reject(`색이 다름(${hueName(h,sat)})`);return;}
-    if(sg.iv>0){const q=iv/sg.iv;if(q<0.55||q>1.8){reject('깜박임 간격이 다름');return;}}
-  }
-  const A=P.anchor||rc,lim=1.5*Math.max(r.w*SW,120)/2;
-  if(Math.hypot(mx-A.x,my-A.y)>lim){reject('처음 지정한 자리에서 너무 멂');return;}
-  const now=Date.now();P.relockT=P.relockT.filter(v=>now-v<120000);
-  if(P.relockT.length>=4){reject('2분에 4번 넘게 옮기게 됨 — 자리가 불안정');return;}
-  if(P.relockT.length&&now-P.relockT[P.relockT.length-1]<6000)return;
-  const c={mx,my,g,iv,h,sat,t0:g[0].t};
-  S.lastFire=t;
-  if(sat<0.25&&!whiteLamp){
-    // 흰빛이고 램프 서명도 아직 없으면 반사광과 구별이 안 된다 → 뻐꾸기 소리가 곧 같이 울려야(진짜 발시) 옮긴다
-    P.pendRL=Object.assign(c,{at:now});log(`상자 밖 흰빛 점멸(${Math.round(mx)},${Math.round(my)}) — 뻐꾸기가 같이 울리면 램프로 보고 옮깁니다`);return;
-  }
-  doRelock(c);
+function nccAt(fg,fw,T,x,y){
+  let S=0,S2=0,C=0;const n=T.n,ix=T.ix,iy=T.iy,z=T.z;
+  for(let k=0;k<n;k++){const q=fg[(y+iy[k])*fw+x+ix[k]];S+=q;S2+=q*q;C+=z[k]*q}
+  const den=S2-S*S/n;return den>1e-3?C/Math.sqrt(den):0;
 }
-function confirmPendRL(wTone){
-  const c=P.pendRL;if(!c)return;const now=Date.now();
-  if(now-c.at>5000){P.pendRL=null;return;}
-  const wl=T0+c.t0*1000;if(wTone-wl<-500||wTone-wl>2000)return;
-  P.pendRL=null;log('뻐꾸기와 함께 울림 → 램프로 확인');doRelock(c);
+function imBuild(){
+  const r=eff(),W=vid.videoWidth,H=vid.videoHeight;if(!r||!W){IM.T=null;return}
+  const tw=Math.min(W*0.7,Math.max(r.w*9,100)),th=Math.min(H*0.7,Math.max(tw*0.72,70)),kc=Math.max(2,Math.round(tw/30));
+  const {g:fg,cw:fw,ch:fh}=imGray(0,0,W,H,kc);
+  const cx0=(r.x+r.w/2)/kc,cy0=(r.y+r.h/2)/kc,tcw=Math.min(fw,Math.round(tw/kc)),tch=Math.min(fh,Math.round(th/kc));
+  const tx=Math.max(0,Math.min(fw-tcw,Math.round(cx0-tcw/2))),ty=Math.max(0,Math.min(fh-tch,Math.round(cy0-tch/2)));
+  const sub=new Float32Array(tcw*tch);for(let y=0;y<tch;y++)for(let x=0;x<tcw;x++)sub[y*tcw+x]=fg[(ty+y)*fw+tx+x];
+  const lx=cx0-tx,ly=cy0-ty,hw=Math.max(1.5,r.w*0.8/kc),hh=Math.max(1.5,r.h*1.0/kc);
+  const Tm=imNorm(sub,tcw,tch,[lx-hw,ly-hh,lx+hw,ly+hh]);
+  // 정밀 보정용(2배 축소) 기준 무늬: 같은 영역
+  const X=tx*kc,Y=ty*kc,pw=tcw*kc,ph=tch*kc,F=imGray(X,Y,pw,ph,2),flx=(cx0*kc-X)/2,fly=(cy0*kc-Y)/2,fhw=Math.max(2,r.w*0.8/2),fhh=Math.max(2,r.h*1.0/2);
+  const Tf=imNorm(F.g,F.cw,F.ch,[flx-fhw,fly-fhh,flx+fhw,fly+fhh]);
+  IM.T=Object.assign(Tm,{kc,lx,ly,W,H,zm:zoomNow(),flat:Tm.sd<5,at:Date.now(),fine:Tf,lpx:cx0*kc-X,lpy:cy0*kc-Y,pw,ph,fk:2});
+  IM.pend=null;IM.lowN=0;IM.job=null;IM.s0=null;
+  IM.msg=IM.T.flat?'주변 무늬가 너무 적어 패턴 인식 불가 (삼각대를 단단히 고정)':'기준 무늬 저장됨';
 }
-function doRelock(c){
+function imStep(){
+  const T=IM.T;if(!P.roi||!T||T.flat||!vid.videoWidth)return;
+  const W=vid.videoWidth,H=vid.videoHeight;
+  if(T.W!==W||T.H!==H||Math.abs(zoomNow()-T.zm)>0.03*T.zm){IM.msg='줌·해상도가 달라 패턴 인식 중지 (램프를 다시 지정하면 갱신)';IM.s0=null;return;}
+  if(IM.job){imJob();return;}
+  const now=performance.now();if(now-IM.last<(IM.pend?400:800))return;IM.last=now;
+  const t0=now,r=eff(),{g:fg,cw:fw,ch:fh}=imGray(0,0,W,H,T.kc);
+  const tx=Math.round((r.x+r.w/2)/T.kc-T.lx),ty=Math.round((r.y+r.h/2)/T.kc-T.ly);
+  let s0=-1;if(tx>=0&&ty>=0&&tx+T.cw<=fw&&ty+T.ch<=fh){s0=nccAt(fg,fw,T,tx,ty);for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const x=tx+dx,y=ty+dy;if((dx||dy)&&x>=0&&y>=0&&x+T.cw<=fw&&y+T.ch<=fh)s0=Math.max(s0,nccAt(fg,fw,T,x,y))}}
+  IM.s0=s0;IM.ms=Math.round(performance.now()-t0);
+  if(IM.pend){                                                          // 지난 탐색에서 본 다른 자리: 새 프레임에서 한 번 더 닮았는지 확인되면 옮긴다
+    const p=IM.pend;let sp=-1;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const x=p.x+dx,y=p.y+dy;if(x>=0&&y>=0&&x+T.cw<=fw&&y+T.ch<=fh)sp=Math.max(sp,nccAt(fg,fw,T,x,y))}
+    if(sp>=0.6&&sp>=s0+0.12){imRelock(p.x,p.y,sp);return;}
+    IM.pend=null;
+  }
+  if(s0>=0.55){
+    IM.lowN=0;IM.pend=null;IM.msg=`패턴 일치 ${s0.toFixed(2)}`;
+    if(s0>=0.9&&Date.now()-T.at>90000)imBuild();                       // 빛이 서서히 변해도 닮음이 유지되도록 기준 무늬를 가끔 새로 찍는다 (잘 맞을 때만)
+    return;
+  }
+  IM.lowN+=s0<0.35?2:1;IM.msg=`패턴 일치 낮음 ${s0.toFixed(2)} — 화면에서 찾는 중`;
+  if(IM.lowN<2)return;
+  const nx=fw-T.cw+1,ny=fh-T.ch+1;if(nx<1||ny<1)return;
+  IM.job={fg,fw,fh,nx,ny,y:0,sc:new Float32Array(nx*ny),s0,tx,ty,t0:performance.now()};
+}
+function imJob(){                                                       // 전체 화면 탐색을 여러 프레임에 나눠 한다 (점멸 감시가 끊기지 않게 프레임당 4ms)
+  const J=IM.job,T=IM.T,tEnd=performance.now()+8;
+  while(J.y<J.ny&&performance.now()<tEnd){const y=J.y++;for(let x=0;x<J.nx;x++)J.sc[y*J.nx+x]=nccAt(J.fg,J.fw,T,x,y);}
+  if(J.y<J.ny)return;
+  IM.job=null;IM.last=0;IM.jobMs=Math.round(performance.now()-J.t0);
+  let b=-2,bi=0;for(let i=0;i<J.sc.length;i++)if(J.sc[i]>b){b=J.sc[i];bi=i}
+  const bx=bi%J.nx,by=(bi/J.nx)|0;
+  let sec=-2;const rx=T.cw*0.6,ry=T.ch*0.6;for(let y=0;y<J.ny;y++)for(let x=0;x<J.nx;x++){if(Math.abs(x-bx)<rx&&Math.abs(y-by)<ry)continue;const v=J.sc[y*J.nx+x];if(v>sec)sec=v}
+  if(b<0.5){IM.msg=`패턴을 화면에서 못 찾음 (최고 ${b.toFixed(2)})`;IM.pend=null;return;}
+  if(b<J.s0+0.12){IM.msg=`패턴 일치 낮음 (${J.s0.toFixed(2)}) — 다른 자리도 크게 낫지 않음`;IM.pend=null;return;}
+  if(sec>b-0.06){IM.msg=`비슷한 무늬가 여러 곳이라 보류 (${b.toFixed(2)} / ${sec.toFixed(2)})`;IM.pend=null;return;}
+  if(Math.hypot(bx-J.tx,by-J.ty)<=1.5)return;
+  IM.pend={x:bx,y:by,n:1};IM.msg=`다른 자리에서 패턴 발견 ${b.toFixed(2)} — 확인 중`;IM.last=performance.now()-300;
+}
+function imRelock(bx,by,sc){
+  const T=IM.T,now=Date.now();IM.pend=null;
+  P.relockT=P.relockT.filter(v=>now-v<120000);
+  if(P.relockT.length>=6){IM.msg='2분에 6번 넘게 옮기게 됨 — 보류';return;}
+  if(now-IM.lastRelock<2500)return;
+  // 정밀 보정: 2배 축소 영상에서 ±(kc+2)px 안을 다시 맞춘다
+  const Tf=T.fine,pad=T.kc+2,X=bx*T.kc,Y=by*T.kc,F=imGray(X-pad,Y-pad,T.pw+2*pad,T.ph+2*pad,2);
+  let best=-2,ox=0,oy=0;const nx=F.cw-Tf.cw,ny=F.ch-Tf.ch;
+  for(let y=0;y<=ny;y++)for(let x=0;x<=nx;x++){const v=nccAt(F.g,F.cw,Tf,x,y);if(v>best){best=v;ox=x;oy=y}}
+  if(best<0.45){IM.msg=`정밀 맞춤 실패 (${best.toFixed(2)})`;return;}
+  const cx=X-pad+ox*2+T.lpx,cy=Y-pad+oy*2+T.lpy,r=eff();
+  const dx=Math.round(cx-(r.x+r.w/2)),dy=Math.round(cy-(r.y+r.h/2));
+  IM.lastRelock=now;P.relockT.push(now);P.relocks++;moveRoi(cx,cy);
+  IM.msg=`패턴으로 램프 자리 조정 (${dx>=0?'+':''}${dx}, ${dy>=0?'+':''}${dy}px · 일치 ${best.toFixed(2)})`;
+  log(`영상 패턴으로 램프 자리 자동 조정 (${dx>=0?'+':''}${dx}, ${dy>=0?'+':''}${dy}px) · 일치 ${sc.toFixed(2)}/${best.toFixed(2)} · ${P.relocks}번째`);
+  G.msg='램프 자리 조정 ('+dx+','+dy+')';G.label=performance.now()+2500;psend({t:'relock',dx,dy,n:P.relocks});
+}
+function moveRoi(cx,cy){
   const r=eff(),W=vid.videoWidth,H=vid.videoHeight;if(!r||!W)return;
-  const {mx,my,g,iv,h,sat}=c,now=Date.now();
-  P.relockT.push(now);P.relocks++;
-  const dx=Math.round(mx-(r.x+r.w/2)),dy=Math.round(my-(r.y+r.h/2));
-  P.roi={x:Math.round(Math.min(W-r.w,Math.max(0,mx-r.w/2))),y:Math.round(Math.min(H-r.h,Math.max(0,my-r.h/2))),w:r.w,h:r.h};
+  P.roi={x:Math.round(Math.min(W-r.w,Math.max(0,cx-r.w/2))),y:Math.round(Math.min(H-r.h,Math.max(0,cy-r.h/2))),w:r.w,h:r.h};
   P.trk=null;P.bg=null;P.weak=null;P.edges=[];P.epos=[];P.wasOn=false;P.rrs=[];buildTemplate();
   lsS('dj_lroi',JSON.stringify({fx:(P.roi.x+r.w/2)/W,fy:(P.roi.y+r.h/2)/H,sc:P.roiScale,z:zoomNow()}));P.savedRoi=jparse(lsG('dj_lroi'),null);
-  const col={h:Math.round(h),s:+sat.toFixed(2),name:hueName(h,sat),n:g.length};
-  sigAdd(col,iv);P.lastFlash=g[0].t;
-  log(`램프 자리 자동 조정 (${dx>=0?'+':''}${dx}, ${dy>=0?'+':''}${dy}px) · ${col.name} ${g.length}회 · ${P.relocks}번째`);
-  G.msg='램프 자리 조정 ('+dx+','+dy+')';G.label=performance.now()+2500;
-  psend({t:'relock',dx,dy,n:P.relocks});
-  fire(g[0].t,'blink',g.length,col,{iv:+iv.toFixed(2),rl:1});
 }
 /* ---------- 램프 색: 켜진 순간 가장 밝아진 픽셀 중 채도 높은 쪽의 색상(hue) ---------- */
 function sampleColor(d,dfc,hi,t){
@@ -800,7 +816,7 @@ function audOn(rms,hf,lf,pcm,ct){
 setInterval(()=>{const t=nowS();
   for(const e of AU.tones){if(e.done||t<e.t+TONE_WAIT)continue;e.done=true;const r=classify(e.t),w=T0+e.t*1000;AU.n++;
     log(`뻐꾸기 ${r.k==='?'?'종류 불명':r.k+'형'} ${r.why||`(A${r.nA}/B${r.nB})`}`);
-    evsend({t:'tone',k:r.k,nA:r.nA,nB:r.nB,pk:r.pk,w,lat:Math.round(nowE()-w),id:Date.now()});if(r.k==='A'||r.k==='B')confirmPendRL(w);}
+    evsend({t:'tone',k:r.k,nA:r.nA,nB:r.nB,pk:r.pk,w,lat:Math.round(nowE()-w),id:Date.now()});}
   while(AU.tones.length&&AU.tones[0].done&&t-AU.tones[0].t>10)AU.tones.shift();},100);
 function segment(t0,t1){
   const R=AU.rate,out=[];
@@ -829,7 +845,7 @@ function drawOverlay(){
   const bw=Math.max(14*dpr,r.w*s),bh=Math.max(10*dpr,r.h*s),cxp=ox+(r.x+r.w/2)*s,cyp=oy+(r.y+r.h/2)*s;
   ovx.strokeRect(cxp-bw/2,cyp-bh/2,bw,bh);
   ovx.strokeStyle='rgba(255,255,255,.5)';ovx.setLineDash([4*dpr,4*dpr]);
-  {const w_=sgWin();ovx.strokeRect(ox+w_.x*s,oy+w_.y*s,w_.w*s,w_.h*s);ovx.setLineDash([]);ovx.fillStyle='rgba(255,255,255,.6)';ovx.font=`${11*dpr}px sans-serif`;ovx.fillText('자동 찾기 범위',ox+w_.x*s+4*dpr,oy+w_.y*s+13*dpr);}
+  if(IM.T&&!IM.T.flat){const T=IM.T,w_=T.cw*T.kc*s,h_=T.ch*T.kc*s;ovx.strokeRect(cxp-T.lpx*s,cyp-T.lpy*s,w_,h_);ovx.setLineDash([]);ovx.fillStyle='rgba(255,255,255,.6)';ovx.font=`${11*dpr}px sans-serif`;ovx.fillText('패턴 기준 범위',cxp-T.lpx*s+4*dpr,cyp-T.lpy*s+13*dpr);}else ovx.setLineDash([]);
 }
 function drawMeter(t){
   const W=meter.width,H=meter.height;mx.clearRect(0,0,W,H);const pts=P.ring.filter(p=>t-p.t<=6);if(!pts.length)return;
